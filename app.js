@@ -1635,6 +1635,68 @@ function initTickerDetailModal() {
 }
 
 // ============================================
+// Live Market Data
+// ============================================
+
+async function fetchMarketData() {
+  try {
+    const response = await fetch('/api/market-data');
+    if (!response.ok) return;
+
+    const payload = await response.json();
+    if (!payload.liveData || payload.error) return;
+
+    // Replace static dashboard data with live computed data
+    if (payload.tickers && payload.tickers.length > 0) {
+      DASHBOARD_DATA.tickers = payload.tickers;
+    }
+    if (payload.indexes && payload.indexes.length > 0) {
+      DASHBOARD_DATA.indexes = payload.indexes;
+    }
+    if (payload.watchlist && payload.watchlist.length > 0) {
+      DASHBOARD_DATA.watchlist = payload.watchlist;
+    }
+
+    // Replace static OHLCV chart data with live bars
+    if (payload.chartData && typeof payload.chartData === 'object') {
+      Object.assign(CHART_DATA, payload.chartData);
+    }
+
+    // Update date label to reflect live data timestamp
+    if (payload.updatedAt) {
+      const updatedDate = new Date(payload.updatedAt * 1000);
+      DASHBOARD_DATA.date = updatedDate.toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+      });
+    }
+
+    // Re-render all data-driven sections
+    renderHeader();
+    renderIndexCards();
+    renderTickerCards();
+    renderWatchlist();
+    renderCustomTickers();
+
+    // Update footer disclaimer
+    const footer = document.querySelector('.footer-disclaimer');
+    if (footer && payload.updatedAt) {
+      const t = new Date(payload.updatedAt * 1000);
+      footer.textContent = `Live data as of ${t.toLocaleDateString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric'
+      })} ${t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. `
+        + 'Indicators computed from Yahoo Finance daily bars. Not financial advice.';
+    }
+
+    // Redraw sparkline charts with live OHLCV
+    requestAnimationFrame(() => initAllCharts());
+
+  } catch (err) {
+    // Silent fail — static dashboard data remains visible
+    console.warn('[Option Riders] Live market data unavailable:', err.message);
+  }
+}
+
+// ============================================
 // Initialize
 // ============================================
 
@@ -1656,9 +1718,10 @@ async function init() {
   initTickerDetailModal();
   await Promise.allSettled([
     fetchEconomicCalendar(),
-    fetchOptionsFlow()
+    fetchOptionsFlow(),
+    fetchMarketData(),
   ]);
-  // Draw sparkline charts after DOM is ready
+  // Draw sparkline charts after DOM is ready (live data already merged above if available)
   requestAnimationFrame(() => initAllCharts());
 }
 
