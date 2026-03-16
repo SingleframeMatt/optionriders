@@ -1902,3 +1902,23 @@ body {
   color: var(--red);
   background: rgba(255, 68, 68, 0.1);
 }
+
+/* ── Signal Score Badges ─────────────────────────────────────────── */
+.signal-score-row {
+  margin: 6px 0 4px;
+}
+.signal-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.signal-strong-buy  { background: rgba(0,255,136,0.18); color: #00ff88; border: 1px solid rgba(0,255,136,0.4); }
+.signal-buy         { background: rgba(0,200,100,0.12); color: #00cc77; border: 1px solid rgba(0,200,100,0.3); }
+.signal-neutral     { background: rgba(180,160,80,0.12); color: #c8a84b; border: 1px solid rgba(180,160,80,0.3); }
+.signal-sell        { background: rgba(255,100,80,0.12); color: #ff6644; border: 1px solid rgba(255,100,80,0.3); }
+.signal-strong-sell { background: rgba(255,68,68,0.18);  color: #ff4444; border: 1px solid rgba(255,68,68,0.4); }

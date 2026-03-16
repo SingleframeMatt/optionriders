@@ -270,6 +270,30 @@ function getRsiClass(rsi) {
   return 'rsi-amber';
 }
 
+function getSignalLabel(score) {
+  if (score >= 50)  return 'STRONG BUY';
+  if (score >= 20)  return 'BUY';
+  if (score <= -50) return 'STRONG SELL';
+  if (score <= -20) return 'SELL';
+  return 'NEUTRAL';
+}
+
+function getSignalClass(score) {
+  if (score >= 50)  return 'signal-strong-buy';
+  if (score >= 20)  return 'signal-buy';
+  if (score <= -50) return 'signal-strong-sell';
+  if (score <= -20) return 'signal-sell';
+  return 'signal-neutral';
+}
+
+function renderSignalBadge(score) {
+  if (score == null) return '';
+  const label = getSignalLabel(score);
+  const cls   = getSignalClass(score);
+  const sign  = score > 0 ? '+' : '';
+  return `<span class="signal-badge ${cls}" title="Composite signal: RSI + price vs SMA20/50 + momentum">${sign}${score} ${label}</span>`;
+}
+
 function getBiasClass(bias) {
   const lower = bias.toLowerCase();
   if (lower.includes('bullish') && !lower.includes('bearish')) return 'badge-bullish';
@@ -1001,6 +1025,8 @@ function renderTickerCards() {
         <span class="badge badge-strategy">${escapeHtml(t.strategy)}</span>
       </div>
 
+      ${t.signalScore != null ? `<div class="signal-score-row">${renderSignalBadge(t.signalScore)}</div>` : ''}
+
       <div class="chart-container" onclick="window.open('${getTradingViewUrl(t.ticker)}', '_blank')" title="Open ${t.ticker} on TradingView">
         <canvas class="sparkline-canvas" data-ticker="${t.ticker}"></canvas>
       </div>
@@ -1087,6 +1113,7 @@ function renderWatchlist() {
     >
       <td style="color: var(--text-muted); font-weight:700;">${w.rank}</td>
       <td style="color: var(--text-bright); font-weight:700;">${escapeHtml(w.ticker)}</td>
+      <td>${w.signalScore != null ? renderSignalBadge(w.signalScore) : '—'}</td>
       <td class="${w.direction === 'LONG' ? 'direction-long' : 'direction-short'}">${escapeHtml(w.direction)}</td>
       <td>${escapeHtml(w.entry)}</td>
       <td>${escapeHtml(w.target)}</td>
@@ -1697,6 +1724,53 @@ async function fetchMarketData() {
 }
 
 // ============================================
+// Signal Merging — combine options flow sentiment with technical scores
+// ============================================
+
+function mergeOptionsFlowIntoScores() {
+  // Build a sentiment map from unusual options: ticker → net boost (-15 to +15)
+  const sentimentMap = {};
+  for (const row of OPTIONS_FLOW.unusual) {
+    const sym = row.baseSymbol;
+    if (!sym) continue;
+    const s = (row.sentiment || '').toLowerCase();
+    const boost = s.includes('bullish') ? 15 : s.includes('bearish') ? -15 : 0;
+    if (boost !== 0) {
+      sentimentMap[sym] = (sentimentMap[sym] || 0) + boost;
+    }
+  }
+
+  if (Object.keys(sentimentMap).length === 0) return; // nothing to merge
+
+  let changed = false;
+
+  // Apply boost to tickers
+  for (const t of DASHBOARD_DATA.tickers) {
+    if (t.signalScore == null) continue;
+    const boost = sentimentMap[t.ticker] || 0;
+    if (boost !== 0) {
+      t.signalScore = Math.max(-100, Math.min(100, t.signalScore + boost));
+      changed = true;
+    }
+  }
+
+  // Apply boost to watchlist
+  for (const w of DASHBOARD_DATA.watchlist) {
+    if (w.signalScore == null) continue;
+    const boost = sentimentMap[w.ticker] || 0;
+    if (boost !== 0) {
+      w.signalScore = Math.max(-100, Math.min(100, w.signalScore + boost));
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    renderTickerCards();
+    renderWatchlist();
+  }
+}
+
+// ============================================
 // Initialize
 // ============================================
 
@@ -1721,6 +1795,8 @@ async function init() {
     fetchOptionsFlow(),
     fetchMarketData(),
   ]);
+  // Merge options flow sentiment into signal scores now that both fetches are done
+  mergeOptionsFlowIntoScores();
   // Draw sparkline charts after DOM is ready (live data already merged above if available)
   requestAnimationFrame(() => initAllCharts());
 }

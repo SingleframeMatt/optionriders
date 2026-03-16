@@ -121,6 +121,40 @@ def _bias(rsi, price, sma20, sma50):
     else:             return "Range"
 
 
+def _signal_score(rsi, price, sma20, sma50, closes):
+    """
+    Composite signal score from -100 (strong sell) to +100 (strong buy).
+
+    Components:
+      RSI momentum   : -40 to +40  (how far RSI deviates from neutral 50)
+      Price vs SMA20 : -20 to +20  (% distance, capped)
+      Price vs SMA50 : -20 to +20  (% distance, capped)
+      5d vs 20d ret  : -20 to +20  (short-term momentum vs longer-term)
+    """
+    score = 0.0
+
+    # RSI component
+    score += max(-40.0, min(40.0, (rsi - 50.0) * 0.8))
+
+    # Price vs SMA20
+    if sma20 > 0:
+        pct = (price - sma20) / sma20 * 100.0
+        score += max(-20.0, min(20.0, pct * 2.0))
+
+    # Price vs SMA50
+    if sma50 > 0:
+        pct = (price - sma50) / sma50 * 100.0
+        score += max(-20.0, min(20.0, pct * 2.0))
+
+    # Short-term momentum: 5-day return vs 20-day return
+    if len(closes) >= 21:
+        ret5  = (closes[-1] - closes[-6])  / closes[-6]  * 100.0 if closes[-6]  else 0.0
+        ret20 = (closes[-1] - closes[-21]) / closes[-21] * 100.0 if closes[-21] else 0.0
+        score += max(-20.0, min(20.0, (ret5 - ret20) * 1.5))
+
+    return int(round(max(-100.0, min(100.0, score))))
+
+
 def _strategy(bias, rsi):
     if rsi < 35: return "Oversold Bounce"
     if rsi > 70: return "Overbought Short"
@@ -150,8 +184,9 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes):
     sma50    = _sma(closes, 50)
 
     support, resistance = _levels(highs, lows, price)
-    bias_str  = _bias(rsi_val, price, sma20, sma50)
-    strat_str = _strategy(bias_str, rsi_val)
+    bias_str   = _bias(rsi_val, price, sma20, sma50)
+    strat_str  = _strategy(bias_str, rsi_val)
+    sig_score  = _signal_score(rsi_val, price, sma20, sma50, closes)
 
     bull_trig = f"Break above {resistance[0]}" if resistance else f"Reclaim {round(price * 1.01, 2)}"
     bear_trig = f"Lose {support[0]}"           if support    else f"Break below {round(price * 0.99, 2)}"
@@ -212,6 +247,7 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes):
         "summary":     summary,
         "sma20":       round(sma20, 2),
         "sma50":       round(sma50, 2),
+        "signalScore": sig_score,
         "liveData":    True,
         "_ohlcv":      ohlcv,   # stripped out before JSON response
     }
@@ -246,13 +282,14 @@ def _build_watchlist(ticker_entries):
             continue   # skip range-bound for watchlist
 
         items.append({
-            "ticker":    e["ticker"],
-            "direction": direction,
-            "entry":     entry_lv,
-            "target":    target,
-            "stop":      stop,
-            "catalyst":  catalyst,
-            "_strength": abs(rsi - 50),
+            "ticker":      e["ticker"],
+            "direction":   direction,
+            "entry":       entry_lv,
+            "target":      target,
+            "stop":        stop,
+            "catalyst":    catalyst,
+            "signalScore": e.get("signalScore", 0),
+            "_strength":   abs(e.get("signalScore", 0)),  # rank by absolute score strength
         })
 
     items.sort(key=lambda x: x["_strength"], reverse=True)
