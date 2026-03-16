@@ -30,7 +30,20 @@ This project is set up for Vercel:
 
 - Static frontend served from the repo root
 - Barchart proxy exposed through `api/options-flow.py`
+- public auth config exposed through `api/public-config.py`
 - Routing configured in `vercel.json`
+
+## Accounts
+
+Option Riders supports lightweight Google sign-in in the browser.
+
+Set this environment variable in Vercel and locally before using sign-in:
+
+```text
+GOOGLE_CLIENT_ID=
+```
+
+User-added tickers remain saved in local browser storage.
 
 ## Domain
 

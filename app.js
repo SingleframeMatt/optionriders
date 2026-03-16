@@ -235,6 +235,17 @@ const OPTIONS_FLOW = {
   updatedAt: ""
 };
 
+const AUTH_STATE = {
+  configLoaded: false,
+  user: null,
+  googleClientId: "",
+  error: "",
+  buttonRendered: false,
+};
+
+const GUEST_TICKERS_STORAGE_KEY = 'optionriders-guest-tickers-v1';
+const GOOGLE_USER_STORAGE_KEY = 'optionriders-google-user-v1';
+
 // ============================================
 // Utility Functions
 // ============================================
@@ -271,6 +282,60 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = String(str ?? '');
   return div.innerHTML;
+}
+
+function loadGuestTickers() {
+  try {
+    const saved = window.localStorage.getItem(GUEST_TICKERS_STORAGE_KEY);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveGuestTickers() {
+  try {
+    window.localStorage.setItem(GUEST_TICKERS_STORAGE_KEY, JSON.stringify(customTickersList));
+  } catch (error) {
+    // Ignore storage failures and keep the in-memory session usable.
+  }
+}
+
+function loadStoredGoogleUser() {
+  try {
+    const saved = window.localStorage.getItem(GOOGLE_USER_STORAGE_KEY);
+    const parsed = saved ? JSON.parse(saved) : null;
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function saveStoredGoogleUser(user) {
+  try {
+    if (!user) {
+      window.localStorage.removeItem(GOOGLE_USER_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(GOOGLE_USER_STORAGE_KEY, JSON.stringify(user));
+  } catch (error) {
+    // Ignore storage failures and keep sign-in usable for the session.
+  }
+}
+
+function getDisplayName(user) {
+  if (!user) return '';
+  return user.name
+    || user.email
+    || 'Account';
+}
+
+function decodeJwtPayload(token) {
+  const payload = token.split('.')[1];
+  const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  return JSON.parse(window.atob(padded));
 }
 
 function getTimeZoneOffsetMinutes(date, timeZone) {
@@ -543,6 +608,43 @@ function renderHeader() {
   sentimentEl.classList.add(
     DASHBOARD_DATA.sentiment === 'BEARISH' ? 'badge-sentiment-bearish' : 'badge-sentiment-bullish'
   );
+}
+
+function renderAuthControls() {
+  const controls = document.getElementById('authControls');
+  if (!controls) return;
+
+  if (!AUTH_STATE.configLoaded) {
+    controls.innerHTML = `<span class="auth-status-pill">Auth loading...</span>`;
+    return;
+  }
+
+  if (AUTH_STATE.error) {
+    controls.innerHTML = `
+      <span class="auth-status-pill error">${escapeHtml(AUTH_STATE.error)}</span>
+      <button class="auth-action-btn" type="button" onclick="initAuth(true)">Retry</button>
+    `;
+    return;
+  }
+
+  if (!AUTH_STATE.googleClientId) {
+    controls.innerHTML = `<span class="auth-status-pill warning">Add GOOGLE_CLIENT_ID</span>`;
+    return;
+  }
+
+  if (!AUTH_STATE.user) {
+    controls.innerHTML = `
+      <span class="auth-status-pill warning">Guest mode</span>
+      <div id="googleSignInMount"></div>
+    `;
+    renderGoogleButton();
+    return;
+  }
+
+  controls.innerHTML = `
+    <span class="auth-status-pill signed-in">${escapeHtml(getDisplayName(AUTH_STATE.user))}</span>
+    <button class="auth-action-btn" type="button" onclick="signOut()">Sign out</button>
+  `;
 }
 
 function renderCatalysts() {
@@ -1292,7 +1394,98 @@ function initCollapsibleSections() {
 // ============================================
 
 // In-memory storage for custom tickers (persists within session)
-let customTickersList = [];
+let customTickersList = loadGuestTickers();
+
+async function fetchPublicAuthConfig() {
+  const response = await fetch('/api/public-config', { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error('Auth config unavailable');
+  }
+  return response.json();
+}
+
+function renderGoogleButton() {
+  const mount = document.getElementById('googleSignInMount');
+  if (!mount || !AUTH_STATE.googleClientId || !window.google?.accounts?.id || AUTH_STATE.user) return;
+
+  mount.innerHTML = '';
+  window.google.accounts.id.initialize({
+    client_id: AUTH_STATE.googleClientId,
+    callback: handleGoogleCredentialResponse,
+    auto_select: false,
+    cancel_on_tap_outside: true,
+  });
+  window.google.accounts.id.renderButton(mount, {
+    theme: 'outline',
+    size: 'medium',
+    shape: 'pill',
+    text: 'signin_with',
+    width: 180,
+  });
+  AUTH_STATE.buttonRendered = true;
+}
+
+function handleGoogleCredentialResponse(response) {
+  try {
+    const payload = decodeJwtPayload(response.credential);
+    AUTH_STATE.user = {
+      name: payload.name || '',
+      email: payload.email || '',
+      picture: payload.picture || '',
+      sub: payload.sub || '',
+    };
+    saveStoredGoogleUser(AUTH_STATE.user);
+    renderAuthControls();
+    renderCustomTickers();
+  } catch (error) {
+    AUTH_STATE.error = 'Google sign-in failed';
+    renderAuthControls();
+  }
+}
+
+function persistTicker() {
+  saveGuestTickers();
+  return true;
+}
+
+function deleteTicker() {
+  saveGuestTickers();
+  return true;
+}
+
+async function initAuth(forceRefresh = false) {
+  if (AUTH_STATE.configLoaded && !forceRefresh) {
+    renderAuthControls();
+    return;
+  }
+
+  AUTH_STATE.error = '';
+  AUTH_STATE.configLoaded = false;
+  AUTH_STATE.googleClientId = "";
+  AUTH_STATE.user = loadStoredGoogleUser();
+  renderAuthControls();
+
+  try {
+    const config = await fetchPublicAuthConfig();
+    AUTH_STATE.configLoaded = true;
+    AUTH_STATE.googleClientId = config.googleClientId || "";
+    renderAuthControls();
+  } catch (error) {
+    AUTH_STATE.configLoaded = true;
+    AUTH_STATE.error = 'Auth unavailable';
+    renderAuthControls();
+  }
+}
+
+async function signOut() {
+  AUTH_STATE.user = null;
+  saveStoredGoogleUser(null);
+  if (window.google?.accounts?.id) {
+    window.google.accounts.id.disableAutoSelect();
+  }
+  renderAuthControls();
+  renderCustomTickers();
+}
 
 function addCustomTicker(symbol) {
   const ticker = symbol.toUpperCase().trim();
@@ -1309,11 +1502,12 @@ function addCustomTicker(symbol) {
   if (customTickersList.includes(ticker)) return 'duplicate';
   
   customTickersList.push(ticker);
-  return true;
+  return ticker;
 }
 
-function removeCustomTicker(ticker) {
+async function removeCustomTicker(ticker) {
   customTickersList = customTickersList.filter(t => t !== ticker);
+  deleteTicker(ticker);
   renderCustomTickers();
 }
 
@@ -1341,7 +1535,7 @@ function renderCustomTickers() {
           <span class="custom-card-ticker" onclick="window.open('${getTradingViewUrl(ticker)}', '_blank')" title="Open ${escapeHtml(ticker)} on TradingView">
             ${escapeHtml(ticker)} <span style="font-size:0.65rem; color:var(--text-muted);">↗</span>
           </span>
-          <span class="custom-card-status">Added to tracking — data on next refresh</span>
+          <span class="custom-card-status">Added to tracking — ${AUTH_STATE.user ? 'saved on this browser for your Google session' : 'saved on this browser'}</span>
         </div>
         <div class="custom-card-actions">
           <a class="custom-card-tv" href="${getTradingViewUrl(ticker)}" target="_blank" rel="noopener">TradingView</a>
@@ -1372,7 +1566,7 @@ function initAddTickerModal() {
     input.value = '';
   }
   
-  function handleAdd() {
+  async function handleAdd() {
     const val = input.value.trim();
     if (!val) return;
     
@@ -1397,7 +1591,12 @@ function initAddTickerModal() {
       }, 1500);
       return;
     }
-    
+
+    const saved = persistTicker(result);
+    if (!saved) {
+      customTickersList = customTickersList.filter((ticker) => ticker !== result);
+    }
+
     closeModal();
     renderCustomTickers();
   }
@@ -1440,7 +1639,9 @@ function initTickerDetailModal() {
 // ============================================
 
 async function init() {
+  await initAuth();
   renderHeader();
+  renderAuthControls();
   renderAlertBar();
   renderCatalysts();
   renderCalendar();

@@ -142,6 +142,65 @@ body {
   gap: 10px;
 }
 
+.auth-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 2px;
+}
+
+.auth-status-pill,
+.auth-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 31px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.35px;
+  white-space: nowrap;
+}
+
+.auth-status-pill {
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+}
+
+.auth-status-pill.signed-in {
+  border-color: rgba(0, 255, 136, 0.22);
+  background: rgba(0, 255, 136, 0.09);
+  color: var(--green);
+}
+
+.auth-status-pill.warning {
+  border-color: rgba(255, 170, 0, 0.26);
+  background: rgba(255, 170, 0, 0.12);
+  color: var(--amber);
+}
+
+.auth-status-pill.error {
+  border-color: rgba(255, 68, 68, 0.25);
+  background: rgba(255, 68, 68, 0.12);
+  color: var(--red);
+}
+
+.auth-action-btn {
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--cyan);
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.auth-action-btn:hover {
+  border-color: rgba(0, 212, 255, 0.34);
+  background: rgba(0, 212, 255, 0.12);
+}
+
 .alert-bar {
   position: sticky;
   top: var(--header-height);

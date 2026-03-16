@@ -6,6 +6,10 @@
       "dest": "/api/options-flow.py"
     },
     {
+      "src": "/api/public-config",
+      "dest": "/api/public-config.py"
+    },
+    {
       "handle": "filesystem"
     },
     {

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import os
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 from barchart_proxy import CACHE_TTL_SECONDS, fetch_options_activity
@@ -10,6 +11,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/api/options-flow"):
             self.handle_options_flow()
+            return
+        if self.path.startswith("/api/public-config"):
+            self.handle_public_config()
             return
         super().do_GET()
 
@@ -30,6 +34,17 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+    def handle_public_config(self):
+        body = json.dumps({
+            "googleClientId": os.environ.get("GOOGLE_CLIENT_ID", ""),
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
 
 def main():

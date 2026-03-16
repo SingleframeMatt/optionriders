@@ -30,6 +30,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <!-- Sticky Header -->
@@ -50,6 +51,9 @@
       <span class="header-date" id="headerDate"></span>
     </div>
     <div class="header-right">
+      <div class="auth-controls" id="authControls">
+        <span class="auth-status-pill">Auth loading...</span>
+      </div>
       <span class="badge badge-open-time" id="marketOpenTime"></span>
       <span class="badge badge-market" id="marketStatus"></span>
       <span class="badge badge-sentiment" id="sentiment"></span>
