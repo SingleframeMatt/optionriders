@@ -19,6 +19,7 @@ _cache = {"expires_at": 0.0, "payload": None}
 TICKERS = [
     "SPY", "QQQ", "NVDA", "MU", "META", "AVGO",
     "AMD", "AAPL", "TSLA", "MSFT", "GOOGL", "AMZN",
+    "SMCI", "PLTR",
 ]
 
 TICKER_NAMES = {
@@ -34,12 +35,15 @@ TICKER_NAMES = {
     "MSFT": "Microsoft",
     "GOOGL":"Alphabet",
     "AMZN": "Amazon",
+    "SMCI": "Super Micro Computer",
+    "PLTR": "Palantir",
     "ES":   "S&P 500 Futures",
     "NQ":   "Nasdaq Futures",
+    "VIX":  "CBOE Volatility Index",
 }
 
-# Futures symbols for yfinance (mapped to short keys for the front-end)
-INDEX_FUTURES = [("ES=F", "ES"), ("NQ=F", "NQ")]
+# Futures + volatility index symbols for yfinance
+INDEX_FUTURES = [("ES=F", "ES"), ("NQ=F", "NQ"), ("^VIX", "VIX")]
 
 
 # ─── Technical indicators ──────────────────────────────────────────────────────
@@ -153,6 +157,141 @@ def _levels(highs, lows, price, n=3):
     return support[:n], resistance[:n]
 
 
+def _adx(highs, lows, closes, period=14):
+    """
+    Average Directional Index — trend strength 0-100.
+    >30 = strong trend, 20-30 = moderate, <20 = weak/ranging.
+    Returns 20.0 (neutral) if insufficient data.
+    """
+    if len(closes) < period * 2 + 2:
+        return 20.0
+
+    tr_list, plus_dm, minus_dm = [], [], []
+    for i in range(1, len(closes)):
+        h, l, pc = highs[i], lows[i], closes[i - 1]
+        tr       = max(h - l, abs(h - pc), abs(l - pc))
+        up_move   = highs[i]   - highs[i - 1]
+        down_move = lows[i - 1] - lows[i]
+        plus_dm.append(up_move   if up_move   > down_move and up_move   > 0 else 0.0)
+        minus_dm.append(down_move if down_move > up_move   and down_move > 0 else 0.0)
+        tr_list.append(tr)
+
+    def _wilder(data, n):
+        if len(data) < n:
+            return []
+        s = sum(data[:n])
+        result = [s]
+        for v in data[n:]:
+            s = s - s / n + v
+            result.append(s)
+        return result
+
+    s_tr   = _wilder(tr_list,   period)
+    s_plus = _wilder(plus_dm,   period)
+    s_minus= _wilder(minus_dm,  period)
+
+    dx_list = []
+    for i in range(len(s_tr)):
+        if s_tr[i] == 0:
+            continue
+        pdi = 100.0 * s_plus[i]  / s_tr[i]
+        mdi = 100.0 * s_minus[i] / s_tr[i]
+        dx  = 100.0 * abs(pdi - mdi) / (pdi + mdi) if (pdi + mdi) > 0 else 0.0
+        dx_list.append(dx)
+
+    if not dx_list:
+        return 20.0
+
+    # ADX = Wilder smooth of DX
+    adx_val = sum(dx_list[:period]) / min(period, len(dx_list))
+    for v in dx_list[period:]:
+        adx_val = (adx_val * (period - 1) + v) / period
+    return round(adx_val, 1)
+
+
+def _bollinger_pct_b(closes, period=20, num_std=2.0):
+    """
+    %B position within Bollinger Bands.
+    0 = at lower band, 0.5 = at middle (SMA), 1 = at upper band.
+    Returns 0.5 (neutral) if insufficient data.
+    """
+    if len(closes) < period:
+        return 0.5
+    window   = closes[-period:]
+    mean_v   = sum(window) / period
+    variance = sum((x - mean_v) ** 2 for x in window) / period
+    std      = variance ** 0.5
+    if std == 0:
+        return 0.5
+    upper = mean_v + num_std * std
+    lower = mean_v - num_std * std
+    pct_b = (closes[-1] - lower) / (upper - lower)
+    return round(max(-0.2, min(1.2, pct_b)), 3)  # allow slightly outside bands
+
+
+def _week52_position(closes):
+    """
+    Where is the current price within its trailing 252-bar range?
+    0.0 = at 52-week low, 1.0 = at 52-week high.
+    """
+    window = closes[-252:] if len(closes) >= 252 else closes
+    if not window:
+        return 0.5
+    lo, hi = min(window), max(window)
+    if hi == lo:
+        return 0.5
+    return round((closes[-1] - lo) / (hi - lo), 3)
+
+
+def _fetch_earnings_date(symbol):
+    """
+    Return next earnings date as ISO string (YYYY-MM-DD) or None.
+    Uses yfinance Ticker.calendar — best-effort, silently fails.
+    """
+    import datetime
+    try:
+        import yfinance as yf
+        t = yf.Ticker(symbol)
+        cal = t.calendar
+        if cal is None:
+            return None
+        today = datetime.date.today()
+
+        # yfinance ≥ 0.2 returns a dict; older versions return a DataFrame
+        if isinstance(cal, dict):
+            dates = cal.get("Earnings Date") or cal.get("earningsDate") or []
+            if not dates:
+                return None
+            if not hasattr(dates, "__iter__"):
+                dates = [dates]
+            upcoming = []
+            for d in dates:
+                try:
+                    if hasattr(d, "date"):
+                        dobj = d.date()
+                    else:
+                        dobj = datetime.date.fromisoformat(str(d)[:10])
+                    if dobj >= today:
+                        upcoming.append(dobj)
+                except Exception:
+                    pass
+            if upcoming:
+                return min(upcoming).isoformat()
+        elif hasattr(cal, "columns"):
+            # Older DataFrame format
+            col = next((c for c in cal.columns if "Earnings" in str(c)), None)
+            if col:
+                vals = cal[col].dropna()
+                if len(vals):
+                    d = vals.iloc[0]
+                    dobj = d.date() if hasattr(d, "date") else datetime.date.fromisoformat(str(d)[:10])
+                    if dobj >= today:
+                        return dobj.isoformat()
+    except Exception:
+        pass
+    return None
+
+
 def _bias(rsi, price, sma20, sma50):
     score = 0
     if   rsi > 65: score += 2
@@ -168,65 +307,89 @@ def _bias(rsi, price, sma20, sma50):
     else:             return "Range"
 
 
-def _signal_score(rsi, price, sma20, sma50, closes, volumes=None, spy_closes=None):
+def _signal_score(rsi, price, sma20, sma50, closes, highs=None, lows=None,
+                  volumes=None, spy_closes=None):
     """
     Composite signal score from -100 (strong sell) to +100 (strong buy).
 
     Components:
-      RSI momentum       : ±30   (deviation from neutral 50)
-      Price vs SMA20     : ±15   (% distance above/below)
-      Price vs SMA50     : ±15   (% distance above/below)
-      5d vs 20d momentum : ±15   (short-term acceleration)
-      MACD histogram     : ±15   (crossover momentum)
-      Volume confirm     : ±10   (high-volume moves score higher)
-      Relative vs SPY    : ±10   (outperforming/underperforming market)
-    Max possible: ±110 → capped to ±100
+      RSI momentum       : ±24   (deviation from neutral 50)
+      Price vs SMA20     : ±12   (% distance above/below)
+      Price vs SMA50     : ±12   (% distance above/below)
+      5d vs 20d momentum : ±12   (short-term acceleration)
+      MACD histogram     : ±12   (crossover momentum)
+      Volume confirm     : ±8    (high-volume moves score higher)
+      Relative vs SPY    : ±8    (outperforming/underperforming market)
+      Bollinger %B       : ±6    (oversold/overbought via BB bands)
+      52-week position   : ±5    (near highs = bullish, near lows = bearish)
+    Raw max: ±99 → ADX multiplier applied → capped to ±100
     """
     score = 0.0
 
-    # RSI (±30)
-    score += max(-30.0, min(30.0, (rsi - 50.0) * 0.6))
+    # RSI (±24)
+    score += max(-24.0, min(24.0, (rsi - 50.0) * 0.48))
 
-    # Price vs SMA20 (±15)
+    # Price vs SMA20 (±12)
     if sma20 > 0:
         pct = (price - sma20) / sma20 * 100.0
-        score += max(-15.0, min(15.0, pct * 1.5))
+        score += max(-12.0, min(12.0, pct * 1.2))
 
-    # Price vs SMA50 (±15)
+    # Price vs SMA50 (±12)
     if sma50 > 0:
         pct = (price - sma50) / sma50 * 100.0
-        score += max(-15.0, min(15.0, pct * 1.5))
+        score += max(-12.0, min(12.0, pct * 1.2))
 
-    # 5-day vs 20-day momentum (±15)
+    # 5-day vs 20-day momentum (±12)
     if len(closes) >= 21 and closes[-6] and closes[-21]:
         ret5  = (closes[-1] - closes[-6])  / closes[-6]  * 100.0
         ret20 = (closes[-1] - closes[-21]) / closes[-21] * 100.0
-        score += max(-15.0, min(15.0, (ret5 - ret20) * 1.2))
+        score += max(-12.0, min(12.0, (ret5 - ret20) * 1.0))
 
-    # MACD histogram (±15)
+    # MACD histogram (±12)
     hist = _macd_histogram(closes)
     if hist != 0.0 and price > 0:
         hist_norm = hist / price * 1000.0   # normalise by price
-        score += max(-15.0, min(15.0, hist_norm))
+        score += max(-12.0, min(12.0, hist_norm))
 
-    # Volume confirmation (±10) — high-volume day amplifies last move direction
+    # Volume confirmation (±8) — high-volume day amplifies last move direction
     if volumes:
         vol_r = _volume_ratio(volumes)
         if vol_r > 1.3 and len(closes) >= 2 and closes[-2]:
             last_ret = (closes[-1] - closes[-2]) / closes[-2] * 100.0
             direction = 1.0 if last_ret > 0 else -1.0
-            boost = min(10.0, (vol_r - 1.0) * 6.0) * direction
+            boost = min(8.0, (vol_r - 1.0) * 5.0) * direction
             score += boost
 
-    # Relative strength vs SPY (±10) — outperformers score higher
+    # Relative strength vs SPY (±8) — outperformers score higher
     if spy_closes and len(spy_closes) >= 6 and len(closes) >= 6:
         try:
             tk_ret  = (closes[-1]     - closes[-6])     / closes[-6]     * 100.0
             spy_ret = (spy_closes[-1] - spy_closes[-6]) / spy_closes[-6] * 100.0
             rel = tk_ret - spy_ret
-            score += max(-10.0, min(10.0, rel * 0.8))
+            score += max(-8.0, min(8.0, rel * 0.8))
         except (ZeroDivisionError, IndexError):
             pass
+
+    # Bollinger %B (±6) — oversold bounce when near/below lower band
+    pct_b = _bollinger_pct_b(closes)
+    # pct_b < 0.2 → oversold → bullish; pct_b > 0.8 → overbought → bearish
+    bb_score = (0.5 - pct_b) * 12.0   # inverted: low %B = positive score
+    score += max(-6.0, min(6.0, bb_score))
+
+    # 52-week position (±5) — momentum: near highs is bullish
+    pos52 = _week52_position(closes)
+    score += max(-5.0, min(5.0, (pos52 - 0.5) * 10.0))
+
+    # ADX multiplier — amplify score when trending, dampen when choppy
+    if highs and lows and len(highs) >= 30:
+        adx_val = _adx(highs, lows, closes)
+        if adx_val >= 30:
+            multiplier = 1.15   # strong trend: trust the signal more
+        elif adx_val >= 20:
+            multiplier = 1.0    # moderate trend: no change
+        else:
+            multiplier = 0.85   # ranging/choppy: reduce confidence
+        score *= multiplier
 
     return int(round(max(-100.0, min(100.0, score))))
 
@@ -260,11 +423,16 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes, volumes=None, s
     sma50    = _sma(closes, 50)
     macd_h   = round(_macd_histogram(closes), 4)
     vol_r    = round(_volume_ratio(volumes), 2) if volumes else None
+    adx_val  = round(_adx(highs, lows, closes), 1)
+    pct_b    = round(_bollinger_pct_b(closes), 3)
+    pos52    = round(_week52_position(closes), 3)
 
     support, resistance = _levels(highs, lows, price)
     bias_str   = _bias(rsi_val, price, sma20, sma50)
     strat_str  = _strategy(bias_str, rsi_val)
-    sig_score  = _signal_score(rsi_val, price, sma20, sma50, closes, volumes, spy_closes)
+    sig_score  = _signal_score(rsi_val, price, sma20, sma50, closes,
+                               highs=highs, lows=lows, volumes=volumes,
+                               spy_closes=spy_closes)
 
     bull_trig = f"Break above {resistance[0]}" if resistance else f"Reclaim {round(price * 1.01, 2)}"
     bear_trig = f"Lose {support[0]}"           if support    else f"Break below {round(price * 0.99, 2)}"
@@ -327,6 +495,9 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes, volumes=None, s
         "sma50":          round(sma50, 2),
         "macdHistogram":  macd_h,
         "volumeRatio":    vol_r,
+        "adx":            adx_val,
+        "bollingerPctB":  pct_b,
+        "week52Position": pos52,
         "signalScore":    sig_score,
         "liveData":    True,
         "_ohlcv":      ohlcv,   # stripped out before JSON response
@@ -414,7 +585,8 @@ def _backtest_ticker(highs, lows, closes, volumes=None, spy_closes=None, lookbac
         rsi_v = _rsi(c)
         sma20 = _sma(c, 20)
         sma50 = _sma(c, 50)
-        score = _signal_score(rsi_v, c[-1], sma20, sma50, c, v, spy)
+        score = _signal_score(rsi_v, c[-1], sma20, sma50, c,
+                               highs=h, lows=l, volumes=v, spy_closes=spy)
         fwd   = {d: round((closes[i + d] - closes[i]) / closes[i] * 100, 3)
                  for d in _FWD_DAYS if i + d < len(closes)}
         records.append((score, fwd))
@@ -524,6 +696,27 @@ def fetch_market_data():
         except Exception as exc:
             print(f"[market_data] {sym}: {exc}")
 
+    # ── Earnings dates (parallel fetch) ──────────────────────────
+    earnings_dates = {}
+    try:
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            future_map = {pool.submit(_fetch_earnings_date, sym): sym for sym in TICKERS}
+            for fut in concurrent.futures.as_completed(future_map, timeout=12):
+                sym = future_map[fut]
+                try:
+                    result = fut.result()
+                    if result:
+                        earnings_dates[sym] = result
+                except Exception:
+                    pass
+    except Exception as exc:
+        print(f"[market_data] earnings fetch error: {exc}")
+
+    # Attach earnings date to each ticker entry
+    for entry in ticker_entries:
+        entry["earningsDate"] = earnings_dates.get(entry["ticker"])
+
     # ── Index / futures entries ───────────────────────────────────
     index_entries = []
     # SPY and QQQ reuse their already-computed ticker_entries
@@ -532,12 +725,27 @@ def fetch_market_data():
         if e:
             index_entries.append(e)
 
+    # VIX — extract as a simple dict (no full entry needed)
+    vix_data = None
     for yf_sym, short_key in INDEX_FUTURES:
         try:
             o = series("Open",  yf_sym)
             h = series("High",  yf_sym)
             l = series("Low",   yf_sym)
             c = series("Close", yf_sym)
+            if len(c) < 2:
+                continue
+            if short_key == "VIX":
+                # VIX: just expose current level and 1-day change
+                prev = c[-2] if len(c) >= 2 else c[-1]
+                chg  = round((c[-1] - prev) / prev * 100, 2) if prev else 0.0
+                vix_data = {
+                    "price":    round(c[-1], 2),
+                    "change":   round(c[-1] - prev, 2),
+                    "changePct": chg,
+                    "label":    ("Fear" if c[-1] > 25 else "Calm" if c[-1] < 15 else "Normal"),
+                }
+                continue
             if len(c) < 22:
                 continue
             entry = _build_entry(0, short_key, TICKER_NAMES.get(short_key, short_key), o, h, l, c)
@@ -545,6 +753,26 @@ def fetch_market_data():
                 index_entries.append(entry)
         except Exception as exc:
             print(f"[market_data] {yf_sym}: {exc}")
+
+    # ── Market breadth ────────────────────────────────────────────
+    scores = [e["signalScore"] for e in ticker_entries if e.get("signalScore") is not None]
+    bullish_n  = sum(1 for s in scores if s >= 20)
+    bearish_n  = sum(1 for s in scores if s <= -20)
+    neutral_n  = len(scores) - bullish_n - bearish_n
+    avg_score  = round(sum(scores) / len(scores), 1) if scores else 0.0
+    if avg_score >= 40:      breadth_label = "Strongly Bullish"
+    elif avg_score >= 15:    breadth_label = "Bullish"
+    elif avg_score <= -40:   breadth_label = "Strongly Bearish"
+    elif avg_score <= -15:   breadth_label = "Bearish"
+    else:                    breadth_label = "Mixed"
+    market_breadth = {
+        "bullish":   bullish_n,
+        "bearish":   bearish_n,
+        "neutral":   neutral_n,
+        "total":     len(scores),
+        "avgScore":  avg_score,
+        "label":     breadth_label,
+    }
 
     # ── Auto-generate watchlist ───────────────────────────────────
     watchlist = _build_watchlist(ticker_entries)
@@ -572,6 +800,9 @@ def fetch_market_data():
         "backtestStats":    backtest_stats,
         "backtestPerTicker":_bt_per_ticker,
         "backtestN":        len(_bt_records),
+        "vix":              vix_data,
+        "marketBreadth":    market_breadth,
+        "earningsDates":    earnings_dates,
         "updatedAt":        int(now),
         "liveData":         True,
     }

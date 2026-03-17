@@ -291,7 +291,57 @@ function renderSignalBadge(score) {
   const label = getSignalLabel(score);
   const cls   = getSignalClass(score);
   const sign  = score > 0 ? '+' : '';
-  return `<span class="signal-badge ${cls}" title="Composite signal: RSI + price vs SMA20/50 + momentum">${sign}${score} ${label}</span>`;
+  return `<span class="signal-badge ${cls}" title="Composite signal: RSI + SMA + momentum + MACD + volume + rel-strength + ADX + Bollinger + 52W position">${sign}${score} ${label}</span>`;
+}
+
+function getVixClass(price) {
+  if (price >= 30) return 'vix-fear';
+  if (price >= 20) return 'vix-elevated';
+  if (price <= 14) return 'vix-calm';
+  return 'vix-normal';
+}
+
+function renderVixBadge(vix) {
+  if (!vix) return;
+  const el = document.getElementById('vixBadge');
+  if (!el) return;
+  const sign = vix.changePct >= 0 ? '+' : '';
+  el.className = `badge vix-badge ${getVixClass(vix.price)}`;
+  el.textContent = `VIX ${vix.price} (${sign}${vix.changePct}%) ${vix.label}`;
+  el.title = 'CBOE Volatility Index — >25 = elevated fear, <15 = low fear/complacency';
+  el.style.display = '';
+}
+
+function renderMarketPulse(breadth) {
+  if (!breadth) return;
+  const el = document.getElementById('marketPulseBadge');
+  if (!el) return;
+  const score = breadth.avgScore;
+  const sign  = score >= 0 ? '+' : '';
+  const cls   = score >= 40 ? 'signal-strong-buy' :
+                score >= 15 ? 'signal-buy' :
+                score <= -40 ? 'signal-strong-sell' :
+                score <= -15 ? 'signal-sell' : 'signal-neutral';
+  el.className = `badge market-pulse-badge signal-badge ${cls}`;
+  el.innerHTML = `PULSE&nbsp;${sign}${score} <span style="opacity:0.7;font-size:0.72em">${escapeHtml(breadth.label)}</span>`;
+  el.title = `Market Pulse: avg signal across ${breadth.total} tickers — ${breadth.bullish} bullish, ${breadth.bearish} bearish, ${breadth.neutral} neutral`;
+  el.style.display = '';
+}
+
+function renderEarningsDate(earningsIso) {
+  if (!earningsIso) return '';
+  const today   = new Date();
+  today.setHours(0, 0, 0, 0);
+  const eDate   = new Date(earningsIso + 'T12:00:00');
+  const diffMs  = eDate - today;
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays < 0 || diffDays > 60) return ''; // skip past or far-future
+  const shortDate = eDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const countdown = diffDays === 0 ? 'Today!' :
+                    diffDays === 1 ? 'Tomorrow' :
+                    `in ${diffDays}d`;
+  const urgency = diffDays <= 3 ? 'earnings-urgent' : diffDays <= 10 ? 'earnings-soon' : 'earnings-normal';
+  return `<span class="earnings-badge ${urgency}" title="Next earnings: ${earningsIso}">📅 Earnings ${shortDate} (${countdown})</span>`;
 }
 
 function getBiasClass(bias) {
@@ -432,6 +482,8 @@ const CHART_DATA = {
   TSLA: [[390.02,392.99,381.4,383.45],[383.45,388.59,383.45,388.33],[388.23,390.89,387.18,390.1],[390.16,390.99,388.68,389.01],[389.0,391.77,388.51,391.29],[391.27,400.7,391.05,400.6],[400.57,401.58,397.33,398.64],[402.05,406.58,400.88,401.2],[401.15,406.1,400.86,403.58],[403.55,403.81,400.95,402.65],[402.64,404.19,402.07,403.35],[403.33,403.36,398.19,400.56],[400.59,401.95,399.35,399.9],[399.86,400.74,398.27,399.23],[402.22,416.38,402.15,411.91],[411.85,412.6,408.96,409.0],[409.01,409.1,406.24,407.38],[407.4,408.65,406.25,408.23],[408.23,408.35,403.95,405.53],[405.56,406.8,404.93,406.14],[406.16,408.25,406.15,407.86],[405.22,406.5,399.44,399.53],[399.5,399.94,394.65,397.01],[396.99,400.13,396.46,398.86],[398.83,401.04,398.49,399.86],[399.85,400.45,396.27,397.84],[397.81,398.08,396.29,397.58],[397.6,398.12,394.97,395.01],[399.02,400.2,395.17,396.12],[396.14,397.73,392.22,394.08],[394.1,395.16,392.3,395.0],[394.98,395.96,392.92,394.99],[395.05,395.21,392.12,393.16],[393.12,393.96,390.08,390.9],[390.9,392.12,389.96,391.2]],
   MSFT: [[404.98,408.5,403.52,405.09],[405.0,409.16,404.67,408.56],[408.55,409.0,406.83,406.83],[406.96,407.8,405.06,405.18],[405.15,405.49,404.44,405.01],[404.97,407.91,404.4,407.9],[407.89,410.21,406.87,409.39],[410.1,410.31,402.93,404.38],[404.43,406.65,404.02,406.03],[405.99,407.37,405.2,407.24],[407.29,407.93,405.83,406.37],[406.37,406.37,404.11,405.64],[405.69,405.95,403.89,404.72],[404.7,405.94,404.25,405.71],[405.84,409.01,403.3,404.45],[404.45,405.0,401.59,402.73],[402.84,403.61,401.88,403.28],[403.25,404.5,403.0,404.23],[404.25,404.41,402.09,403.66],[403.68,404.5,403.29,403.8],[403.82,405.15,403.78,404.86],[404.41,405.77,401.83,403.5],[403.45,405.81,402.4,403.65],[403.58,405.25,402.67,404.84],[404.88,406.12,404.05,404.35],[404.35,404.85,402.64,403.06],[403.05,404.07,402.6,403.83],[403.88,403.95,401.71,401.9],[400.96,404.8,399.65,401.08],[401.11,402.54,397.52,397.78],[397.81,398.17,395.4,396.46],[396.46,396.79,394.92,396.59],[396.6,397.38,395.18,396.07],[396.08,396.58,394.5,394.57],[394.59,395.76,394.24,395.55]],
   GOOGL: [[294.36,298.65,294.1,297.11],[297.03,300.08,297.03,299.47],[299.47,301.45,298.99,300.78],[300.89,301.97,300.2,300.81],[300.79,301.93,300.68,301.07],[301.03,305.14,301.01,305.06],[305.08,306.8,304.48,306.34],[306.49,308.63,305.59,306.53],[306.55,309.5,306.54,308.42],[308.42,309.32,307.61,308.2],[308.24,309.05,307.8,308.97],[308.96,309.31,306.43,307.75],[307.74,308.37,306.62,306.63],[306.62,307.5,306.41,307.05],[306.48,310.93,305.93,310.89],[310.89,311.4,308.73,308.87],[308.89,309.82,308.37,308.76],[308.77,309.58,308.66,309.34],[309.33,309.41,307.57,308.45],[308.44,308.8,307.44,308.15],[308.18,308.98,307.82,308.7],[306.82,308.86,302.85,302.86],[302.86,303.67,301.03,302.3],[302.28,304.05,301.92,303.04],[302.98,304.31,302.85,303.81],[303.84,304.73,302.98,304.62],[304.59,305.09,303.98,304.86],[304.85,305.05,303.43,303.49],[307.08,307.82,304.42,306.68],[306.65,307.57,304.06,304.17],[304.19,304.35,302.3,302.74],[302.73,303.08,300.59,301.91],[301.97,302.05,300.45,301.96],[301.96,302.62,301.1,301.43],[301.45,302.5,300.95,302.18]],
+  SMCI: [],
+  PLTR: [],
   AMZN: [[210.45,212.25,207.12,209.05],[209.03,210.85,208.83,210.56],[210.55,210.75,209.83,210.13],[210.17,210.48,209.19,209.6],[209.58,209.92,208.83,209.36],[209.34,212.69,209.0,212.69],[212.69,213.82,212.42,213.45],[214.03,214.82,212.43,214.08],[214.05,215.65,214.04,214.41],[214.39,215.3,213.84,214.95],[214.97,215.65,214.79,215.36],[215.3,215.49,213.57,214.48],[214.49,214.81,213.79,213.96],[213.95,214.63,213.72,214.34],[215.88,217.0,213.06,213.62],[213.64,214.55,212.13,212.2],[212.2,212.65,211.72,212.6],[212.59,213.29,212.58,212.62],[212.64,212.79,211.33,212.32],[212.31,213.33,212.29,212.71],[212.73,213.32,212.55,212.64],[210.32,211.7,208.85,210.28],[210.26,211.17,208.15,208.63],[208.62,210.56,208.36,209.7],[209.65,210.87,209.36,210.06],[210.06,210.62,209.37,209.71],[209.69,209.89,208.81,209.79],[209.79,210.25,209.32,209.5],[209.35,210.56,207.61,209.97],[210.0,210.5,207.97,208.04],[208.04,208.4,206.86,207.79],[207.77,208.16,206.54,207.15],[207.17,207.8,206.23,207.78],[207.77,208.49,207.68,208.14],[208.13,208.5,207.37,207.72]],
 };
 
@@ -445,7 +497,8 @@ function getTradingViewUrl(ticker) {
     'AMD': 'NASDAQ:AMD', 'AAPL': 'NASDAQ:AAPL',
     'TSLA': 'NASDAQ:TSLA', 'MSFT': 'NASDAQ:MSFT',
     'GOOGL': 'NASDAQ:GOOGL', 'AMZN': 'NASDAQ:AMZN',
-    'NFLX': 'NASDAQ:NFLX', 'SMCI': 'NASDAQ:SMCI'
+    'NFLX': 'NASDAQ:NFLX', 'SMCI': 'NASDAQ:SMCI',
+    'PLTR': 'NASDAQ:PLTR'
   };
   const sym = symbolMap[ticker] || ticker;
   return `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(sym)}`;
@@ -1027,6 +1080,8 @@ function renderTickerCards() {
 
       ${t.signalScore != null ? `<div class="signal-score-row">${renderSignalBadge(t.signalScore)}</div>` : ''}
 
+      ${t.earningsDate ? `<div class="earnings-row">${renderEarningsDate(t.earningsDate)}</div>` : ''}
+
       <div class="chart-container" onclick="window.open('${getTradingViewUrl(t.ticker)}', '_blank')" title="Open ${t.ticker} on TradingView">
         <canvas class="sparkline-canvas" data-ticker="${t.ticker}"></canvas>
       </div>
@@ -1055,6 +1110,20 @@ function renderTickerCards() {
           <span class="atr-value glow-hover">${escapeHtml(t.expectedMove)}</span>
         </div>
       </div>
+      ${t.adx != null ? `<div class="atr-row">
+        <div class="atr-item">
+          <span class="atr-label" title="Average Directional Index — trend strength">ADX</span>
+          <span class="atr-value glow-hover ${t.adx >= 30 ? 'adx-strong' : t.adx < 20 ? 'adx-weak' : ''}">${t.adx}${t.adx >= 30 ? ' ↑' : t.adx < 20 ? ' ~' : ''}</span>
+        </div>
+        <div class="atr-item">
+          <span class="atr-label" title="Bollinger Band %B — 0=lower band, 1=upper band">BB %B</span>
+          <span class="atr-value glow-hover">${t.bollingerPctB != null ? (t.bollingerPctB * 100).toFixed(0) + '%' : '—'}</span>
+        </div>
+        <div class="atr-item">
+          <span class="atr-label" title="52-week range position — 0%=52W low, 100%=52W high">52W Pos</span>
+          <span class="atr-value glow-hover">${t.week52Position != null ? (t.week52Position * 100).toFixed(0) + '%' : '—'}</span>
+        </div>
+      </div>` : ''}
 
       <table class="levels-table">
         <tr>
@@ -1712,6 +1781,14 @@ async function fetchMarketData() {
         weekday: 'short', month: 'short', day: 'numeric'
       })} ${t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. `
         + 'Indicators computed from Yahoo Finance daily bars. Not financial advice.';
+    }
+
+    // Render VIX badge and Market Pulse
+    if (payload.vix) {
+      renderVixBadge(payload.vix);
+    }
+    if (payload.marketBreadth) {
+      renderMarketPulse(payload.marketBreadth);
     }
 
     // Render backtest accuracy tables

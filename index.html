@@ -2,21 +2,15 @@
 <html lang="en">
 <head>
 <!--
-   ______                            __
-  / ____/___  ____ ___  ____  __  __/ /____  _____
- / /   / __ \/ __ `__ \/ __ \/ / / / __/ _ \/ ___/
-/ /___/ /_/ / / / / / / /_/ / /_/ / /_/  __/ /
-\____/\____/_/ /_/ /_/ .___/\__,_/\__/\___/_/
-                    /_/
-        Created with Perplexity Computer
-        https://www.perplexity.ai/computer
+   ____        __  _               ____  _     __
+  / __ \____  / /_(_)___  ____    / __ \(_)___/ /__  __________
+ / / / / __ \/ __/ / __ \/ __ \  / /_/ / / __  / _ \/ ___/ ___/
+/ /_/ / /_/ / /_/ / /_/ / / / / / _, _/ / /_/ /  __/ /  (__  )
+\____/ .___/\__/_/\____/_/ /_/ /_/ |_/_/\__,_/\___/_/  /____/
+    /_/
+        Option Riders — Live Trading Dashboard
+        https://www.optionriders.com
 -->
-
-<!-- Perplexity Computer Attribution — SEO Meta Tags -->
-<meta name="generator" content="Perplexity Computer">
-<meta name="author" content="Perplexity Computer">
-<meta property="og:see_also" content="https://www.perplexity.ai/computer">
-<link rel="author" href="https://www.perplexity.ai/computer">
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -54,6 +48,8 @@
       <div class="auth-controls" id="authControls">
         <span class="auth-status-pill">Auth loading...</span>
       </div>
+      <span class="market-pulse-badge" id="marketPulseBadge" style="display:none"></span>
+      <span class="vix-badge" id="vixBadge" style="display:none"></span>
       <span class="badge badge-open-time" id="marketOpenTime"></span>
       <span class="badge badge-market" id="marketStatus"></span>
       <span class="badge badge-sentiment" id="sentiment"></span>
@@ -314,10 +310,8 @@
 
     <!-- Footer -->
     <footer class="footer">
-      <p class="footer-disclaimer">Data as of Friday March 13, 2026 close. Pre-market levels may differ. Not financial advice.</p>
-      <a href="https://www.perplexity.ai/computer" target="_blank" rel="noopener noreferrer" class="footer-attribution">
-        Created with Perplexity Computer
-      </a>
+      <p class="footer-disclaimer">Live data from Yahoo Finance. Indicators computed daily. Not financial advice.</p>
+      <span class="footer-attribution">Option Riders © 2026</span>
     </footer>
   </main>
 

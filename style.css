@@ -1935,3 +1935,54 @@ body {
   margin-top: 10px;
   line-height: 1.5;
 }
+
+/* ── VIX Badge ───────────────────────────────────────────────────── */
+.vix-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.vix-calm     { background: rgba(0,200,100,0.14); color: #00cc77; border-color: rgba(0,200,100,0.3); }
+.vix-normal   { background: rgba(180,160,80,0.14); color: #c8a84b; border-color: rgba(180,160,80,0.3); }
+.vix-elevated { background: rgba(255,140,0,0.14); color: #ff9a00; border-color: rgba(255,140,0,0.35); }
+.vix-fear     { background: rgba(255,68,68,0.18); color: #ff4444; border-color: rgba(255,68,68,0.4); }
+
+/* ── Market Pulse Badge ──────────────────────────────────────────── */
+.market-pulse-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* ── Earnings Badge ──────────────────────────────────────────────── */
+.earnings-row {
+  margin: 4px 0;
+}
+.earnings-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 0.67rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.earnings-urgent { background: rgba(255,68,68,0.16); color: #ff6644; border-color: rgba(255,68,68,0.4); }
+.earnings-soon   { background: rgba(255,165,0,0.14); color: #ffa500; border-color: rgba(255,165,0,0.35); }
+.earnings-normal { background: rgba(100,180,255,0.12); color: #64b4ff; border-color: rgba(100,180,255,0.3); }
+
+/* ── ADX Indicator Colouring ─────────────────────────────────────── */
+.adx-strong { color: #00ff88; font-weight: 700; }
+.adx-weak   { color: var(--text-muted); }
