@@ -1714,9 +1714,12 @@ async function fetchMarketData() {
         + 'Indicators computed from Yahoo Finance daily bars. Not financial advice.';
     }
 
-    // Render backtest accuracy table
+    // Render backtest accuracy tables
     if (payload.backtestStats) {
       renderBacktest(payload.backtestStats, payload.backtestN || 0);
+    }
+    if (payload.backtestPerTicker) {
+      renderBacktestPerTicker(payload.backtestPerTicker);
     }
 
     // Redraw sparkline charts with live OHLCV
@@ -1787,6 +1790,43 @@ function renderBacktest(stats, totalN) {
   if (note) note.textContent = 'Win% = % of signals where price closed higher after N days. Avg Ret = mean % return. Computed from Yahoo Finance daily closes. Past performance does not predict future results.';
 }
 
+function renderBacktestPerTicker(perTicker) {
+  const container = document.getElementById('backtestPerTickerWrap');
+  if (!container || !perTicker || Object.keys(perTicker).length === 0) return;
+
+  const scoreForBucket = { 'STRONG BUY': 75, 'BUY': 30, 'NEUTRAL': 0, 'SELL': -30, 'STRONG SELL': -75 };
+
+  function mini(pct) {
+    if (pct == null) return '<span style="color:var(--text-muted)">—</span>';
+    const cls = pct >= 60 ? 'bt-strong' : pct >= 52 ? 'bt-ok' : pct < 45 ? 'bt-weak' : 'bt-flat';
+    return `<span class="${cls}">${pct}%</span>`;
+  }
+
+  const rows = Object.entries(perTicker).map(([ticker, stats]) => {
+    const buy  = stats['STRONG BUY']  || stats['BUY']  || {};
+    const sell = stats['STRONG SELL'] || stats['SELL'] || {};
+    return `<tr>
+      <td style="color:var(--text-bright);font-weight:700">${escapeHtml(ticker)}</td>
+      <td>${mini(buy.win1d)}</td><td>${mini(buy.win5d)}</td>
+      <td>${mini(sell.win1d)}</td><td>${mini(sell.win5d)}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="options-flow-panel-title" style="margin-top:18px">Per-Ticker Signal Accuracy</div>
+    <div class="table-wrapper">
+      <table class="data-table backtest-table">
+        <thead><tr>
+          <th>Ticker</th>
+          <th>Buy 1D</th><th>Buy 5D</th>
+          <th>Sell 1D</th><th>Sell 5D</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <p class="backtest-note">Best Buy/Sell bucket shown per ticker. Win% = price higher after N days.</p>`;
+}
+
 // ============================================
 // Signal Merging — combine options flow sentiment with technical scores
 // ============================================
@@ -1838,6 +1878,58 @@ function mergeOptionsFlowIntoScores() {
 // Initialize
 // ============================================
 
+// ============================================
+// Auto-Refresh (every 5 minutes while page is open)
+// ============================================
+
+const AUTO_REFRESH_MS = 5 * 60 * 1000;  // 5 minutes
+let _refreshCountdown = AUTO_REFRESH_MS / 1000;
+let _refreshTimer     = null;
+let _countdownTimer   = null;
+
+function _updateRefreshBadge() {
+  const badge = document.getElementById('refreshCountdown');
+  if (!badge) return;
+  const mins = Math.floor(_refreshCountdown / 60);
+  const secs = String(_refreshCountdown % 60).padStart(2, '0');
+  badge.textContent = `Refresh in ${mins}:${secs}`;
+}
+
+async function _autoRefresh() {
+  _refreshCountdown = AUTO_REFRESH_MS / 1000;
+  const badge = document.getElementById('refreshCountdown');
+  if (badge) badge.textContent = 'Refreshing…';
+
+  await Promise.allSettled([fetchOptionsFlow(), fetchMarketData()]);
+  mergeOptionsFlowIntoScores();
+  requestAnimationFrame(() => initAllCharts());
+}
+
+function initAutoRefresh() {
+  // Inject countdown badge next to market status
+  const headerRight = document.querySelector('.header-right');
+  if (headerRight) {
+    const badge = document.createElement('span');
+    badge.id        = 'refreshCountdown';
+    badge.className = 'badge badge-market';
+    badge.style.cssText = 'font-size:0.62rem;opacity:0.7;cursor:default;';
+    badge.title     = 'Auto-refreshes market data every 5 minutes';
+    headerRight.prepend(badge);
+    _updateRefreshBadge();
+  }
+
+  _countdownTimer = setInterval(() => {
+    _refreshCountdown = Math.max(0, _refreshCountdown - 1);
+    _updateRefreshBadge();
+  }, 1000);
+
+  _refreshTimer = setInterval(_autoRefresh, AUTO_REFRESH_MS);
+}
+
+// ============================================
+// Initialize
+// ============================================
+
 async function init() {
   await initAuth();
   renderHeader();
@@ -1863,6 +1955,8 @@ async function init() {
   mergeOptionsFlowIntoScores();
   // Draw sparkline charts after DOM is ready (live data already merged above if available)
   requestAnimationFrame(() => initAllCharts());
+  // Start auto-refresh cycle
+  initAutoRefresh();
 }
 
 // Run on DOM ready

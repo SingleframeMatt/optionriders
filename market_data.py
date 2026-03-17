@@ -81,6 +81,53 @@ def _sma(values, period):
     return sum(values[-period:]) / period
 
 
+def _ema(values, period):
+    """Exponential moving average — uses full history for warmup."""
+    if not values:
+        return 0.0
+    k = 2.0 / (period + 1)
+    e = values[0]
+    for v in values[1:]:
+        e = v * k + e * (1 - k)
+    return e
+
+
+def _macd_histogram(closes, fast=12, slow=26, sig=9):
+    """
+    MACD histogram = MACD line − signal line.
+    Positive → bullish momentum, negative → bearish.
+    Returns 0 if insufficient data.
+    """
+    min_bars = slow + sig + 5
+    if len(closes) < min_bars:
+        return 0.0
+
+    # Build MACD line over the last (sig * 3) bars for signal line warmup
+    lookback = sig * 3
+    macd_series = []
+    start = max(slow - 1, len(closes) - lookback - slow)
+    for i in range(start, len(closes)):
+        window = closes[:i + 1]
+        macd_series.append(_ema(window[-fast * 3:], fast) - _ema(window[-slow * 2:], slow))
+
+    if len(macd_series) < sig:
+        return 0.0
+
+    signal_line = _ema(macd_series, sig)
+    return macd_series[-1] - signal_line
+
+
+def _volume_ratio(volumes):
+    """
+    Current volume / 20-day average volume.
+    Returns 1.0 (neutral) if insufficient data.
+    """
+    if not volumes or len(volumes) < 21:
+        return 1.0
+    avg = sum(volumes[-21:-1]) / 20
+    return (volumes[-1] / avg) if avg > 0 else 1.0
+
+
 def _levels(highs, lows, price, n=3):
     """Pivot-based support & resistance from the last 30 bars."""
     h = highs[-30:] if len(highs) >= 30 else highs
@@ -121,36 +168,65 @@ def _bias(rsi, price, sma20, sma50):
     else:             return "Range"
 
 
-def _signal_score(rsi, price, sma20, sma50, closes):
+def _signal_score(rsi, price, sma20, sma50, closes, volumes=None, spy_closes=None):
     """
     Composite signal score from -100 (strong sell) to +100 (strong buy).
 
     Components:
-      RSI momentum   : -40 to +40  (how far RSI deviates from neutral 50)
-      Price vs SMA20 : -20 to +20  (% distance, capped)
-      Price vs SMA50 : -20 to +20  (% distance, capped)
-      5d vs 20d ret  : -20 to +20  (short-term momentum vs longer-term)
+      RSI momentum       : ±30   (deviation from neutral 50)
+      Price vs SMA20     : ±15   (% distance above/below)
+      Price vs SMA50     : ±15   (% distance above/below)
+      5d vs 20d momentum : ±15   (short-term acceleration)
+      MACD histogram     : ±15   (crossover momentum)
+      Volume confirm     : ±10   (high-volume moves score higher)
+      Relative vs SPY    : ±10   (outperforming/underperforming market)
+    Max possible: ±110 → capped to ±100
     """
     score = 0.0
 
-    # RSI component
-    score += max(-40.0, min(40.0, (rsi - 50.0) * 0.8))
+    # RSI (±30)
+    score += max(-30.0, min(30.0, (rsi - 50.0) * 0.6))
 
-    # Price vs SMA20
+    # Price vs SMA20 (±15)
     if sma20 > 0:
         pct = (price - sma20) / sma20 * 100.0
-        score += max(-20.0, min(20.0, pct * 2.0))
+        score += max(-15.0, min(15.0, pct * 1.5))
 
-    # Price vs SMA50
+    # Price vs SMA50 (±15)
     if sma50 > 0:
         pct = (price - sma50) / sma50 * 100.0
-        score += max(-20.0, min(20.0, pct * 2.0))
+        score += max(-15.0, min(15.0, pct * 1.5))
 
-    # Short-term momentum: 5-day return vs 20-day return
-    if len(closes) >= 21:
-        ret5  = (closes[-1] - closes[-6])  / closes[-6]  * 100.0 if closes[-6]  else 0.0
-        ret20 = (closes[-1] - closes[-21]) / closes[-21] * 100.0 if closes[-21] else 0.0
-        score += max(-20.0, min(20.0, (ret5 - ret20) * 1.5))
+    # 5-day vs 20-day momentum (±15)
+    if len(closes) >= 21 and closes[-6] and closes[-21]:
+        ret5  = (closes[-1] - closes[-6])  / closes[-6]  * 100.0
+        ret20 = (closes[-1] - closes[-21]) / closes[-21] * 100.0
+        score += max(-15.0, min(15.0, (ret5 - ret20) * 1.2))
+
+    # MACD histogram (±15)
+    hist = _macd_histogram(closes)
+    if hist != 0.0 and price > 0:
+        hist_norm = hist / price * 1000.0   # normalise by price
+        score += max(-15.0, min(15.0, hist_norm))
+
+    # Volume confirmation (±10) — high-volume day amplifies last move direction
+    if volumes:
+        vol_r = _volume_ratio(volumes)
+        if vol_r > 1.3 and len(closes) >= 2 and closes[-2]:
+            last_ret = (closes[-1] - closes[-2]) / closes[-2] * 100.0
+            direction = 1.0 if last_ret > 0 else -1.0
+            boost = min(10.0, (vol_r - 1.0) * 6.0) * direction
+            score += boost
+
+    # Relative strength vs SPY (±10) — outperformers score higher
+    if spy_closes and len(spy_closes) >= 6 and len(closes) >= 6:
+        try:
+            tk_ret  = (closes[-1]     - closes[-6])     / closes[-6]     * 100.0
+            spy_ret = (spy_closes[-1] - spy_closes[-6]) / spy_closes[-6] * 100.0
+            rel = tk_ret - spy_ret
+            score += max(-10.0, min(10.0, rel * 0.8))
+        except (ZeroDivisionError, IndexError):
+            pass
 
     return int(round(max(-100.0, min(100.0, score))))
 
@@ -169,7 +245,7 @@ def _strategy(bias, rsi):
 
 # ─── Entry builder ─────────────────────────────────────────────────────────────
 
-def _build_entry(rank, symbol, name, opens, highs, lows, closes):
+def _build_entry(rank, symbol, name, opens, highs, lows, closes, volumes=None, spy_closes=None):
     if len(closes) < 22:
         return None
 
@@ -182,11 +258,13 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes):
     atr_pct  = round(atr_val / price * 100, 2) if price else 0.0
     sma20    = _sma(closes, 20)
     sma50    = _sma(closes, 50)
+    macd_h   = round(_macd_histogram(closes), 4)
+    vol_r    = round(_volume_ratio(volumes), 2) if volumes else None
 
     support, resistance = _levels(highs, lows, price)
     bias_str   = _bias(rsi_val, price, sma20, sma50)
     strat_str  = _strategy(bias_str, rsi_val)
-    sig_score  = _signal_score(rsi_val, price, sma20, sma50, closes)
+    sig_score  = _signal_score(rsi_val, price, sma20, sma50, closes, volumes, spy_closes)
 
     bull_trig = f"Break above {resistance[0]}" if resistance else f"Reclaim {round(price * 1.01, 2)}"
     bear_trig = f"Lose {support[0]}"           if support    else f"Break below {round(price * 0.99, 2)}"
@@ -245,9 +323,11 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes):
         "optionsIdea": opts,
         "expectedMove": f"±${atr_val:.2f} ({atr_pct:.1f}%)",
         "summary":     summary,
-        "sma20":       round(sma20, 2),
-        "sma50":       round(sma50, 2),
-        "signalScore": sig_score,
+        "sma20":          round(sma20, 2),
+        "sma50":          round(sma50, 2),
+        "macdHistogram":  macd_h,
+        "volumeRatio":    vol_r,
+        "signalScore":    sig_score,
         "liveData":    True,
         "_ohlcv":      ohlcv,   # stripped out before JSON response
     }
@@ -313,7 +393,7 @@ _BUCKETS = [
 _FWD_DAYS = (1, 3, 5)
 
 
-def _backtest_ticker(highs, lows, closes, lookback=51):
+def _backtest_ticker(highs, lows, closes, volumes=None, spy_closes=None, lookback=51):
     """
     Walk-forward backtest for one ticker.
 
@@ -326,13 +406,15 @@ def _backtest_ticker(highs, lows, closes, lookback=51):
     max_fwd = max(_FWD_DAYS)
     records = []
     for i in range(lookback, len(closes) - max_fwd):
-        c = closes[:i + 1]
-        h = highs[:i + 1]
-        l = lows[:i + 1]
+        c   = closes[:i + 1]
+        h   = highs[:i + 1]
+        l   = lows[:i + 1]
+        v   = volumes[:i + 1] if volumes else None
+        spy = spy_closes[:i + 1] if spy_closes else None
         rsi_v = _rsi(c)
         sma20 = _sma(c, 20)
         sma50 = _sma(c, 50)
-        score = _signal_score(rsi_v, c[-1], sma20, sma50, c)
+        score = _signal_score(rsi_v, c[-1], sma20, sma50, c, v, spy)
         fwd   = {d: round((closes[i + d] - closes[i]) / closes[i] * 100, 3)
                  for d in _FWD_DAYS if i + d < len(closes)}
         records.append((score, fwd))
@@ -411,24 +493,34 @@ def fetch_market_data():
         except Exception:
             return []
 
+    # ── Fetch SPY closes for relative-strength signal ─────────────
+    spy_closes = series("Close", "SPY")   # already in TICKERS; will be populated
+
     # ── Main tickers ─────────────────────────────────────────────
-    ticker_entries = []
-    _bt_records    = []   # accumulated walk-forward records for backtest
+    ticker_entries  = []
+    _bt_records     = []   # all-ticker walk-forward records
+    _bt_per_ticker  = {}   # per-ticker walk-forward records
 
     for rank, sym in enumerate(TICKERS, 1):
         try:
-            o = series("Open",  sym)
-            h = series("High",  sym)
-            l = series("Low",   sym)
-            c = series("Close", sym)
+            o = series("Open",   sym)
+            h = series("High",   sym)
+            l = series("Low",    sym)
+            c = series("Close",  sym)
+            v = series("Volume", sym)
             if len(c) < 22:
                 continue
-            entry = _build_entry(rank, sym, TICKER_NAMES.get(sym, sym), o, h, l, c)
+            spy = spy_closes if sym != "SPY" else None
+            entry = _build_entry(rank, sym, TICKER_NAMES.get(sym, sym), o, h, l, c,
+                                 volumes=v or None, spy_closes=spy)
             if entry:
                 ticker_entries.append(entry)
-            # Accumulate backtest records (needs 51+ bars)
+            # Accumulate backtest records (needs 56+ bars for full signal)
             if len(c) >= 56:
-                _bt_records.extend(_backtest_ticker(h, l, c))
+                recs = _backtest_ticker(h, l, c, volumes=v or None,
+                                        spy_closes=spy)
+                _bt_records.extend(recs)
+                _bt_per_ticker[sym] = _aggregate_backtest(recs)
         except Exception as exc:
             print(f"[market_data] {sym}: {exc}")
 
@@ -473,14 +565,15 @@ def fetch_market_data():
             chart_data[e["ticker"]] = e.pop("_ohlcv")
 
     payload = {
-        "tickers":       ticker_entries,
-        "indexes":       index_entries,
-        "watchlist":     watchlist,
-        "chartData":     chart_data,
-        "backtestStats": backtest_stats,
-        "backtestN":     len(_bt_records),
-        "updatedAt":     int(now),
-        "liveData":      True,
+        "tickers":          ticker_entries,
+        "indexes":          index_entries,
+        "watchlist":        watchlist,
+        "chartData":        chart_data,
+        "backtestStats":    backtest_stats,
+        "backtestPerTicker":_bt_per_ticker,
+        "backtestN":        len(_bt_records),
+        "updatedAt":        int(now),
+        "liveData":         True,
     }
 
     with _cache_lock:
