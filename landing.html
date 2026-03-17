@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OptionRiders — Intraday Options Trading Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { background: #030508; color: #fff; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; min-height: 100vh; }
+a { text-decoration: none; }
+input { font-family: inherit; }
+button { font-family: inherit; }
+
+/* ── ANIMATIONS ── */
+@keyframes ticker      { 0% { transform: translateX(0) } 100% { transform: translateX(-50%) } }
+@keyframes pulse-dot   { 0%,100% { opacity:1; transform:scale(1) } 50% { opacity:.4; transform:scale(.8) } }
+@keyframes shimmer     { 0% { background-position:-200% 0 } 100% { background-position:200% 0 } }
+@keyframes fade-up     { from { opacity:0; transform:translateY(24px) } to { opacity:1; transform:translateY(0) } }
+@keyframes glow-float  { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-6px) } }
+@keyframes scan        { 0% { top:-2px } 100% { top:100% } }
+
+.ticker-track { animation: ticker 32s linear infinite; display: flex; width: max-content; }
+.ticker-track:hover { animation-play-state: paused; }
+
+.fade-up   { animation: fade-up .6s ease both; }
+.fade-up-1 { animation: fade-up .6s .1s ease both; }
+.fade-up-2 { animation: fade-up .6s .22s ease both; }
+.fade-up-3 { animation: fade-up .6s .36s ease both; }
+
+/* ── BACKGROUNDS ── */
+.mesh-bg {
+  background:
+    radial-gradient(ellipse 70% 50% at 15% -5%, rgba(0,224,255,.08) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 40% at 85% 8%,  rgba(255,166,0,.07)  0%, transparent 55%),
+    radial-gradient(ellipse 80% 55% at 50% 105%,rgba(16,255,180,.05) 0%, transparent 50%),
+    #030508;
+}
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+/* ── BUTTONS ── */
+.btn-primary {
+  background: linear-gradient(135deg,#10b981 0%,#06b6d4 50%,#0ea5e9 100%);
+  color: #000;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: transform .2s ease, box-shadow .2s ease;
+  display: inline-block;
+  text-align: center;
+}
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.18) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease infinite;
+}
+.btn-primary:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 0 50px rgba(0,224,255,.35), 0 10px 30px rgba(0,0,0,.3);
+}
+.btn-secondary {
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.04);
+  color: rgba(255,255,255,.75);
+  cursor: pointer;
+  transition: all .2s ease;
+  display: inline-block;
+  text-align: center;
+}
+.btn-secondary:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.2); color: #fff; }
+
+/* ── CARDS ── */
+.card-hover { transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease; }
+.card-hover:hover { transform: translateY(-4px); border-color: rgba(0,224,255,.2) !important; box-shadow: 0 20px 60px rgba(0,0,0,.5), 0 0 30px rgba(0,224,255,.06); }
+
+/* ── MISC ── */
+.mono { font-family: 'JetBrains Mono', monospace; }
+.live-dot { width:8px; height:8px; border-radius:50%; background:#10b981; animation: pulse-dot 1.5s ease-in-out infinite; box-shadow: 0 0 8px #10b981; display: inline-block; flex-shrink: 0; }
+.price-glow { text-shadow: 0 0 30px rgba(16,255,180,.4); }
+
+input:focus { outline: none; }
+
+/* ── TICKER BAR ── */
+#ticker-bar { overflow: hidden; border-bottom: 1px solid rgba(255,255,255,.05); background: rgba(0,0,0,.4); padding: 9px 0; }
+
+/* ── NAV ── */
+#nav {
+  position: sticky; top: 0; z-index: 50;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  background: rgba(3,5,8,.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  overflow: visible;
+}
+.nav-inner { max-width:1280px; margin:0 auto; padding:0 28px; display:flex; align-items:center; justify-content:space-between; height:120px; }
+.nav-logo { display:flex; align-items:center; gap:18px; }
+.nav-logo-icon { width:90px; height:90px; border-radius:20px; background:transparent; flex-shrink:0; overflow:hidden; filter:drop-shadow(0 0 20px rgba(0,224,255,0.15)); }
+.nav-logo-text { font-weight:800; font-size:22px; letter-spacing:-.02em; }
+.nav-links { display:flex; gap:28px; }
+.nav-links a { font-size:14px; color:rgba(255,255,255,.4); transition:color .2s; }
+.nav-links a:hover { color:#fff; }
+.nav-right { display:flex; align-items:center; gap:16px; }
+
+/* ── HERO ── */
+#hero { position:relative; overflow:hidden; border-bottom:1px solid rgba(255,255,255,.06); }
+.hero-inner { max-width:1280px; margin:0 auto; padding:80px 28px 100px; }
+.hero-pill { display:flex; justify-content:center; margin-bottom:48px; }
+.hero-pill-inner { display:inline-flex; align-items:center; gap:8px; padding:8px 18px; border-radius:999px; border:1px solid rgba(16,185,129,.25); background:rgba(16,185,129,.08); font-size:13px; color:#6ee7b7; font-weight:500; }
+.hero-grid { display:grid; grid-template-columns:1fr 1fr; gap:60px; align-items:start; }
+.hero-headline { font-size: clamp(40px,5vw,66px); font-weight:900; line-height:1.0; letter-spacing:-.04em; margin:0 0 24px; }
+.hero-headline .line1 { display:block; color:#fff; }
+.hero-headline .grad { display:block; background:linear-gradient(135deg,#34d399 0%,#22d3ee 55%,#818cf8 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.hero-sub { font-size:18px; line-height:1.75; color:rgba(255,255,255,.5); max-width:460px; margin:0 0 36px; }
+.hero-btns { display:flex; gap:12px; margin-bottom:48px; flex-wrap:wrap; }
+.hero-stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+.stat-card { border-radius:16px; border:1px solid rgba(255,255,255,.07); background:rgba(255,255,255,.02); padding:16px 14px; text-align:center; }
+.stat-val { font-size:22px; font-weight:800; letter-spacing:-.03em; margin-bottom:4px; }
+.stat-sub { font-size:10px; text-transform:uppercase; letter-spacing:.15em; color:rgba(255,255,255,.3); }
+
+/* ── TERMINAL ── */
+.terminal { position:relative; border-radius:24px; border:1px solid rgba(0,224,255,.12); background:rgba(8,12,22,.97); overflow:hidden; box-shadow:0 0 80px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); }
+.terminal-glow { position:absolute; inset:-30px; border-radius:40px; background:radial-gradient(ellipse, rgba(0,224,255,.08) 0%, transparent 70%); filter:blur(20px); pointer-events:none; z-index:-1; }
+.term-bar { padding:13px 20px; border-bottom:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.02); display:flex; align-items:center; justify-content:space-between; }
+.term-dots { display:flex; gap:6px; }
+.term-dot { width:10px; height:10px; border-radius:50%; }
+.term-title { font-size:11px; color:rgba(255,255,255,.3); }
+.term-badges { display:flex; gap:6px; }
+.term-badge { font-size:10px; padding:3px 10px; border-radius:999px; }
+.term-context { padding:10px 20px; border-bottom:1px solid rgba(255,255,255,.04); background:rgba(255,166,0,.04); display:flex; flex-wrap:wrap; gap:8px; }
+.term-ctx-tag { font-size:10px; padding:3px 10px; border-radius:6px; }
+.term-thead { display:grid; grid-template-columns:.8fr .75fr 1.2fr 1.1fr .6fr .75fr; padding:10px 20px; border-bottom:1px solid rgba(255,255,255,.05); background:rgba(255,255,255,.02); }
+.term-th { font-size:9px; text-transform:uppercase; letter-spacing:.18em; color:rgba(255,255,255,.25); }
+.term-row { display:grid; grid-template-columns:.8fr .75fr 1.2fr 1.1fr .6fr .75fr; padding:12px 20px; transition:background .15s; cursor:default; }
+.term-row:hover { background:rgba(255,255,255,.03); }
+.term-ticker { font-size:13px; font-weight:700; color:#fff; letter-spacing:.02em; }
+.dir-badge { font-size:10px; font-weight:700; padding:3px 8px; border-radius:6px; display:inline-block; }
+.dir-long  { background:rgba(16,185,129,.15); color:#34d399; border:1px solid rgba(52,211,153,.2); }
+.dir-short { background:rgba(248,113,113,.15); color:#f87171; border:1px solid rgba(248,113,113,.2); }
+.term-cell { font-size:12px; color:rgba(255,255,255,.5); display:flex; align-items:center; }
+.term-chg-pos { font-size:12px; font-weight:700; color:#34d399; display:flex; align-items:center; }
+.term-chg-neg { font-size:12px; font-weight:700; color:#f87171; display:flex; align-items:center; }
+.term-footer { display:grid; grid-template-columns:1fr 1fr 1fr; border-top:1px solid rgba(255,255,255,.06); }
+.term-footer-cell { padding:13px 18px; border-right:1px solid rgba(255,255,255,.04); background:rgba(8,12,22,.97); }
+.term-footer-cell:last-child { border-right:none; }
+.term-footer-label { font-size:9px; text-transform:uppercase; letter-spacing:.15em; color:rgba(255,255,255,.3); margin-bottom:6px; }
+.term-footer-val { font-size:13px; font-weight:600; }
+
+/* ── SECTIONS ── */
+.section { max-width:1280px; margin:0 auto; padding:96px 28px; }
+.section-label { font-size:11px; text-transform:uppercase; letter-spacing:.25em; margin-bottom:14px; }
+.section-title { font-size:clamp(30px,4vw,52px); font-weight:800; letter-spacing:-.03em; line-height:1.1; }
+
+/* ── BENTO ── */
+.bento { display:grid; grid-template-columns:repeat(12,1fr); gap:16px; margin-top:56px; }
+.bento-card { border-radius:24px; padding:36px 32px; position:relative; overflow:hidden; }
+.bento-card .glow { position:absolute; border-radius:50%; filter:blur(40px); pointer-events:none; }
+.bento-icon { font-size:36px; margin-bottom:18px; }
+.bento-title { font-size:20px; font-weight:700; margin-bottom:12px; letter-spacing:-.02em; }
+.bento-text { font-size:14px; line-height:1.7; color:rgba(255,255,255,.5); }
+.bento-sm { padding:28px 26px; }
+.bento-sm .bento-icon { font-size:28px; margin-bottom:14px; }
+.bento-sm .bento-title { font-size:16px; }
+.bento-sm .bento-text { font-size:13px; line-height:1.65; }
+
+/* ── ACCESS SECTION ── */
+#access-section { border-top:1px solid rgba(255,255,255,.06); border-bottom:1px solid rgba(255,255,255,.06); background:rgba(0,0,0,.3); }
+.access-grid { display:grid; grid-template-columns:1.45fr .55fr; gap:20px; margin-top:56px; }
+.signin-card { border-radius:28px; border:1px solid rgba(34,211,238,.1); background:rgba(8,12,22,.95); padding:48px; position:relative; overflow:hidden; box-shadow:0 0 80px rgba(0,224,255,.05); }
+.signin-glow { position:absolute; top:-60px; right:-60px; width:250px; height:250px; border-radius:50%; background:rgba(34,211,238,.04); filter:blur(60px); pointer-events:none; }
+.access-badge { display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:999px; border:1px solid rgba(52,211,153,.2); background:rgba(52,211,153,.08); margin-bottom:20px; }
+.access-badge-text { font-size:11px; color:#6ee7b7; font-weight:600; text-transform:uppercase; letter-spacing:.12em; }
+.signin-title { font-size:36px; font-weight:800; letter-spacing:-.03em; margin-bottom:12px; }
+.signin-sub { font-size:16px; color:rgba(255,255,255,.45); margin-bottom:36px; max-width:420px; line-height:1.65; }
+.input-field { width:100%; padding:15px 20px; border-radius:14px; border:1px solid rgba(255,255,255,.08); background:rgba(255,255,255,.03); color:#fff; font-size:15px; transition:all .2s; margin-bottom:12px; }
+.input-field::placeholder { color:rgba(255,255,255,.2); }
+.input-field:focus { border-color:rgba(34,211,238,.3); background:rgba(34,211,238,.03); }
+.or-divider { display:flex; align-items:center; gap:12px; margin:20px 0; }
+.or-line { flex:1; height:1px; background:rgba(255,255,255,.07); }
+.or-text { font-size:11px; color:rgba(255,255,255,.2); letter-spacing:.15em; }
+.google-btn { width:100%; display:flex; align-items:center; justify-content:center; gap:12px; padding:14px; border-radius:14px; border:1px solid rgba(255,255,255,.1); background:#fff; color:#000; font-size:15px; font-weight:600; cursor:pointer; transition:all .2s; }
+.google-btn:hover { transform:scale(1.01); box-shadow:0 4px 20px rgba(0,0,0,.3); }
+.script-col { display:flex; flex-direction:column; gap:8px; }
+.script-header { margin-bottom:8px; }
+.script-label { font-size:11px; text-transform:uppercase; letter-spacing:.2em; color:rgba(52,211,153,.6); margin-bottom:8px; }
+.script-title { font-size:22px; font-weight:800; letter-spacing:-.02em; margin-bottom:8px; }
+.script-sub { font-size:14px; color:rgba(255,255,255,.4); line-height:1.6; }
+.plan-card { border-radius:22px; padding:24px; position:relative; overflow:hidden; transition:transform .25s ease, box-shadow .25s ease; }
+.plan-card:hover { transform:translateY(-3px); box-shadow:0 16px 40px rgba(0,0,0,.4); }
+.plan-hot { border:1px solid rgba(52,211,153,.22); background:linear-gradient(135deg,rgba(16,185,129,.08),rgba(6,182,212,.04)); }
+.plan-normal { border:1px solid rgba(255,255,255,.07); background:rgba(255,255,255,.02); }
+.plan-best-badge { position:absolute; top:16px; right:16px; padding:3px 10px; border-radius:999px; border:1px solid rgba(52,211,153,.25); background:rgba(52,211,153,.12); font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.15em; color:#6ee7b7; }
+.plan-name { font-size:11px; text-transform:uppercase; letter-spacing:.15em; color:rgba(255,255,255,.35); margin-bottom:10px; }
+.plan-price { display:flex; align-items:baseline; gap:4px; margin-bottom:8px; }
+.plan-amount { font-size:38px; font-weight:900; letter-spacing:-.04em; }
+.plan-period { font-size:14px; color:rgba(255,255,255,.3); }
+.plan-note { font-size:13px; color:rgba(255,255,255,.45); margin-bottom:20px; line-height:1.6; }
+
+/* ── BENEFITS ── */
+.benefits-grid { display:grid; grid-template-columns:1fr 1fr; gap:80px; align-items:center; }
+.benefits-copy h2 { font-size:clamp(28px,3.5vw,48px); font-weight:800; letter-spacing:-.03em; line-height:1.1; margin-bottom:24px; }
+.benefits-copy p { font-size:16px; color:rgba(255,255,255,.45); line-height:1.75; margin-bottom:16px; }
+.benefit-item { display:flex; align-items:center; gap:16px; padding:16px 20px; border-radius:16px; margin-bottom:10px; transition:transform .2s ease; cursor:default; }
+.benefit-item:hover { transform:translateX(4px); }
+.benefit-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.benefit-text { font-size:15px; color:rgba(255,255,255,.75); font-weight:500; }
+
+/* ── FAQ ── */
+#faq-section { border-top:1px solid rgba(255,255,255,.06); background:rgba(0,0,0,.25); }
+.faq-inner { max-width:900px; margin:0 auto; padding:96px 28px; }
+.faq-header { text-align:center; margin-bottom:60px; }
+.faq-item { border-radius:20px; border:1px solid rgba(255,255,255,.07); background:rgba(255,255,255,.02); padding:28px 32px; margin-bottom:10px; transition:all .2s ease; cursor:default; }
+.faq-item:hover { border-color:rgba(255,255,255,.12); background:rgba(255,255,255,.04); }
+.faq-q { font-size:17px; font-weight:700; margin-bottom:10px; letter-spacing:-.01em; }
+.faq-a { font-size:14px; color:rgba(255,255,255,.5); line-height:1.75; }
+
+/* ── CTA ── */
+.cta-wrap { max-width:1280px; margin:0 auto; padding:96px 28px; }
+.cta-box { border-radius:36px; border:1px solid rgba(255,255,255,.07); background:rgba(8,12,22,.95); padding:80px 60px; text-align:center; position:relative; overflow:hidden; box-shadow:0 0 100px rgba(0,0,0,.5); }
+.cta-glow-l { position:absolute; top:-30%; left:10%; width:500px; height:400px; border-radius:50%; background:radial-gradient(ellipse,rgba(34,211,238,.07),transparent 70%); filter:blur(40px); pointer-events:none; }
+.cta-glow-r { position:absolute; bottom:-20%; right:10%; width:400px; height:300px; border-radius:50%; background:radial-gradient(ellipse,rgba(52,211,153,.07),transparent 70%); filter:blur(40px); pointer-events:none; }
+.cta-eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:.25em; color:rgba(255,255,255,.3); margin-bottom:20px; }
+.cta-title { font-size:clamp(36px,5vw,64px); font-weight:900; letter-spacing:-.04em; line-height:1.0; margin-bottom:20px; }
+.cta-title .white { color:#fff; }
+.cta-title .grad { background:linear-gradient(135deg,#34d399,#22d3ee,#818cf8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.cta-sub { font-size:18px; color:rgba(255,255,255,.4); max-width:480px; margin:0 auto 44px; line-height:1.65; }
+.cta-btns { display:flex; gap:14px; justify-content:center; flex-wrap:wrap; }
+
+/* ── FOOTER ── */
+footer { border-top:1px solid rgba(255,255,255,.05); padding:28px; }
+.footer-inner { max-width:1280px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; }
+.footer-brand { font-weight:800; font-size:15px; color:rgba(255,255,255,.4); }
+.footer-copy { font-size:12px; color:rgba(255,255,255,.2); }
+.footer-tag { font-size:12px; color:rgba(255,255,255,.2); }
+</style>
+</head>
+<body class="mesh-bg">
+
+<!-- TICKER TAPE -->
+<div id="ticker-bar">
+  <div class="ticker-track" id="ticker"></div>
+</div>
+
+<!-- NAV -->
+<nav id="nav">
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <div class="nav-logo-icon" style="margin-bottom:-30px;"><img src="assets/optionriders-horse-transparent.png" alt="OptionRiders" style="width:100%;height:100%;object-fit:contain;display:block;"></div>
+      <div>
+        <span class="nav-logo-text" style="display:block;">OptionRiders</span>
+        <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.28em;color:rgba(255,255,255,0.35);margin-top:4px;display:block;">Trade. Ride. Profit.</span>
+      </div>
+    </div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#access">Access</a>
+      <a href="#script">Script</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <div class="nav-right">
+      <a href="index.html" class="btn-primary" style="padding:8px 20px;border-radius:10px;font-size:13px;">Get Access →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section id="hero" class="grid-bg">
+  <div class="hero-inner">
+    <div class="hero-pill fade-up">
+      <div class="hero-pill-inner">
+        <div class="live-dot"></div>
+        Dashboard live now &nbsp;·&nbsp; Free to access &nbsp;·&nbsp; Script optional
+      </div>
+    </div>
+
+    <div class="hero-grid">
+      <!-- Left copy -->
+      <div>
+        <h1 class="hero-headline fade-up-1">
+          <span class="line1">Stop guessing.</span>
+          <span class="grad">Ride with edge.</span>
+        </h1>
+        <p class="hero-sub fade-up-2">
+          The free intraday dashboard for options traders — ranked watchlists, real flow data, spread checks, and session context. TradingView script available for more edge.
+        </p>
+        <div class="hero-btns fade-up-2">
+          <a href="index.html" class="btn-primary" style="padding:14px 28px;border-radius:14px;font-size:15px;">Use Free Dashboard →</a>
+          <a href="#script" class="btn-secondary" style="padding:14px 24px;border-radius:14px;font-size:15px;">View Script Plans</a>
+        </div>
+        <div class="hero-stats fade-up-3">
+          <div class="stat-card"><div class="stat-val">Free</div><div class="stat-sub">Dashboard</div></div>
+          <div class="stat-card"><div class="stat-val">Live</div><div class="stat-sub">Flow Data</div></div>
+          <div class="stat-card"><div class="stat-val">Real</div><div class="stat-sub">Spread Check</div></div>
+          <div class="stat-card"><div class="stat-val">$120</div><div class="stat-sub">Lifetime Script</div></div>
+        </div>
+      </div>
+
+      <!-- Right terminal -->
+      <div id="dashboard" style="position:relative;">
+        <div class="terminal-glow"></div>
+        <div class="terminal">
+          <!-- Title bar -->
+          <div class="term-bar">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <div class="term-dots">
+                <div class="term-dot" style="background:#ff5f57;"></div>
+                <div class="term-dot" style="background:#febc2e;"></div>
+                <div class="term-dot" style="background:#28c840;"></div>
+              </div>
+              <span class="term-title mono">option-riders — dashboard v2.1</span>
+            </div>
+            <div class="term-badges">
+              <span class="term-badge mono" style="border:1px solid rgba(255,166,0,.25);background:rgba(255,166,0,.08);color:#fbbf24;">FOMC Week</span>
+              <span class="term-badge mono" style="border:1px solid rgba(248,113,113,.25);background:rgba(248,113,113,.08);color:#f87171;">Bearish</span>
+            </div>
+          </div>
+          <!-- Context -->
+          <div class="term-context">
+            <span class="term-ctx-tag mono" style="border:1px solid rgba(251,191,36,.15);background:rgba(251,191,36,.08);color:#fbbf24;">⚠ Red folder Wed 12:30 PM</span>
+            <span class="term-ctx-tag mono" style="border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03);color:rgba(255,255,255,.35);">NVDA GTC Keynote 11am PT</span>
+            <span class="term-ctx-tag mono" style="border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03);color:rgba(255,255,255,.35);">Pre-Market Bias: Bearish</span>
+          </div>
+          <!-- Table header -->
+          <div class="term-thead mono">
+            <span class="term-th">Ticker</span><span class="term-th">Dir</span><span class="term-th">Entry</span><span class="term-th">Target</span><span class="term-th">Stop</span><span class="term-th">Chg</span>
+          </div>
+          <!-- Rows -->
+          <div class="term-row mono" style="border-bottom:1px solid rgba(255,255,255,.04);">
+            <span class="term-ticker">SPY</span>
+            <span class="term-cell"><span class="dir-badge dir-short">▼ Short</span></span>
+            <span class="term-cell">Below 661</span><span class="term-cell">656–652</span><span class="term-cell">668</span>
+            <span class="term-chg-neg">-0.42%</span>
+          </div>
+          <div class="term-row mono" style="border-bottom:1px solid rgba(255,255,255,.04);">
+            <span class="term-ticker">QQQ</span>
+            <span class="term-cell"><span class="dir-badge dir-short">▼ Short</span></span>
+            <span class="term-cell">Below 591</span><span class="term-cell">585–580</span><span class="term-cell">600</span>
+            <span class="term-chg-neg">-0.61%</span>
+          </div>
+          <div class="term-row mono" style="border-bottom:1px solid rgba(255,255,255,.04);background:rgba(16,185,129,.04);">
+            <span class="term-ticker">NVDA</span>
+            <span class="term-cell"><span class="dir-badge dir-long">▲ Long</span></span>
+            <span class="term-cell">Above 184</span><span class="term-cell">190–195</span><span class="term-cell">178</span>
+            <span class="term-chg-pos">+1.24%</span>
+          </div>
+          <div class="term-row mono">
+            <span class="term-ticker">MU</span>
+            <span class="term-cell"><span class="dir-badge dir-long">▲ Long</span></span>
+            <span class="term-cell">Above 430</span><span class="term-cell">445–450</span><span class="term-cell">418</span>
+            <span class="term-chg-pos">+0.89%</span>
+          </div>
+          <!-- Footer stats -->
+          <div class="term-footer mono">
+            <div class="term-footer-cell">
+              <div class="term-footer-label">Unusual Flow</div>
+              <div class="term-footer-val" style="color:#22d3ee;">48 contracts</div>
+            </div>
+            <div class="term-footer-cell">
+              <div class="term-footer-label">ATM Spread</div>
+              <div class="term-footer-val" style="color:#34d399;">SPY: $0.02</div>
+            </div>
+            <div class="term-footer-cell">
+              <div class="term-footer-label">VIX</div>
+              <div class="term-footer-val" style="color:#fbbf24;">18.4 &nbsp;+8.4%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES BENTO -->
+<section id="features">
+  <div class="section">
+    <p class="section-label" style="color:rgba(34,211,238,.6);">Why it hits</p>
+    <h2 class="section-title">Clean tools for<br>messy conditions.</h2>
+
+    <div class="bento">
+      <!-- Big cyan -->
+      <div class="bento-card card-hover" style="grid-column:span 5;border:1px solid rgba(34,211,238,.12);background:linear-gradient(135deg,rgba(34,211,238,.06) 0%,rgba(8,12,22,.98) 60%);">
+        <div class="glow" style="top:-40px;right:-40px;width:160px;height:160px;background:rgba(34,211,238,.06);"></div>
+        <div class="bento-icon">⚡</div>
+        <h3 class="bento-title">Ranked Intraday Watchlist</h3>
+        <p class="bento-text">Strongest options names first — direction, entry, target, stop, and catalyst laid out cleanly so you know exactly where to focus at open.</p>
+      </div>
+      <!-- Amber -->
+      <div class="bento-card card-hover" style="grid-column:span 4;border:1px solid rgba(251,191,36,.12);background:linear-gradient(160deg,rgba(251,191,36,.06) 0%,rgba(8,12,22,.98) 70%);">
+        <div class="glow" style="bottom:-30px;right:-30px;width:120px;height:120px;background:rgba(251,191,36,.06);"></div>
+        <div class="bento-icon">🔥</div>
+        <h3 class="bento-title">Unusual + Most Traded Options</h3>
+        <p class="bento-text">Spot where size, liquidity, and urgency are building before the crowd catches on.</p>
+      </div>
+      <!-- Two small -->
+      <div style="grid-column:span 3;display:flex;flex-direction:column;gap:16px;">
+        <div class="bento-card bento-sm card-hover" style="flex:1;border:1px solid rgba(52,211,153,.12);background:linear-gradient(135deg,rgba(52,211,153,.06) 0%,rgba(8,12,22,.98) 70%);">
+          <div class="bento-icon">🎯</div>
+          <h3 class="bento-title">ATM Spread Check</h3>
+          <p class="bento-text">Filter out untradable names before you commit capital.</p>
+        </div>
+        <div class="bento-card bento-sm card-hover" style="flex:1;border:1px solid rgba(129,140,248,.12);background:linear-gradient(135deg,rgba(129,140,248,.06) 0%,rgba(8,12,22,.98) 70%);">
+          <div class="bento-icon">📊</div>
+          <h3 class="bento-title">Session Context</h3>
+          <p class="bento-text">Events, themes, and market overview baked right in.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ACCESS -->
+<section id="access-section">
+  <div class="section">
+    <p class="section-label" style="color:rgba(52,211,153,.6);">Access</p>
+    <h2 class="section-title" style="max-width:580px;margin-bottom:14px;">Dashboard is free.<br>Script is optional.</h2>
+    <p style="font-size:17px;color:rgba(255,255,255,.45);max-width:480px;line-height:1.65;">Sign in and use everything immediately. Only pay for the TradingView script if you want private on-chart signals.</p>
+
+    <div class="access-grid" id="access">
+      <!-- Sign-in -->
+      <div class="signin-card">
+        <div class="signin-glow"></div>
+        <div style="position:relative;">
+          <div class="access-badge">
+            <div class="live-dot" style="width:6px;height:6px;"></div>
+            <span class="access-badge-text">Free Access</span>
+          </div>
+          <h3 class="signin-title">Sign in to start riding.</h3>
+          <p class="signin-sub">Email/password or Google unlocks the full dashboard. Browsing is free, but saved watchlists stay tied to your signed-in account.</p>
+          <input type="email" class="input-field" placeholder="Email address">
+          <input type="password" class="input-field" placeholder="Password">
+          <button class="btn-primary" style="width:100%;padding:16px;border-radius:14px;font-size:15px;margin-bottom:0;" onclick="goToDashboard()">Sign In / Create Account →</button>
+          <div class="or-divider"><div class="or-line"></div><span class="or-text">OR</span><div class="or-line"></div></div>
+          <button class="google-btn" onclick="goToDashboard()">
+            <svg width="20" height="20" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Continue with Google
+          </button>
+        </div>
+      </div>
+
+      <!-- Script plans -->
+      <div class="script-col" id="script">
+        <div class="script-header">
+          <p class="script-label">Optional Add-On</p>
+          <h3 class="script-title">TradingView Script</h3>
+          <p class="script-sub">Private on-chart signals, watchlist logic, and alerts.</p>
+        </div>
+        <div class="plan-card plan-normal">
+          <div class="plan-name">Monthly</div>
+          <div class="plan-price"><span class="plan-amount">$39</span><span class="plan-period">/mo</span></div>
+          <p class="plan-note">Recurring access with ongoing updates.</p>
+          <button class="btn-secondary" style="width:100%;padding:13px;border-radius:12px;font-size:14px;font-weight:700;">Get Monthly</button>
+        </div>
+        <div class="plan-card plan-hot">
+          <div class="plan-best-badge">Best Value</div>
+          <div class="plan-name">Lifetime</div>
+          <div class="plan-price"><span class="plan-amount price-glow">$120</span><span class="plan-period"> once</span></div>
+          <p class="plan-note">One payment. Permanent access. Best deal.</p>
+          <button class="btn-primary" style="width:100%;padding:13px;border-radius:12px;font-size:14px;">Get Lifetime</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BENEFITS -->
+<section>
+  <div class="section">
+    <div class="benefits-grid">
+      <div class="benefits-copy">
+        <p class="section-label" style="color:rgba(251,191,36,.6);">What you're really buying</p>
+        <h2>Better selection.<br>Sharper discipline.</h2>
+        <p>Option Riders is for traders tired of scanning aimlessly, chasing weak names, and getting dragged into setups that looked good for two seconds and then died.</p>
+        <p>Focus on tradable names, cleaner context, tighter execution, and a sharper daily process.</p>
+      </div>
+      <div>
+        <div class="benefit-item" style="border:1px solid rgba(251,191,36,.12);background:rgba(251,191,36,.05);">
+          <div class="benefit-dot" style="background:#fbbf24;box-shadow:0 0 8px #fbbf24;"></div>
+          <span class="benefit-text">Know what matters before the bell</span>
+        </div>
+        <div class="benefit-item" style="border:1px solid rgba(34,211,238,.12);background:rgba(34,211,238,.05);">
+          <div class="benefit-dot" style="background:#22d3ee;box-shadow:0 0 8px #22d3ee;"></div>
+          <span class="benefit-text">See options flow without drowning in noise</span>
+        </div>
+        <div class="benefit-item" style="border:1px solid rgba(52,211,153,.12);background:rgba(52,211,153,.05);">
+          <div class="benefit-dot" style="background:#34d399;box-shadow:0 0 8px #34d399;"></div>
+          <span class="benefit-text">Filter tradable names with tighter spreads</span>
+        </div>
+        <div class="benefit-item" style="border:1px solid rgba(129,140,248,.12);background:rgba(129,140,248,.05);">
+          <div class="benefit-dot" style="background:#818cf8;box-shadow:0 0 8px #818cf8;"></div>
+          <span class="benefit-text">Dashboard + script access — your choice</span>
+        </div>
+        <div class="benefit-item" style="border:1px solid rgba(52,211,153,.12);background:rgba(52,211,153,.05);">
+          <div class="benefit-dot" style="background:#34d399;box-shadow:0 0 8px #34d399;"></div>
+          <span class="benefit-text">Trade with structure and less emotion</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq-section">
+  <div class="faq-inner" id="faq">
+    <div class="faq-header">
+      <p class="section-label" style="color:rgba(34,211,238,.6);">FAQ</p>
+      <h2 class="section-title">Straight answers.</h2>
+    </div>
+    <div class="faq-item">
+      <h3 class="faq-q">What do I get with Option Riders?</h3>
+      <p class="faq-a">Live dashboard with ranked watchlists, options flow, ATM spread checks, and session context — plus the private TradingView script if you choose.</p>
+    </div>
+    <div class="faq-item">
+      <h3 class="faq-q">Who is this for?</h3>
+      <p class="faq-a">Intraday traders who want cleaner selection, tighter execution, and a faster process for liquid options setups.</p>
+    </div>
+    <div class="faq-item">
+      <h3 class="faq-q">Why does the spread check matter?</h3>
+      <p class="faq-a">A setup can look perfect on the chart and still be a bad trade if the options chain is too wide. This filter keeps you out of junk.</p>
+    </div>
+    <div class="faq-item">
+      <h3 class="faq-q">Is this for long-term investors?</h3>
+      <p class="faq-a">No. Built exclusively for active traders focused on the current session and execution quality.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<div class="cta-wrap">
+  <div class="cta-box">
+    <div class="cta-glow-l"></div>
+    <div class="cta-glow-r"></div>
+    <div style="position:relative;">
+      <p class="cta-eyebrow">Ready to ride?</p>
+      <h2 class="cta-title">
+        <span class="white">Stop forcing trades.</span><br>
+        <span class="grad">Start trading sharp.</span>
+      </h2>
+      <p class="cta-sub">Start free. Add the TradingView script only if you want the extra on-chart edge.</p>
+      <div class="cta-btns">
+        <a href="index.html" class="btn-primary" style="padding:16px 36px;border-radius:16px;font-size:16px;">Use Free Dashboard →</a>
+        <a href="index.html" class="btn-secondary" style="padding:16px 28px;border-radius:16px;font-size:16px;">Preview Platform</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <span class="footer-brand">OptionRiders</span>
+    <span class="footer-copy">© 2026 OptionRiders · Built for intraday traders</span>
+    <span class="footer-tag">Trade. Ride. Profit.</span>
+  </div>
+</footer>
+
+<script>
+  // Auth redirect — dashboard handles Google sign-in / account creation
+  function goToDashboard() {
+    window.location.href = 'index.html';
+  }
+
+  // Ticker tape
+  const tickers = [
+    {t:"SPY",  c:"-0.42%", pos:false},
+    {t:"QQQ",  c:"-0.61%", pos:false},
+    {t:"NVDA", c:"+1.24%", pos:true },
+    {t:"MU",   c:"+0.89%", pos:true },
+    {t:"AAPL", c:"-0.18%", pos:false},
+    {t:"TSLA", c:"+2.10%", pos:true },
+    {t:"AMZN", c:"-0.33%", pos:false},
+    {t:"META", c:"+0.77%", pos:true },
+    {t:"VIX",  c:"+8.40%", pos:true },
+    {t:"GLD",  c:"+0.52%", pos:true },
+    {t:"IWM",  c:"-0.91%", pos:false},
+    {t:"MSFT", c:"+0.14%", pos:true },
+  ];
+  const track = document.getElementById('ticker');
+  const items = [...tickers, ...tickers];
+  items.forEach(({t, c, pos}) => {
+    const span = document.createElement('span');
+    span.className = 'mono';
+    span.style.cssText = `margin:0 32px;font-size:12px;font-weight:500;white-space:nowrap;color:${pos?'#34d399':'#f87171'};`;
+    span.textContent = `${t}  ${c}`;
+    track.appendChild(span);
+  });
+
+  // Hover effects for terminal rows
+  document.querySelectorAll('.term-row').forEach(row => {
+    const orig = row.style.background;
+    row.addEventListener('mouseenter', () => row.style.background = 'rgba(255,255,255,0.035)');
+    row.addEventListener('mouseleave', () => row.style.background = orig);
+  });
+</script>
+</body>
+</html>

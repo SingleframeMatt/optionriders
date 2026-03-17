@@ -43,6 +43,37 @@ Set this environment variable in Vercel and locally before using sign-in:
 GOOGLE_CLIENT_ID=
 ```
 
+Google setup:
+
+1. In Google Cloud Console, create or select a project.
+2. Open `APIs & Services` -> `Credentials`.
+3. Create an `OAuth client ID` for a `Web application`.
+4. Add these `Authorized JavaScript origins`:
+   `http://127.0.0.1:8125`
+   `http://localhost:8125`
+   `https://www.optionriders.com`
+5. Copy the client ID into `.env` locally and into your Vercel project environment variables as `GOOGLE_CLIENT_ID`.
+6. Restart the local server after updating `.env`.
+
+The current app uses Google Identity Services in the browser and stores the signed-in profile locally for dashboard access.
+
+To enable the TradingView script checkout CTA, also set:
+
+```text
+STRIPE_PAYMENT_LINK=
+TRADINGVIEW_PRODUCT_NAME=
+TRADINGVIEW_PRODUCT_DESCRIPTION=
+TRADINGVIEW_PRODUCT_PRICE_LABEL=
+TRADINGVIEW_MONTHLY_LINK=
+TRADINGVIEW_MONTHLY_NAME=
+TRADINGVIEW_MONTHLY_PRICE=
+TRADINGVIEW_MONTHLY_DESCRIPTION=
+TRADINGVIEW_LIFETIME_LINK=
+TRADINGVIEW_LIFETIME_NAME=
+TRADINGVIEW_LIFETIME_PRICE=
+TRADINGVIEW_LIFETIME_DESCRIPTION=
+```
+
 User-added tickers remain saved in local browser storage.
 
 ## Domain

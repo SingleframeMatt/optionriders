@@ -230,6 +230,7 @@ const OPTIONS_FLOW = {
   mostActive: [],
   atmSpreads: [],
   maxSpreadDollars: 0.15,
+  putCallRatio: null,
   loading: true,
   error: "",
   updatedAt: ""
@@ -243,8 +244,37 @@ const AUTH_STATE = {
   buttonRendered: false,
 };
 
+const APP_CONFIG = {
+  tradingViewProductName: "Option Riders TradingView Script",
+  tradingViewProductDescription: "Private TradingView tool with Option Riders signals and alerts directly on-chart.",
+  monthlyPlan: {
+    link: "",
+    name: "Monthly Access",
+    price: "$39/month",
+    description: "Recurring access with ongoing updates.",
+  },
+  lifetimePlan: {
+    link: "",
+    name: "Lifetime Access",
+    price: "$120 one-time",
+    description: "One payment for lifetime access.",
+  },
+};
+
 const GUEST_TICKERS_STORAGE_KEY = 'optionriders-guest-tickers-v1';
 const GOOGLE_USER_STORAGE_KEY = 'optionriders-google-user-v1';
+const USER_TICKERS_STORAGE_PREFIX = 'optionriders-user-tickers-v1';
+const TRADE_ALERTS_STORAGE_KEY = 'optionriders-trade-alerts-v1';
+const BUILT_IN_TICKERS = new Set([
+  ...DASHBOARD_DATA.indexes.map((item) => item.ticker),
+  ...DASHBOARD_DATA.tickers.map((item) => item.ticker),
+  ...DASHBOARD_DATA.watchlist.map((item) => item.ticker),
+]);
+const ALERT_STATE = {
+  items: [],
+  activeSignals: {},
+  notificationsEnabled: false,
+};
 
 // ============================================
 // Utility Functions
@@ -328,6 +358,48 @@ function renderMarketPulse(breadth) {
   el.style.display = '';
 }
 
+function renderProductOffer() {
+  const section = document.getElementById('productOfferSection');
+  const title = document.getElementById('productOfferTitle');
+  const description = document.getElementById('productOfferDescription');
+  const note = document.getElementById('productOfferNote');
+  const monthlyName = document.getElementById('monthlyPlanName');
+  const monthlyPrice = document.getElementById('monthlyPlanPrice');
+  const monthlyDescription = document.getElementById('monthlyPlanDescription');
+  const monthlyBuyBtn = document.getElementById('monthlyPlanBuyBtn');
+  const lifetimeName = document.getElementById('lifetimePlanName');
+  const lifetimePrice = document.getElementById('lifetimePlanPrice');
+  const lifetimeDescription = document.getElementById('lifetimePlanDescription');
+  const lifetimeBuyBtn = document.getElementById('lifetimePlanBuyBtn');
+  if (!section || !title || !description || !note || !monthlyName || !monthlyPrice || !monthlyDescription || !monthlyBuyBtn || !lifetimeName || !lifetimePrice || !lifetimeDescription || !lifetimeBuyBtn) return;
+
+  title.textContent = APP_CONFIG.tradingViewProductName || 'Option Riders TradingView Script';
+  description.textContent = APP_CONFIG.tradingViewProductDescription || 'Private TradingView tool for traders who want the same Option Riders signal framework directly on-chart.';
+
+  const plans = [
+    { config: APP_CONFIG.monthlyPlan, nameEl: monthlyName, priceEl: monthlyPrice, descEl: monthlyDescription, buttonEl: monthlyBuyBtn },
+    { config: APP_CONFIG.lifetimePlan, nameEl: lifetimeName, priceEl: lifetimePrice, descEl: lifetimeDescription, buttonEl: lifetimeBuyBtn },
+  ];
+
+  plans.forEach(({ config, nameEl, priceEl, descEl, buttonEl }) => {
+    nameEl.textContent = config.name;
+    priceEl.textContent = config.price;
+    descEl.textContent = config.description;
+    if (config.link) {
+      buttonEl.href = config.link;
+      buttonEl.setAttribute('aria-disabled', 'false');
+    } else {
+      buttonEl.href = '#';
+      buttonEl.setAttribute('aria-disabled', 'true');
+    }
+  });
+
+  note.textContent = (APP_CONFIG.monthlyPlan.link || APP_CONFIG.lifetimePlan.link)
+    ? 'Instant checkout through Stripe.'
+    : 'Set your Stripe plan links to make checkout live.';
+  section.style.display = '';
+}
+
 function renderEarningsDate(earningsIso) {
   if (!earningsIso) return '';
   const today   = new Date();
@@ -358,21 +430,33 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-function loadGuestTickers() {
+function normalizeTickerList(list) {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : [])
+    .map((item) => String(item || '').trim().toUpperCase())
+    .filter((item) => item && item.length <= 5 && /^[A-Z0-9]+$/.test(item) && !seen.has(item) && seen.add(item));
+}
+
+function getTickerStorageKey(user = AUTH_STATE.user) {
+  return user?.sub ? `${USER_TICKERS_STORAGE_PREFIX}:${user.sub}` : GUEST_TICKERS_STORAGE_KEY;
+}
+
+function loadSavedTickers(user = AUTH_STATE.user) {
   try {
-    const saved = window.localStorage.getItem(GUEST_TICKERS_STORAGE_KEY);
+    const saved = window.localStorage.getItem(getTickerStorageKey(user));
     const parsed = saved ? JSON.parse(saved) : [];
-    return Array.isArray(parsed) ? parsed : [];
+    return normalizeTickerList(parsed);
   } catch (error) {
     return [];
   }
 }
 
-function saveGuestTickers() {
+function saveTickerList(user = AUTH_STATE.user, list = customTickersList) {
   try {
-    window.localStorage.setItem(GUEST_TICKERS_STORAGE_KEY, JSON.stringify(customTickersList));
+    window.localStorage.setItem(getTickerStorageKey(user), JSON.stringify(normalizeTickerList(list)));
+    return true;
   } catch (error) {
-    // Ignore storage failures and keep the in-memory session usable.
+    return false;
   }
 }
 
@@ -396,6 +480,188 @@ function saveStoredGoogleUser(user) {
   } catch (error) {
     // Ignore storage failures and keep sign-in usable for the session.
   }
+}
+
+function syncTickersForCurrentUser() {
+  if (!AUTH_STATE.user?.sub) {
+    customTickersList = loadSavedTickers(null);
+    return;
+  }
+
+  const accountTickers = loadSavedTickers(AUTH_STATE.user);
+  const guestTickers = loadSavedTickers(null);
+  const merged = normalizeTickerList([...accountTickers, ...guestTickers]);
+  customTickersList = merged;
+  saveTickerList(AUTH_STATE.user, merged);
+}
+
+function loadTradeAlerts() {
+  try {
+    const saved = window.localStorage.getItem(TRADE_ALERTS_STORAGE_KEY);
+    const parsed = saved ? JSON.parse(saved) : null;
+    ALERT_STATE.items = Array.isArray(parsed?.items) ? parsed.items.slice(0, 12) : [];
+    ALERT_STATE.activeSignals = parsed && typeof parsed.activeSignals === 'object' ? parsed.activeSignals : {};
+    ALERT_STATE.notificationsEnabled = parsed?.notificationsEnabled === true;
+  } catch (error) {
+    ALERT_STATE.items = [];
+    ALERT_STATE.activeSignals = {};
+    ALERT_STATE.notificationsEnabled = false;
+  }
+}
+
+function saveTradeAlerts() {
+  try {
+    window.localStorage.setItem(TRADE_ALERTS_STORAGE_KEY, JSON.stringify({
+      items: ALERT_STATE.items.slice(0, 12),
+      activeSignals: ALERT_STATE.activeSignals,
+      notificationsEnabled: ALERT_STATE.notificationsEnabled,
+    }));
+  } catch (error) {
+    // ignore storage failure
+  }
+}
+
+function parseTriggerLevel(text) {
+  const match = String(text || '').match(/(\d+(?:\.\d+)?)/);
+  return match ? Number(match[1]) : null;
+}
+
+function formatAlertTime(timestamp) {
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit'
+  }).format(new Date(timestamp));
+}
+
+function getTickerPrice(ticker) {
+  const row = DASHBOARD_DATA.tickers.find((item) => item.ticker === ticker)
+    || DASHBOARD_DATA.indexes.find((item) => item.ticker === ticker);
+  return row?.price ?? null;
+}
+
+function getTickerPutCallState(ticker) {
+  const row = (OPTIONS_FLOW.atmSpreads || []).find((item) => item.ticker === ticker);
+  return row?.putCallRatio || null;
+}
+
+function evaluateTradeAlerts() {
+  const newAlerts = [];
+
+  for (const row of DASHBOARD_DATA.watchlist) {
+    const price = getTickerPrice(row.ticker);
+    const trigger = parseTriggerLevel(row.entry);
+    const ratio = getTickerPutCallState(row.ticker);
+    if (price == null || trigger == null) continue;
+
+    const isLong = row.direction === 'LONG';
+    const crossed = isLong ? price >= trigger : price <= trigger;
+    const scoreOk = typeof row.signalScore === 'number'
+      ? (isLong ? row.signalScore >= 20 : row.signalScore <= -20)
+      : true;
+    const optionsOk = ratio
+      ? (isLong ? ratio.leader !== 'puts' : ratio.leader !== 'calls')
+      : true;
+    const liquidOk = (() => {
+      const spreadRow = (OPTIONS_FLOW.atmSpreads || []).find((item) => item.ticker === row.ticker);
+      return spreadRow ? !spreadRow.isWide : true;
+    })();
+
+    const signalKey = `${row.ticker}:${row.direction}:${row.entry}`;
+    const shouldTrigger = crossed && scoreOk && optionsOk && liquidOk;
+    const wasActive = Boolean(ALERT_STATE.activeSignals[signalKey]);
+
+    if (shouldTrigger && !wasActive) {
+      const alert = {
+        id: `${signalKey}:${Date.now()}`,
+        ticker: row.ticker,
+        direction: row.direction,
+        entry: row.entry,
+        target: row.target,
+        stop: row.stop,
+        price: Number(price.toFixed(2)),
+        signalScore: row.signalScore ?? null,
+        putCallLabel: ratio?.label || 'n/a',
+        ratioLeader: ratio?.leader || 'balanced',
+        timestamp: Date.now(),
+        summary: `${row.ticker} ${row.direction} triggered at ${price.toFixed(2)} vs ${row.entry}. Target ${row.target}, stop ${row.stop}.`,
+      };
+      ALERT_STATE.items.unshift(alert);
+      ALERT_STATE.items = ALERT_STATE.items.slice(0, 12);
+      newAlerts.push(alert);
+    }
+
+    ALERT_STATE.activeSignals[signalKey] = shouldTrigger;
+  }
+
+  if (newAlerts.length) {
+    saveTradeAlerts();
+    renderAlertCenter();
+    renderAlertBar();
+    notifyTradeAlerts(newAlerts);
+  }
+}
+
+function notifyTradeAlerts(alerts) {
+  if (!ALERT_STATE.notificationsEnabled || typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+    return;
+  }
+
+  alerts.forEach((alert) => {
+    const body = `${alert.entry} | price ${alert.price} | target ${alert.target} | stop ${alert.stop}`;
+    const notification = new Notification(`${alert.ticker} ${alert.direction} alert`, { body });
+    notification.onclick = () => {
+      window.focus();
+      openTickerDetailModal(alert.ticker);
+    };
+  });
+}
+
+function renderAlertsPill() {
+  const pill = document.getElementById('alertsTogglePill');
+  if (!pill) return;
+
+  const permission = typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
+  let label = 'Trading Alerts Off';
+  let className = 'auth-status-pill alerts-pill';
+
+  if (permission === 'denied') {
+    label = 'Trading Alerts Blocked';
+    className += ' warning';
+    ALERT_STATE.notificationsEnabled = false;
+  } else if (permission === 'unsupported') {
+    label = 'Trading Alerts Unsupported';
+    className += ' warning';
+    ALERT_STATE.notificationsEnabled = false;
+  } else if (ALERT_STATE.notificationsEnabled && permission === 'granted') {
+    label = 'Trading Alerts On';
+    className += ' signed-in';
+  }
+
+  pill.textContent = label;
+  pill.className = className;
+  pill.disabled = permission === 'unsupported';
+}
+
+async function enableBrowserAlerts() {
+  if (typeof Notification === 'undefined') {
+    renderAlertsPill();
+    return;
+  }
+
+  if (ALERT_STATE.notificationsEnabled) {
+    ALERT_STATE.notificationsEnabled = false;
+    saveTradeAlerts();
+    renderAlertsPill();
+    return;
+  }
+
+  const permission = Notification.permission === 'granted'
+    ? 'granted'
+    : await Notification.requestPermission();
+
+  ALERT_STATE.notificationsEnabled = permission === 'granted';
+  saveTradeAlerts();
+  renderAlertsPill();
 }
 
 function getDisplayName(user) {
@@ -706,15 +972,15 @@ function renderAuthControls() {
 
   if (!AUTH_STATE.googleClientId) {
     controls.innerHTML = `<span class="auth-status-pill warning">Add GOOGLE_CLIENT_ID</span>`;
+    renderAuthGate();
     return;
   }
 
   if (!AUTH_STATE.user) {
     controls.innerHTML = `
-      <span class="auth-status-pill warning">Guest mode</span>
-      <div id="googleSignInMount"></div>
+      <span class="auth-status-pill warning">Sign in required</span>
     `;
-    renderGoogleButton();
+    renderAuthGate();
     return;
   }
 
@@ -722,6 +988,7 @@ function renderAuthControls() {
     <span class="auth-status-pill signed-in">${escapeHtml(getDisplayName(AUTH_STATE.user))}</span>
     <button class="auth-action-btn" type="button" onclick="signOut()">Sign out</button>
   `;
+  renderAuthGate();
 }
 
 function renderCatalysts() {
@@ -733,6 +1000,14 @@ function renderCatalysts() {
 
 function getAlertItems() {
   const alerts = [];
+  const tradeAlerts = ALERT_STATE.items.slice(0, 2).map((item) => ({
+    type: item.direction === 'LONG' ? 'macro' : 'today',
+    text: `${item.ticker} ${item.direction} triggered at ${item.price} vs ${item.entry}`
+  }));
+
+  if (tradeAlerts.length) {
+    alerts.push(...tradeAlerts);
+  }
   const todayKey = new Intl.DateTimeFormat('en-CA', {
     timeZone: ECONOMIC_CALENDAR.timezone,
     year: 'numeric',
@@ -774,7 +1049,7 @@ function getAlertItems() {
     });
   }
 
-  return alerts.slice(0, 4);
+  return alerts.slice(0, 5);
 }
 
 function renderAlertBar() {
@@ -1051,9 +1326,9 @@ function renderTickerCards() {
   grid.innerHTML = DASHBOARD_DATA.tickers.map((t, i) => `
     <div class="ticker-card ${t.star ? 'star-pick' : ''}" style="animation-delay: ${0.15 + i * 0.04}s">
       ${t.star ? '<div class="star-icon">★</div>' : ''}
-      
+
       <div class="ticker-rank">#${t.rank}</div>
-      
+
       <div class="ticker-header ticker-header-link" onclick="window.open('${getTradingViewUrl(t.ticker)}', '_blank')" title="Open ${t.ticker} chart on TradingView">
         <span class="ticker-symbol">${escapeHtml(t.ticker)}</span>
         <span class="ticker-name">${escapeHtml(t.name)}</span>
@@ -1080,91 +1355,35 @@ function renderTickerCards() {
 
       ${t.signalScore != null ? `<div class="signal-score-row">${renderSignalBadge(t.signalScore)}</div>` : ''}
 
-      ${t.earningsDate ? `<div class="earnings-row">${renderEarningsDate(t.earningsDate)}</div>` : ''}
-
       <div class="chart-container" onclick="window.open('${getTradingViewUrl(t.ticker)}', '_blank')" title="Open ${t.ticker} on TradingView">
         <canvas class="sparkline-canvas" data-ticker="${t.ticker}"></canvas>
       </div>
 
-      <div class="rsi-bar-container">
-        <div class="rsi-bar-header">
-          <span class="rsi-bar-label">RSI (14)</span>
-          <span class="rsi-bar-value ${getRsiClass(t.rsi)}">${t.rsi}</span>
+      <div class="ticker-compact-stats">
+        <div class="ticker-compact-stat">
+          <span class="ticker-compact-label">RSI</span>
+          <span class="ticker-compact-value ${getRsiClass(t.rsi)}">${t.rsi}</span>
         </div>
-        <div class="rsi-bar-track">
-          <div class="rsi-bar-fill ${getRsiClass(t.rsi)}" style="width: ${t.rsi}%;"></div>
+        <div class="ticker-compact-stat">
+          <span class="ticker-compact-label">ATR</span>
+          <span class="ticker-compact-value">${t.atr}</span>
         </div>
-      </div>
-
-      <div class="atr-row">
-        <div class="atr-item">
-          <span class="atr-label">ATR</span>
-          <span class="atr-value glow-hover">${t.atr}</span>
-        </div>
-        <div class="atr-item">
-          <span class="atr-label">ATR %</span>
-          <span class="atr-value glow-hover">${t.atrPct}%</span>
-        </div>
-        <div class="atr-item">
-          <span class="atr-label">Exp Move</span>
-          <span class="atr-value glow-hover">${escapeHtml(t.expectedMove)}</span>
-        </div>
-      </div>
-      ${t.adx != null ? `<div class="atr-row">
-        <div class="atr-item">
-          <span class="atr-label" title="Average Directional Index — trend strength">ADX</span>
-          <span class="atr-value glow-hover ${t.adx >= 30 ? 'adx-strong' : t.adx < 20 ? 'adx-weak' : ''}">${t.adx}${t.adx >= 30 ? ' ↑' : t.adx < 20 ? ' ~' : ''}</span>
-        </div>
-        <div class="atr-item">
-          <span class="atr-label" title="Bollinger Band %B — 0=lower band, 1=upper band">BB %B</span>
-          <span class="atr-value glow-hover">${t.bollingerPctB != null ? (t.bollingerPctB * 100).toFixed(0) + '%' : '—'}</span>
-        </div>
-        <div class="atr-item">
-          <span class="atr-label" title="52-week range position — 0%=52W low, 100%=52W high">52W Pos</span>
-          <span class="atr-value glow-hover">${t.week52Position != null ? (t.week52Position * 100).toFixed(0) + '%' : '—'}</span>
-        </div>
-      </div>` : ''}
-
-      <table class="levels-table">
-        <tr>
-          <td>Prev Day High</td>
-          <td>${formatPrice(t.prevDayHigh)}</td>
-        </tr>
-        <tr>
-          <td>Prev Day Low</td>
-          <td>${formatPrice(t.prevDayLow)}</td>
-        </tr>
-        <tr>
-          <td>5-Day High</td>
-          <td>${formatPrice(t.fiveDayHigh)}</td>
-        </tr>
-        <tr>
-          <td>5-Day Low</td>
-          <td>${formatPrice(t.fiveDayLow)}</td>
-        </tr>
-        <tr>
-          <td>Support</td>
-          <td class="support-vals">${t.support.join(' / ')}</td>
-        </tr>
-        <tr>
-          <td>Resistance</td>
-          <td class="resistance-vals">${t.resistance.join(' / ')}</td>
-        </tr>
-      </table>
-
-      <div class="ticker-triggers">
-        <div class="trigger trigger-bull">▲ ${escapeHtml(t.bullTrigger)}</div>
-        <div class="trigger trigger-bear">▼ ${escapeHtml(t.bearTrigger)}</div>
-      </div>
-
-      <div class="ticker-meta">
-        <div class="meta-row">
-          <span class="meta-label">Options</span>
-          <span class="meta-value">${escapeHtml(t.optionsIdea)}</span>
+        <div class="ticker-compact-stat">
+          <span class="ticker-compact-label">Move</span>
+          <span class="ticker-compact-value">${escapeHtml(t.expectedMove)}</span>
         </div>
       </div>
 
-      <div class="ticker-summary">${escapeHtml(t.summary)}</div>
+      <div class="ticker-levels-compact">
+        <div class="ticker-levels-row">
+          <span class="ticker-levels-label">Support</span>
+          <span class="ticker-levels-value support">${t.support.slice(0, 2).join(' / ')}</span>
+        </div>
+        <div class="ticker-levels-row">
+          <span class="ticker-levels-label">Resistance</span>
+          <span class="ticker-levels-value resistance">${t.resistance.slice(0, 2).join(' / ')}</span>
+        </div>
+      </div>
     </div>
   `).join('');
 }
@@ -1183,6 +1402,7 @@ function renderWatchlist() {
       <td style="color: var(--text-muted); font-weight:700;">${w.rank}</td>
       <td style="color: var(--text-bright); font-weight:700;">${escapeHtml(w.ticker)}</td>
       <td>${w.signalScore != null ? renderSignalBadge(w.signalScore) : '—'}</td>
+      <td>${renderWatchlistPutCallRatio(w.ticker)}</td>
       <td class="${w.direction === 'LONG' ? 'direction-long' : 'direction-short'}">${escapeHtml(w.direction)}</td>
       <td>${escapeHtml(w.entry)}</td>
       <td>${escapeHtml(w.target)}</td>
@@ -1190,6 +1410,27 @@ function renderWatchlist() {
       <td style="color: var(--text-secondary);">${escapeHtml(w.catalyst)}</td>
     </tr>
   `).join('');
+}
+
+function renderWatchlistPutCallRatio(ticker) {
+  const row = (OPTIONS_FLOW.atmSpreads || []).find((item) => item.ticker === ticker);
+  const ratio = row?.putCallRatio;
+  if (!ratio) return '<span style="color: var(--text-muted);">—</span>';
+
+  const leaderClass = ratio.leader || 'balanced';
+  const leaderText = leaderClass === 'calls'
+    ? 'Calls'
+    : leaderClass === 'puts'
+      ? 'Puts'
+      : 'Balanced';
+  const tooltip = `Calls ${Number(ratio.callVolume || 0).toLocaleString()} vs puts ${Number(ratio.putVolume || 0).toLocaleString()} volume`;
+
+  return `
+    <div class="watchlist-pcr ${leaderClass}" title="${escapeHtml(tooltip)}">
+      <span class="watchlist-pcr-ratio">${escapeHtml(ratio.label || 'n/a')}</span>
+      <span class="watchlist-pcr-leader">${escapeHtml(leaderText)}</span>
+    </div>
+  `;
 }
 
 function renderThemes() {
@@ -1239,12 +1480,13 @@ function renderOptionsFlowRows(rows, type) {
 
 function renderAtmSpreadRows(rows, maxSpreadDollars) {
   if (!rows.length) {
-    return `<tr class="options-flow-loading"><td colspan="5">No ATM spread data available.</td></tr>`;
+    return `<tr class="options-flow-loading"><td colspan="6">No ATM spread data available.</td></tr>`;
   }
 
   return rows.map((row) => {
     const statusClass = row.isWide ? 'wide' : 'ok';
     const statusText = row.isWide ? `Avoid > $${maxSpreadDollars.toFixed(2)}` : 'Tradeable';
+    const pcrHtml = renderWatchlistPutCallRatio(row.ticker);
 
     return `
       <tr>
@@ -1262,6 +1504,7 @@ function renderAtmSpreadRows(rows, maxSpreadDollars) {
             <span class="options-spread-sub">${escapeHtml(row.put.contract)} · ${escapeHtml(row.put.expirationDate)}</span>
           </div>
         </td>
+        <td>${pcrHtml}</td>
         <td class="options-spread-status ${statusClass}">${escapeHtml(statusText)}</td>
       </tr>
     `;
@@ -1273,26 +1516,44 @@ function renderOptionsFlow() {
   const mostActiveBody = document.getElementById('mostActiveOptionsBody');
   const atmSpreadBody = document.getElementById('atmSpreadBody');
   const meta = document.getElementById('optionsFlowMeta');
+  const ratio = document.getElementById('optionsFlowRatio');
 
   if (OPTIONS_FLOW.loading) {
     unusualBody.innerHTML = `<tr class="options-flow-loading"><td colspan="5">Loading Barchart options activity...</td></tr>`;
     mostActiveBody.innerHTML = `<tr class="options-flow-loading"><td colspan="5">Loading Barchart options activity...</td></tr>`;
-    atmSpreadBody.innerHTML = `<tr class="options-flow-loading"><td colspan="5">Loading Barchart ATM spreads...</td></tr>`;
+    atmSpreadBody.innerHTML = `<tr class="options-flow-loading"><td colspan="6">Loading Barchart ATM spreads...</td></tr>`;
     meta.textContent = 'Loading Barchart options activity...';
+    if (ratio) {
+      ratio.className = 'options-flow-ratio';
+      ratio.textContent = 'Loading put/call ratio...';
+    }
     return;
   }
 
   if (OPTIONS_FLOW.error) {
     unusualBody.innerHTML = `<tr class="options-flow-loading"><td colspan="5">${escapeHtml(OPTIONS_FLOW.error)}</td></tr>`;
     mostActiveBody.innerHTML = `<tr class="options-flow-loading"><td colspan="5">${escapeHtml(OPTIONS_FLOW.error)}</td></tr>`;
-    atmSpreadBody.innerHTML = `<tr class="options-flow-loading"><td colspan="5">${escapeHtml(OPTIONS_FLOW.error)}</td></tr>`;
+    atmSpreadBody.innerHTML = `<tr class="options-flow-loading"><td colspan="6">${escapeHtml(OPTIONS_FLOW.error)}</td></tr>`;
     meta.textContent = 'Barchart feed unavailable';
+    if (ratio) {
+      ratio.className = 'options-flow-ratio';
+      ratio.textContent = 'Put/call ratio unavailable';
+    }
     return;
   }
 
   atmSpreadBody.innerHTML = renderAtmSpreadRows(OPTIONS_FLOW.atmSpreads, OPTIONS_FLOW.maxSpreadDollars);
   unusualBody.innerHTML = renderOptionsFlowRows(OPTIONS_FLOW.unusual, 'unusual');
   mostActiveBody.innerHTML = renderOptionsFlowRows(OPTIONS_FLOW.mostActive, 'active');
+  if (ratio) {
+    const flowRatio = OPTIONS_FLOW.putCallRatio || {};
+    const leader = flowRatio.leader || 'balanced';
+    const ratioLabel = typeof flowRatio.ratio === 'number'
+      ? `Call/put ${flowRatio.ratio.toFixed(2)}:1`
+      : 'Call/put n/a';
+    ratio.className = `options-flow-ratio ${leader}`;
+    ratio.textContent = `${ratioLabel} · ${flowRatio.summary || 'Put/call mix unavailable'}`;
+  }
   meta.textContent = OPTIONS_FLOW.updatedAt
     ? `Source: Barchart · ATM liquidity threshold $${OPTIONS_FLOW.maxSpreadDollars.toFixed(2)} · Updated ${OPTIONS_FLOW.updatedAt}`
     : 'Source: Barchart';
@@ -1303,7 +1564,7 @@ async function fetchOptionsFlow() {
   renderOptionsFlow();
 
   try {
-    const response = await fetch('/api/options-flow');
+    const response = await fetch(`/api/options-flow${buildTickerQuery()}`);
     if (!response.ok) {
       throw new Error('Options activity proxy unavailable.');
     }
@@ -1312,6 +1573,7 @@ async function fetchOptionsFlow() {
     OPTIONS_FLOW.unusual = payload.unusual || [];
     OPTIONS_FLOW.mostActive = payload.mostActive || [];
     OPTIONS_FLOW.atmSpreads = payload.atmSpreads || [];
+    OPTIONS_FLOW.putCallRatio = payload.putCallRatio || null;
     OPTIONS_FLOW.maxSpreadDollars = typeof payload.maxSpreadDollars === 'number' ? payload.maxSpreadDollars : 0.15;
     OPTIONS_FLOW.error = '';
     OPTIONS_FLOW.loading = false;
@@ -1325,6 +1587,7 @@ async function fetchOptionsFlow() {
     OPTIONS_FLOW.unusual = [];
     OPTIONS_FLOW.mostActive = [];
     OPTIONS_FLOW.atmSpreads = [];
+    OPTIONS_FLOW.putCallRatio = null;
     OPTIONS_FLOW.maxSpreadDollars = 0.15;
     OPTIONS_FLOW.loading = false;
     OPTIONS_FLOW.error = 'Use server.py to load live Barchart options activity.';
@@ -1332,6 +1595,8 @@ async function fetchOptionsFlow() {
   }
 
   renderOptionsFlow();
+  renderWatchlist();
+  evaluateTradeAlerts();
 }
 
 function getTickerDetails(ticker) {
@@ -1489,8 +1754,7 @@ function initCollapsibleSections() {
 // Custom Ticker Management (in-memory)
 // ============================================
 
-// In-memory storage for custom tickers (persists within session)
-let customTickersList = loadGuestTickers();
+let customTickersList = [];
 
 async function fetchPublicAuthConfig() {
   const response = await fetch('/api/public-config', { cache: 'no-store' });
@@ -1501,28 +1765,88 @@ async function fetchPublicAuthConfig() {
 }
 
 function renderGoogleButton() {
-  const mount = document.getElementById('googleSignInMount');
-  if (!mount || !AUTH_STATE.googleClientId || !window.google?.accounts?.id || AUTH_STATE.user) return;
+  const mounts = [
+    document.getElementById('googleSignInMountGate'),
+  ].filter(Boolean);
+  if (!mounts.length || !AUTH_STATE.googleClientId || !window.google?.accounts?.id || AUTH_STATE.user) return;
 
-  mount.innerHTML = '';
   window.google.accounts.id.initialize({
     client_id: AUTH_STATE.googleClientId,
     callback: handleGoogleCredentialResponse,
     auto_select: false,
     cancel_on_tap_outside: true,
+    context: 'signup',
+    ux_mode: 'popup',
   });
-  window.google.accounts.id.renderButton(mount, {
-    theme: 'outline',
-    size: 'medium',
-    shape: 'pill',
-    text: 'signin_with',
-    width: 180,
+  mounts.forEach((mount) => {
+    mount.innerHTML = '';
+    window.google.accounts.id.renderButton(mount, {
+      theme: 'outline',
+      size: 'large',
+      shape: 'pill',
+      text: 'continue_with',
+      width: 250,
+    });
   });
+  window.google.accounts.id.prompt();
   AUTH_STATE.buttonRendered = true;
+}
+
+function renderAuthGate() {
+  const wrap = document.getElementById('dashboardGateWrap');
+  const note = document.getElementById('authGateNote');
+  const addTickerBtns = [
+    document.getElementById('addTickerBtn'),
+    document.getElementById('addTickerBtnInline'),
+  ].filter(Boolean);
+  const submitBtn = document.getElementById('authGateSubmit');
+  if (!wrap || !note || !addTickerBtns.length) return;
+
+  const locked = !AUTH_STATE.user;
+  wrap.classList.toggle('is-locked', locked);
+  addTickerBtns.forEach((button) => {
+    button.disabled = locked;
+    button.setAttribute('aria-disabled', locked ? 'true' : 'false');
+    button.title = locked ? 'Sign in to add custom tickers' : 'Add a custom ticker';
+  });
+
+  if (!AUTH_STATE.googleClientId) {
+    note.textContent = 'Google sign-in is not configured yet. Email/password UI is shown in-window, but it still needs a real auth backend before it can work.';
+  } else if (AUTH_STATE.user) {
+    note.textContent = `Signed in as ${getDisplayName(AUTH_STATE.user)}.`;
+  } else {
+    note.textContent = 'Use the Google button below for one-click sign-in. Email/password needs backend setup before it can be enabled.';
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = false;
+  }
+
+  if (locked && AUTH_STATE.googleClientId) {
+    renderGoogleButton();
+  }
+}
+
+function initAuthGateForm() {
+  const form = document.getElementById('authGateForm');
+  const note = document.getElementById('authGateNote');
+  if (!form || !note) return;
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    note.textContent = 'Email/password sign-in is not wired to a backend yet. Google sign-in below is the live auth path right now.';
+  });
 }
 
 function handleGoogleCredentialResponse(response) {
   try {
+    const previousUser = AUTH_STATE.user;
+    if (previousUser?.sub) {
+      saveTickerList(previousUser, customTickersList);
+    } else {
+      saveTickerList(null, customTickersList);
+    }
+
     const payload = decodeJwtPayload(response.credential);
     AUTH_STATE.user = {
       name: payload.name || '',
@@ -1531,8 +1855,10 @@ function handleGoogleCredentialResponse(response) {
       sub: payload.sub || '',
     };
     saveStoredGoogleUser(AUTH_STATE.user);
+    syncTickersForCurrentUser();
     renderAuthControls();
     renderCustomTickers();
+    Promise.allSettled([fetchOptionsFlow(), fetchMarketData()]);
   } catch (error) {
     AUTH_STATE.error = 'Google sign-in failed';
     renderAuthControls();
@@ -1540,13 +1866,11 @@ function handleGoogleCredentialResponse(response) {
 }
 
 function persistTicker() {
-  saveGuestTickers();
-  return true;
+  return saveTickerList();
 }
 
 function deleteTicker() {
-  saveGuestTickers();
-  return true;
+  return saveTickerList();
 }
 
 async function initAuth(forceRefresh = false) {
@@ -1559,45 +1883,66 @@ async function initAuth(forceRefresh = false) {
   AUTH_STATE.configLoaded = false;
   AUTH_STATE.googleClientId = "";
   AUTH_STATE.user = loadStoredGoogleUser();
+  syncTickersForCurrentUser();
   renderAuthControls();
 
   try {
     const config = await fetchPublicAuthConfig();
     AUTH_STATE.configLoaded = true;
     AUTH_STATE.googleClientId = config.googleClientId || "";
+    APP_CONFIG.tradingViewProductName = config.tradingViewProductName || APP_CONFIG.tradingViewProductName;
+    APP_CONFIG.tradingViewProductDescription = config.tradingViewProductDescription || APP_CONFIG.tradingViewProductDescription;
+    APP_CONFIG.monthlyPlan = {
+      ...APP_CONFIG.monthlyPlan,
+      link: config.tradingViewMonthlyLink || "",
+      name: config.tradingViewMonthlyName || APP_CONFIG.monthlyPlan.name,
+      price: config.tradingViewMonthlyPrice || APP_CONFIG.monthlyPlan.price,
+      description: config.tradingViewMonthlyDescription || APP_CONFIG.monthlyPlan.description,
+    };
+    APP_CONFIG.lifetimePlan = {
+      ...APP_CONFIG.lifetimePlan,
+      link: config.tradingViewLifetimeLink || config.stripePaymentLink || "",
+      name: config.tradingViewLifetimeName || APP_CONFIG.lifetimePlan.name,
+      price: config.tradingViewLifetimePrice || config.tradingViewProductPriceLabel || APP_CONFIG.lifetimePlan.price,
+      description: config.tradingViewLifetimeDescription || APP_CONFIG.lifetimePlan.description,
+    };
+    renderProductOffer();
     renderAuthControls();
   } catch (error) {
     AUTH_STATE.configLoaded = true;
     AUTH_STATE.error = 'Auth unavailable';
+    renderProductOffer();
     renderAuthControls();
   }
 }
 
 async function signOut() {
+  if (AUTH_STATE.user?.sub) {
+    saveTickerList(AUTH_STATE.user, customTickersList);
+  }
+
   AUTH_STATE.user = null;
   saveStoredGoogleUser(null);
+  customTickersList = loadSavedTickers(null);
   if (window.google?.accounts?.id) {
     window.google.accounts.id.disableAutoSelect();
   }
   renderAuthControls();
   renderCustomTickers();
+  await Promise.allSettled([fetchOptionsFlow(), fetchMarketData()]);
 }
 
 function addCustomTicker(symbol) {
   const ticker = symbol.toUpperCase().trim();
   if (!ticker || ticker.length > 5) return false;
   
-  // Check if already in dashboard data
-  const allExisting = [
-    ...DASHBOARD_DATA.indexes.map(i => i.ticker),
-    ...DASHBOARD_DATA.tickers.map(t => t.ticker)
-  ];
-  if (allExisting.includes(ticker)) return 'exists';
+  if (BUILT_IN_TICKERS.has(ticker)) return 'exists';
   
   // Check if already in custom list
   if (customTickersList.includes(ticker)) return 'duplicate';
   
   customTickersList.push(ticker);
+  customTickersList = normalizeTickerList(customTickersList);
   return ticker;
 }
 
@@ -1605,51 +1950,51 @@ async function removeCustomTicker(ticker) {
   customTickersList = customTickersList.filter(t => t !== ticker);
   deleteTicker(ticker);
   renderCustomTickers();
+  await Promise.allSettled([fetchOptionsFlow(), fetchMarketData()]);
 }
 
 function renderCustomTickers() {
   const grid = document.getElementById('customTickerGrid');
-  // Filter out tickers that are now in the main dashboard data
-  const mainTickers = [
-    ...DASHBOARD_DATA.indexes.map(i => i.ticker),
-    ...DASHBOARD_DATA.tickers.map(t => t.ticker)
-  ];
-  const filtered = customTickersList.filter(t => !mainTickers.includes(t));
+  if (!grid) return;
+  const filtered = normalizeTickerList(customTickersList);
   customTickersList = filtered;
   
   if (filtered.length === 0) {
-    grid.style.display = 'none';
+    grid.innerHTML = `<div class="tracked-ticker-empty">No custom tickers yet — use "Add Ticker" in the header to track a symbol across the dashboard.</div>`;
     return;
   }
   
-  grid.style.display = 'block';
-  grid.innerHTML = `
-    <div class="custom-ticker-label">Custom Tickers</div>
-    ${filtered.map((ticker, i) => `
-      <div class="custom-card" style="animation-delay: ${i * 0.05}s; margin-bottom: 8px;">
-        <div class="custom-card-info">
-          <span class="custom-card-ticker" onclick="window.open('${getTradingViewUrl(ticker)}', '_blank')" title="Open ${escapeHtml(ticker)} on TradingView">
-            ${escapeHtml(ticker)} <span style="font-size:0.65rem; color:var(--text-muted);">↗</span>
-          </span>
-          <span class="custom-card-status">Added to tracking — ${AUTH_STATE.user ? 'saved on this browser for your Google session' : 'saved on this browser'}</span>
-        </div>
-        <div class="custom-card-actions">
-          <a class="custom-card-tv" href="${getTradingViewUrl(ticker)}" target="_blank" rel="noopener">TradingView</a>
-          <button class="custom-card-remove" onclick="removeCustomTicker('${escapeHtml(ticker)}')" title="Remove ${escapeHtml(ticker)}">×</button>
-        </div>
-      </div>
-    `).join('')}
-  `;
+  grid.innerHTML = filtered.map((ticker) => `
+    <div class="tracked-ticker-chip">
+      <a class="tracked-ticker-chip-symbol" href="${getTradingViewUrl(ticker)}" target="_blank" rel="noopener">${escapeHtml(ticker)}</a>
+      <span class="tracked-ticker-chip-note">${AUTH_STATE.user ? 'saved to this signed-in account on this browser' : 'saved on this browser until you sign in'}</span>
+      <button class="tracked-ticker-chip-remove" onclick="removeCustomTicker('${escapeHtml(ticker)}')" title="Remove ${escapeHtml(ticker)}">×</button>
+    </div>
+  `).join('');
+}
+
+function getTrackedCustomTickers() {
+  return normalizeTickerList(customTickersList);
+}
+
+function buildTickerQuery() {
+  const extras = getTrackedCustomTickers();
+  if (!extras.length) return '';
+  return `?tickers=${encodeURIComponent(extras.join(','))}`;
 }
 
 // Modal logic
 function initAddTickerModal() {
   const modal = document.getElementById('addTickerModal');
-  const btn = document.getElementById('addTickerBtn');
+  const buttons = [
+    document.getElementById('addTickerBtn'),
+    document.getElementById('addTickerBtnInline'),
+  ].filter(Boolean);
   const input = document.getElementById('tickerInput');
   const addBtn = document.getElementById('modalAdd');
   const cancelBtn = document.getElementById('modalCancel');
   const closeBtn = document.getElementById('modalClose');
+  if (!modal || !buttons.length || !input || !addBtn || !cancelBtn || !closeBtn) return;
   
   function openModal() {
     modal.classList.add('active');
@@ -1695,9 +2040,10 @@ function initAddTickerModal() {
 
     closeModal();
     renderCustomTickers();
+    await Promise.allSettled([fetchOptionsFlow(), fetchMarketData()]);
   }
   
-  btn.addEventListener('click', openModal);
+  buttons.forEach((button) => button.addEventListener('click', openModal));
   cancelBtn.addEventListener('click', closeModal);
   closeBtn.addEventListener('click', closeModal);
   addBtn.addEventListener('click', handleAdd);
@@ -1712,6 +2058,13 @@ function initAddTickerModal() {
   modal.addEventListener('click', (e) => {
     if (e.target === modal) closeModal();
   });
+}
+
+function initAlertCenter() {
+  loadTradeAlerts();
+  renderAlertsPill();
+  renderAlertBar();
+  document.getElementById('alertsTogglePill')?.addEventListener('click', enableBrowserAlerts);
 }
 
 function initTickerDetailModal() {
@@ -1736,7 +2089,7 @@ function initTickerDetailModal() {
 
 async function fetchMarketData() {
   try {
-    const response = await fetch('/api/market-data');
+    const response = await fetch(`/api/market-data${buildTickerQuery()}`);
     if (!response.ok) return;
 
     const payload = await response.json();
@@ -1772,6 +2125,7 @@ async function fetchMarketData() {
     renderTickerCards();
     renderWatchlist();
     renderCustomTickers();
+    evaluateTradeAlerts();
 
     // Update footer disclaimer
     const footer = document.querySelector('.footer-disclaimer');
@@ -2009,6 +2363,9 @@ function initAutoRefresh() {
 
 async function init() {
   await initAuth();
+  initAlertCenter();
+  initAuthGateForm();
+  renderProductOffer();
   renderHeader();
   renderAuthControls();
   renderAlertBar();

@@ -3,9 +3,32 @@
 import json
 import os
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from barchart_proxy import CACHE_TTL_SECONDS, fetch_options_activity
 from market_data import fetch_market_data
+
+
+def load_dotenv(dotenv_path=".env"):
+    env_file = Path(dotenv_path)
+    if not env_file.exists():
+        return
+
+    for raw_line in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key or key in os.environ:
+            continue
+
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        os.environ[key] = value
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
@@ -23,7 +46,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def handle_options_flow(self):
         try:
-            payload = fetch_options_activity()
+            params = parse_qs(urlparse(self.path).query)
+            tickers = []
+            for value in params.get("tickers", []):
+                tickers.extend(part.strip() for part in value.split(","))
+            payload = fetch_options_activity(extra_symbols=tickers)
             body = json.dumps(payload).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -41,7 +68,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def handle_market_data(self):
         try:
-            payload = fetch_market_data()
+            params = parse_qs(urlparse(self.path).query)
+            tickers = []
+            for value in params.get("tickers", []):
+                tickers.extend(part.strip() for part in value.split(","))
+            payload = fetch_market_data(extra_tickers=tickers)
             body = json.dumps(payload).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -60,6 +91,27 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def handle_public_config(self):
         body = json.dumps({
             "googleClientId": os.environ.get("GOOGLE_CLIENT_ID", ""),
+            "stripePaymentLink": os.environ.get("STRIPE_PAYMENT_LINK", ""),
+            "tradingViewProductName": os.environ.get("TRADINGVIEW_PRODUCT_NAME", "Option Riders TradingView Script"),
+            "tradingViewProductDescription": os.environ.get(
+                "TRADINGVIEW_PRODUCT_DESCRIPTION",
+                "Private TradingView tool for traders who want the same Option Riders signal framework directly on-chart.",
+            ),
+            "tradingViewProductPriceLabel": os.environ.get("TRADINGVIEW_PRODUCT_PRICE_LABEL", ""),
+            "tradingViewMonthlyLink": os.environ.get("TRADINGVIEW_MONTHLY_LINK", ""),
+            "tradingViewMonthlyName": os.environ.get("TRADINGVIEW_MONTHLY_NAME", "Monthly Access"),
+            "tradingViewMonthlyPrice": os.environ.get("TRADINGVIEW_MONTHLY_PRICE", "$0/mo"),
+            "tradingViewMonthlyDescription": os.environ.get(
+                "TRADINGVIEW_MONTHLY_DESCRIPTION",
+                "Recurring access to the Option Riders TradingView script.",
+            ),
+            "tradingViewLifetimeLink": os.environ.get("TRADINGVIEW_LIFETIME_LINK", ""),
+            "tradingViewLifetimeName": os.environ.get("TRADINGVIEW_LIFETIME_NAME", "Lifetime Access"),
+            "tradingViewLifetimePrice": os.environ.get("TRADINGVIEW_LIFETIME_PRICE", "$0 one-time"),
+            "tradingViewLifetimeDescription": os.environ.get(
+                "TRADINGVIEW_LIFETIME_DESCRIPTION",
+                "One payment for lifetime access to the script.",
+            ),
         }).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -70,6 +122,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
 
 def main():
+    load_dotenv()
     server = ThreadingHTTPServer(("127.0.0.1", 8125), DashboardHandler)
     print("Serving Option Riders at http://127.0.0.1:8125")
     server.serve_forever()

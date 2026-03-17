@@ -14,13 +14,15 @@ import time
 CACHE_TTL_SECONDS = 300  # refresh every 5 minutes
 
 _cache_lock = threading.Lock()
-_cache = {"expires_at": 0.0, "payload": None}
+_cache = {}
 
 TICKERS = [
     "SPY", "QQQ", "NVDA", "MU", "META", "AVGO",
     "AMD", "AAPL", "TSLA", "MSFT", "GOOGL", "AMZN",
     "SMCI", "PLTR",
 ]
+
+DEFAULT_TICKERS = list(TICKERS)
 
 TICKER_NAMES = {
     "SPY":  "S&P 500 ETF",
@@ -504,48 +506,83 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes, volumes=None, s
     }
 
 
-def _build_watchlist(ticker_entries):
+def _build_watchlist_item(entry, pinned=False):
+    if not entry:
+        return None
+
+    bias   = entry.get("bias", "Range")
+    sup    = entry.get("support", [])
+    res    = entry.get("resistance", [])
+    price  = entry.get("price", 0)
+    atr    = entry.get("atr", 0)
+    score  = entry.get("signalScore", 0)
+
+    if "Bullish" in bias:
+        direction = "LONG"
+        entry_lv  = f"Above {res[0]}" if res else f"Above {round(price, 2)}"
+        target    = f"{res[1]}-{res[2]}" if len(res) >= 3 else str(round(price + atr, 2))
+        stop      = str(sup[0]) if sup else str(round(price - atr, 2))
+        catalyst  = "Bullish momentum + technical breakout"
+    elif "Bearish" in bias:
+        direction = "SHORT"
+        entry_lv  = f"Below {sup[0]}" if sup else f"Below {round(price, 2)}"
+        target    = f"{sup[1]}-{sup[2]}" if len(sup) >= 3 else str(round(price - atr, 2))
+        stop      = str(res[0]) if res else str(round(price + atr, 2))
+        catalyst  = "Bearish momentum + technical breakdown"
+    elif pinned:
+        direction = "LONG" if score >= 0 else "SHORT"
+        entry_lv  = f"Above {res[0]}" if direction == "LONG" and res else f"Below {sup[0]}" if sup else f"Near {round(price, 2)}"
+        target    = f"{res[1]}-{res[2]}" if direction == "LONG" and len(res) >= 3 else f"{sup[1]}-{sup[2]}" if direction == "SHORT" and len(sup) >= 3 else str(round(price + atr, 2)) if direction == "LONG" else str(round(price - atr, 2))
+        stop      = str(sup[0]) if direction == "LONG" and sup else str(res[0]) if res else str(round(price - atr, 2)) if direction == "LONG" else str(round(price + atr, 2))
+        catalyst  = "Custom ticker tracking"
+    else:
+        return None
+
+    return {
+        "ticker":      entry["ticker"],
+        "direction":   direction,
+        "entry":       entry_lv,
+        "target":      target,
+        "stop":        stop,
+        "catalyst":    catalyst,
+        "signalScore": score,
+        "_strength":   abs(score),
+    }
+
+
+def _build_watchlist(ticker_entries, pinned_symbols=None):
     """Rank tickers by signal strength and auto-generate trade setups."""
+    pinned_symbols = set(pinned_symbols or [])
+    by_symbol = {entry["ticker"]: entry for entry in ticker_entries if entry and entry.get("ticker")}
+
     items = []
-    for e in ticker_entries:
-        if not e:
-            continue
-        bias   = e.get("bias", "Range")
-        rsi    = e.get("rsi", 50)
-        sup    = e.get("support", [])
-        res    = e.get("resistance", [])
-        price  = e.get("price", 0)
-        atr    = e.get("atr", 0)
-
-        if "Bullish" in bias:
-            direction = "LONG"
-            entry_lv  = f"Above {res[0]}" if res else f"Above {round(price, 2)}"
-            target    = f"{res[1]}-{res[2]}" if len(res) >= 3 else str(round(price + atr, 2))
-            stop      = str(sup[0])          if sup        else str(round(price - atr, 2))
-            catalyst  = "Bullish momentum + technical breakout"
-        elif "Bearish" in bias:
-            direction = "SHORT"
-            entry_lv  = f"Below {sup[0]}" if sup else f"Below {round(price, 2)}"
-            target    = f"{sup[1]}-{sup[2]}" if len(sup) >= 3 else str(round(price - atr, 2))
-            stop      = str(res[0])           if res        else str(round(price + atr, 2))
-            catalyst  = "Bearish momentum + technical breakdown"
-        else:
-            continue   # skip range-bound for watchlist
-
-        items.append({
-            "ticker":      e["ticker"],
-            "direction":   direction,
-            "entry":       entry_lv,
-            "target":      target,
-            "stop":        stop,
-            "catalyst":    catalyst,
-            "signalScore": e.get("signalScore", 0),
-            "_strength":   abs(e.get("signalScore", 0)),  # rank by absolute score strength
-        })
+    for entry in ticker_entries:
+        item = _build_watchlist_item(entry, pinned=entry.get("ticker") in pinned_symbols)
+        if item:
+            items.append(item)
 
     items.sort(key=lambda x: x["_strength"], reverse=True)
+
+    selected = []
+    used = set()
+    for item in items:
+        if item["ticker"] in used:
+            continue
+        if len(selected) >= 7:
+            break
+        selected.append(item)
+        used.add(item["ticker"])
+
+    for symbol in pinned_symbols:
+        if symbol in used:
+            continue
+        item = _build_watchlist_item(by_symbol.get(symbol), pinned=True)
+        if item:
+            selected.append(item)
+            used.add(symbol)
+
     result = []
-    for i, item in enumerate(items[:7], 1):
+    for i, item in enumerate(selected, 1):
         item["rank"] = i
         del item["_strength"]
         result.append(item)
@@ -629,15 +666,30 @@ def _aggregate_backtest(all_records):
 
 # ─── Public API ───────────────────────────────────────────────────────────────
 
-def fetch_market_data():
+def _normalize_extra_tickers(extra_tickers=None):
+    normalized = []
+    seen = set(DEFAULT_TICKERS)
+    for ticker in extra_tickers or []:
+        symbol = str(ticker or "").strip().upper()
+        if not symbol or len(symbol) > 5 or not symbol.isalnum() or symbol in seen:
+            continue
+        normalized.append(symbol)
+        seen.add(symbol)
+    return normalized
+
+
+def fetch_market_data(extra_tickers=None):
     """
     Return live market data with computed indicators.
     Cached for CACHE_TTL_SECONDS to avoid excessive Yahoo Finance calls.
     """
     now = time.time()
+    extra_symbols = _normalize_extra_tickers(extra_tickers)
+    cache_key = tuple(extra_symbols)
     with _cache_lock:
-        if _cache["payload"] and _cache["expires_at"] > now:
-            return _cache["payload"]
+        cached = _cache.get(cache_key)
+        if cached and cached["expires_at"] > now:
+            return cached["payload"]
 
     try:
         import yfinance as yf
@@ -647,7 +699,8 @@ def fetch_market_data():
             "Run: pip install yfinance --break-system-packages"
         )
 
-    all_yf_symbols = TICKERS + [yf_sym for yf_sym, _ in INDEX_FUTURES]
+    request_tickers = DEFAULT_TICKERS + extra_symbols
+    all_yf_symbols = request_tickers + [yf_sym for yf_sym, _ in INDEX_FUTURES]
 
     raw = yf.download(
         all_yf_symbols,
@@ -673,7 +726,7 @@ def fetch_market_data():
     _bt_records     = []   # all-ticker walk-forward records
     _bt_per_ticker  = {}   # per-ticker walk-forward records
 
-    for rank, sym in enumerate(TICKERS, 1):
+    for rank, sym in enumerate(request_tickers, 1):
         try:
             o = series("Open",   sym)
             h = series("High",   sym)
@@ -701,7 +754,7 @@ def fetch_market_data():
     try:
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-            future_map = {pool.submit(_fetch_earnings_date, sym): sym for sym in TICKERS}
+            future_map = {pool.submit(_fetch_earnings_date, sym): sym for sym in request_tickers}
             for fut in concurrent.futures.as_completed(future_map, timeout=12):
                 sym = future_map[fut]
                 try:
@@ -775,7 +828,7 @@ def fetch_market_data():
     }
 
     # ── Auto-generate watchlist ───────────────────────────────────
-    watchlist = _build_watchlist(ticker_entries)
+    watchlist = _build_watchlist(ticker_entries, pinned_symbols=extra_symbols)
 
     # ── Backtest accuracy stats ───────────────────────────────────
     backtest_stats = _aggregate_backtest(_bt_records) if _bt_records else {}
@@ -808,7 +861,9 @@ def fetch_market_data():
     }
 
     with _cache_lock:
-        _cache["payload"] = payload
-        _cache["expires_at"] = now + CACHE_TTL_SECONDS
+        _cache[cache_key] = {
+            "payload": payload,
+            "expires_at": now + CACHE_TTL_SECONDS,
+        }
 
     return payload

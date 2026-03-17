@@ -31,20 +31,22 @@
   <header class="header" id="header">
     <div class="header-left">
       <div class="logo">
-        <svg class="logo-icon" viewBox="0 0 32 32" width="28" height="28" fill="none" aria-label="Option Riders Logo">
-          <rect x="1" y="1" width="30" height="30" rx="6" stroke="var(--green)" stroke-width="1.5" fill="none" opacity="0.3"/>
-          <polyline points="4,20 10,20 13,10 16,24 19,14 22,18 25,8 28,20" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-          <circle cx="25" cy="8" r="2" fill="var(--green)">
-            <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite"/>
-          </circle>
-        </svg>
-        <span class="logo-text">OPTION RIDERS</span>
+        <img class="logo-image" src="assets/optionriders-horse-transparent.png" alt="Option Riders">
+        <div class="logo-copy">
+          <span class="logo-title">OptionRiders</span>
+          <span class="logo-tagline">Trade. Ride. Profit.</span>
+        </div>
       </div>
     </div>
     <div class="header-center">
       <span class="header-date" id="headerDate"></span>
     </div>
     <div class="header-right">
+      <button class="add-ticker-btn" id="addTickerBtn" title="Add a custom ticker">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Add Ticker
+      </button>
+      <button class="auth-status-pill alerts-pill" id="alertsTogglePill" type="button">Trading Alerts Off</button>
       <div class="auth-controls" id="authControls">
         <span class="auth-status-pill">Auth loading...</span>
       </div>
@@ -63,172 +65,228 @@
 
   <!-- Main scrollable content -->
   <main class="main" id="main">
-    <!-- Market Overview Banner -->
-    <section class="section catalyst-section is-collapsed" id="catalysts" data-collapsible>
-      <button class="section-toggle" type="button" aria-expanded="false" aria-controls="catalystsBody">
-        <span class="section-title">Market Overview</span>
-        <span class="section-toggle-icon" aria-hidden="true"></span>
-      </button>
-      <div class="section-body" id="catalystsBody" hidden>
-        <div class="catalyst-strip" id="catalystStrip"></div>
-      </div>
-    </section>
-
-    <!-- Quick Watchlist -->
-    <section class="section is-expanded" id="watchlistSection" data-collapsible>
-      <button class="section-toggle" type="button" aria-expanded="true" aria-controls="watchlistBodyWrap">
-        <span class="section-title">Quick Watchlist</span>
-        <span class="section-toggle-icon" aria-hidden="true"></span>
-      </button>
-      <div class="section-body" id="watchlistBodyWrap">
-        <div class="table-wrapper">
-          <table class="data-table watchlist-table" id="watchlistTable">
-            <thead>
-              <tr>
-                <th>Rank</th>
-                <th>Ticker</th>
-                <th>Score</th>
-                <th>Direction</th>
-                <th>Entry</th>
-                <th>Target</th>
-                <th>Stop</th>
-                <th>Catalyst</th>
-              </tr>
-            </thead>
-            <tbody id="watchlistBody"></tbody>
-          </table>
-        </div>
-        <div class="options-flow-block">
-          <div class="options-flow-header">
-            <h3 class="options-flow-title">Unusual & Most Traded Options</h3>
-            <span class="options-flow-meta" id="optionsFlowMeta">Loading Barchart options activity...</span>
+    <div class="dashboard-gate-wrap is-locked" id="dashboardGateWrap">
+      <div class="auth-gate-overlay" id="authGateOverlay">
+        <div class="auth-gate-stack">
+          <div class="auth-gate-card">
+            <span class="auth-gate-kicker">Members Access</span>
+            <h2 class="auth-gate-title">Sign in to use the dashboard</h2>
+            <p class="auth-gate-copy">Sign in with email and password or continue with Google to unlock the live watchlist, alerts, options flow, and ticker tools. The TradingView purchase buttons stay available without signing in.</p>
+            <div class="auth-gate-actions">
+              <form class="auth-gate-form" id="authGateForm">
+                <input class="auth-gate-input" id="authGateEmail" type="email" placeholder="Email address" autocomplete="email">
+                <input class="auth-gate-input" id="authGatePassword" type="password" placeholder="Password" autocomplete="current-password">
+                <button class="auth-gate-submit" id="authGateSubmit" type="submit">Sign In / Create Account</button>
+              </form>
+              <div class="auth-gate-divider"><span>or continue with Google</span></div>
+              <div class="google-signin-mount" id="googleSignInMountGate"></div>
+              <span class="auth-gate-note" id="authGateNote">Free account. No credit card required.</span>
+            </div>
           </div>
-          <div class="options-flow-panel options-spread-panel">
-            <div class="options-flow-panel-title">Watchlist ATM Spread Check</div>
+          <section class="section product-offer-section compact-offer is-expanded" id="productOfferSection">
+            <div class="product-offer-card">
+              <div class="product-offer-copy">
+                <span class="product-offer-kicker">TradingView Script</span>
+                <h2 class="product-offer-title" id="productOfferTitle">Option Riders TradingView Script</h2>
+                <p class="product-offer-description" id="productOfferDescription">Private TradingView tool with Option Riders signals and alerts directly on-chart.</p>
+                <span class="product-offer-note" id="productOfferNote">Set your Stripe plan links to make checkout live.</span>
+              </div>
+              <div class="product-offer-actions pricing-grid" id="productOfferPlans">
+                <div class="product-plan-card" id="monthlyPlanCard">
+                  <div class="product-plan-name" id="monthlyPlanName">Monthly Access</div>
+                  <div class="product-plan-price" id="monthlyPlanPrice">$39/month</div>
+                  <div class="product-plan-description" id="monthlyPlanDescription">Recurring access with ongoing updates.</div>
+                  <a class="product-offer-buy" id="monthlyPlanBuyBtn" href="#" target="_blank" rel="noopener noreferrer" aria-disabled="true">Buy Monthly</a>
+                </div>
+                <div class="product-plan-card featured" id="lifetimePlanCard">
+                  <div class="product-plan-badge">Best Value</div>
+                  <div class="product-plan-name" id="lifetimePlanName">Lifetime Access</div>
+                  <div class="product-plan-price" id="lifetimePlanPrice">$120 one-time</div>
+                  <div class="product-plan-description" id="lifetimePlanDescription">One payment for lifetime access.</div>
+                  <a class="product-offer-buy" id="lifetimePlanBuyBtn" href="#" target="_blank" rel="noopener noreferrer" aria-disabled="true">Buy Lifetime</a>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <div class="dashboard-gated-content" id="dashboardGatedContent">
+        <section class="section tracked-tickers-section is-expanded" id="trackedTickersSection">
+          <div class="tracked-ticker-list" id="customTickerGrid"></div>
+        </section>
+
+        <!-- Market Overview Banner -->
+        <section class="section catalyst-section is-expanded" id="catalysts" data-collapsible>
+          <button class="section-toggle" type="button" aria-expanded="true" aria-controls="catalystsBody">
+            <span class="section-title">Market Overview</span>
+            <span class="section-toggle-icon" aria-hidden="true"></span>
+          </button>
+          <div class="section-body" id="catalystsBody">
+            <div class="catalyst-strip" id="catalystStrip"></div>
+          </div>
+        </section>
+
+        <!-- Quick Watchlist -->
+        <section class="section is-expanded" id="watchlistSection" data-collapsible>
+          <div class="section-header-row watchlist-header-row">
+            <button class="section-toggle watchlist-section-toggle" type="button" aria-expanded="true" aria-controls="watchlistBodyWrap">
+              <span class="section-title">Quick Watchlist</span>
+              <span class="section-toggle-icon" aria-hidden="true"></span>
+            </button>
+            <button class="add-ticker-btn" id="addTickerBtnInline" title="Add a custom ticker" type="button">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              Add Ticker
+            </button>
+          </div>
+          <div class="section-body" id="watchlistBodyWrap">
             <div class="table-wrapper">
-              <table class="data-table options-flow-table">
+              <table class="data-table watchlist-table" id="watchlistTable">
                 <thead>
                   <tr>
+                    <th>Rank</th>
                     <th>Ticker</th>
-                    <th>Underlying</th>
-                    <th>ATM Call Spread</th>
-                    <th>ATM Put Spread</th>
-                    <th>Status</th>
+                    <th>Score</th>
+                    <th>P/C Ratio</th>
+                    <th>Direction</th>
+                    <th>Entry</th>
+                    <th>Target</th>
+                    <th>Stop</th>
+                    <th>Catalyst</th>
                   </tr>
                 </thead>
-                <tbody id="atmSpreadBody"></tbody>
+                <tbody id="watchlistBody"></tbody>
               </table>
             </div>
-          </div>
-          <div class="options-flow-grid">
-            <div class="options-flow-panel">
-              <div class="options-flow-panel-title">Unusual Options</div>
-              <div class="table-wrapper">
-                <table class="data-table options-flow-table">
-                  <thead>
-                    <tr>
-                      <th>Symbol</th>
-                      <th>Contract</th>
-                      <th>Premium</th>
-                      <th>Size</th>
-                      <th>Bias</th>
-                    </tr>
-                  </thead>
-                  <tbody id="unusualOptionsBody"></tbody>
-                </table>
+            <div class="options-flow-block">
+              <div class="options-flow-header">
+                <div class="options-flow-heading">
+                  <h3 class="options-flow-title">Unusual & Most Traded Options</h3>
+                  <div class="options-flow-ratio" id="optionsFlowRatio">Loading put/call ratio...</div>
+                </div>
+                <span class="options-flow-meta" id="optionsFlowMeta">Loading Barchart options activity...</span>
+              </div>
+              <div class="options-flow-panel options-spread-panel">
+                <div class="options-flow-panel-title">Watchlist ATM Spread Check</div>
+                <div class="table-wrapper">
+                  <table class="data-table options-flow-table">
+                    <thead>
+                      <tr>
+                        <th>Ticker</th>
+                        <th>Underlying</th>
+                        <th>ATM Call Spread</th>
+                        <th>ATM Put Spread</th>
+                        <th>P/C Ratio</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="atmSpreadBody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="options-flow-grid">
+                <div class="options-flow-panel">
+                  <div class="options-flow-panel-title">Unusual Options</div>
+                  <div class="table-wrapper">
+                    <table class="data-table options-flow-table">
+                      <thead>
+                        <tr>
+                          <th>Symbol</th>
+                          <th>Contract</th>
+                          <th>Premium</th>
+                          <th>Size</th>
+                          <th>Bias</th>
+                        </tr>
+                      </thead>
+                      <tbody id="unusualOptionsBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div class="options-flow-panel">
+                  <div class="options-flow-panel-title">Most Traded Options</div>
+                  <div class="table-wrapper">
+                    <table class="data-table options-flow-table">
+                      <thead>
+                        <tr>
+                          <th>Symbol</th>
+                          <th>Contract</th>
+                          <th>Last</th>
+                          <th>Volume</th>
+                          <th>OI</th>
+                        </tr>
+                      </thead>
+                      <tbody id="mostActiveOptionsBody"></tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="options-flow-panel">
-              <div class="options-flow-panel-title">Most Traded Options</div>
-              <div class="table-wrapper">
-                <table class="data-table options-flow-table">
-                  <thead>
-                    <tr>
-                      <th>Symbol</th>
-                      <th>Contract</th>
-                      <th>Last</th>
-                      <th>Volume</th>
-                      <th>OI</th>
-                    </tr>
-                  </thead>
-                  <tbody id="mostActiveOptionsBody"></tbody>
-                </table>
-              </div>
-            </div>
           </div>
-        </div>
-      </div>
-    </section>
+        </section>
 
-    <!-- Economic Calendar -->
-    <section class="section is-collapsed" id="calendarSection" data-collapsible>
-      <button class="section-toggle" type="button" aria-expanded="false" aria-controls="calendarBodyWrap">
-        <span class="section-title">Economic Calendar</span>
-        <span class="section-toggle-icon" aria-hidden="true"></span>
-      </button>
-      <div class="section-body" id="calendarBodyWrap" hidden>
-        <div class="section-header-row calendar-header-row">
-          <div class="section-title-spacer"></div>
-          <div class="calendar-toolbar">
-            <span class="calendar-toolbar-note" id="calendarMeta">USD red folder only · Loading weekly events...</span>
-            <a
-              class="calendar-source-link"
-              href="https://www.forexfactory.com/calendar"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Forex Factory ↗
-            </a>
-          </div>
-        </div>
-        <div class="table-wrapper">
-          <table class="data-table calendar-table" id="calendarTable">
-            <thead>
-              <tr>
-                <th>Day</th>
-                <th>Time</th>
-                <th>CCY</th>
-                <th>Event</th>
-                <th>Forecast</th>
-                <th>Prior</th>
-                <th>Actual</th>
-              </tr>
-            </thead>
-            <tbody id="calendarBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- Index Cards -->
-    <section class="section is-collapsed" id="indexSection" data-collapsible>
-      <button class="section-toggle" type="button" aria-expanded="false" aria-controls="indexBodyWrap">
-        <span class="section-title">Index Overview</span>
-        <span class="section-toggle-icon" aria-hidden="true"></span>
-      </button>
-      <div class="section-body" id="indexBodyWrap" hidden>
-        <div class="index-grid" id="indexGrid"></div>
-      </div>
-    </section>
-
-    <!-- Top Intraday Tickers -->
-    <section class="section is-collapsed" id="tickerSection" data-collapsible>
-      <button class="section-toggle" type="button" aria-expanded="false" aria-controls="tickerBodyWrap">
-        <span class="section-title">Best Intraday Tickers — Ranked</span>
-        <span class="section-toggle-icon" aria-hidden="true"></span>
-      </button>
-      <div class="section-body" id="tickerBodyWrap" hidden>
-        <div class="section-header-row">
-          <div class="section-title-spacer"></div>
-          <button class="add-ticker-btn" id="addTickerBtn" title="Add a custom ticker">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            Add Ticker
+        <!-- Economic Calendar -->
+        <section class="section is-expanded" id="calendarSection" data-collapsible>
+          <button class="section-toggle" type="button" aria-expanded="true" aria-controls="calendarBodyWrap">
+            <span class="section-title">Economic Calendar</span>
+            <span class="section-toggle-icon" aria-hidden="true"></span>
           </button>
-        </div>
-        <div class="ticker-grid" id="tickerGrid"></div>
-        <div class="ticker-grid custom-ticker-grid" id="customTickerGrid" style="display:none;"></div>
+          <div class="section-body" id="calendarBodyWrap">
+            <div class="section-header-row calendar-header-row">
+              <div class="section-title-spacer"></div>
+              <div class="calendar-toolbar">
+                <span class="calendar-toolbar-note" id="calendarMeta">USD red folder only · Loading weekly events...</span>
+                <a
+                  class="calendar-source-link"
+                  href="https://www.forexfactory.com/calendar"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Forex Factory ↗
+                </a>
+              </div>
+            </div>
+              <div class="table-wrapper">
+                <table class="data-table calendar-table" id="calendarTable">
+                  <thead>
+                    <tr>
+                      <th>Day</th>
+                      <th>Time</th>
+                      <th>CCY</th>
+                      <th>Event</th>
+                      <th>Forecast</th>
+                      <th>Prior</th>
+                      <th>Actual</th>
+                    </tr>
+                  </thead>
+                  <tbody id="calendarBody"></tbody>
+                </table>
+              </div>
+            </div>
+        </section>
+
+        <!-- Index Cards -->
+        <section class="section is-expanded" id="indexSection" data-collapsible>
+          <button class="section-toggle" type="button" aria-expanded="true" aria-controls="indexBodyWrap">
+            <span class="section-title">Index Overview</span>
+            <span class="section-toggle-icon" aria-hidden="true"></span>
+          </button>
+          <div class="section-body" id="indexBodyWrap">
+            <div class="index-grid" id="indexGrid"></div>
+          </div>
+        </section>
+
+        <!-- Top Intraday Tickers -->
+        <section class="section is-expanded" id="tickerSection" data-collapsible>
+          <button class="section-toggle" type="button" aria-expanded="true" aria-controls="tickerBodyWrap">
+            <span class="section-title">Best Intraday Tickers — Ranked</span>
+            <span class="section-toggle-icon" aria-hidden="true"></span>
+          </button>
+          <div class="section-body" id="tickerBodyWrap">
+            <div class="ticker-grid" id="tickerGrid"></div>
+          </div>
+        </section>
       </div>
-    </section>
+    </div>
+
 
     <!-- Ticker Detail Modal -->
     <div class="modal-overlay" id="tickerDetailModal">
@@ -254,7 +312,7 @@
         <div class="modal-body">
           <label class="modal-label" for="tickerInput">Ticker Symbol</label>
           <input type="text" class="modal-input" id="tickerInput" placeholder="e.g. NFLX, SMCI, COIN" maxlength="5" autocomplete="off" spellcheck="false">
-          <p class="modal-hint">Ticker will appear as a tracking card. Full analysis data populates on the next daily refresh.</p>
+          <p class="modal-hint">Ticker will be added to your tracked symbols, fetched with the same live market and options data as the rest of the dashboard, and saved on this signed-in browser profile.</p>
         </div>
         <div class="modal-footer">
           <button class="modal-btn modal-btn-cancel" id="modalCancel">Cancel</button>
@@ -264,23 +322,23 @@
     </div>
 
     <!-- Key Themes -->
-    <section class="section is-collapsed" id="themesSection" data-collapsible>
-      <button class="section-toggle" type="button" aria-expanded="false" aria-controls="themesBodyWrap">
+    <section class="section is-expanded" id="themesSection" data-collapsible>
+      <button class="section-toggle" type="button" aria-expanded="true" aria-controls="themesBodyWrap">
         <span class="section-title">Key Themes</span>
         <span class="section-toggle-icon" aria-hidden="true"></span>
       </button>
-      <div class="section-body" id="themesBodyWrap" hidden>
+      <div class="section-body" id="themesBodyWrap">
         <ol class="themes-list" id="themesList"></ol>
       </div>
     </section>
 
     <!-- Signal Accuracy Backtest -->
-    <section class="section is-collapsed" id="backtestSection" data-collapsible>
-      <button class="section-toggle" type="button" aria-expanded="false" aria-controls="backtestBodyWrap">
+    <section class="section is-expanded" id="backtestSection" data-collapsible>
+      <button class="section-toggle" type="button" aria-expanded="true" aria-controls="backtestBodyWrap">
         <span class="section-title">Signal Accuracy — Backtest</span>
         <span class="section-toggle-icon" aria-hidden="true"></span>
       </button>
-      <div class="section-body" id="backtestBodyWrap" hidden>
+      <div class="section-body" id="backtestBodyWrap">
         <div class="section-header-row">
           <span class="calendar-toolbar-note" id="backtestMeta">Live data required — run server.py to load.</span>
         </div>
@@ -316,5 +374,6 @@
   </main>
 
   <script src="app.js"></script>
+
 </body>
 </html>

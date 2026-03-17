@@ -1,5 +1,6 @@
 import json
 from http.server import BaseHTTPRequestHandler
+from urllib.parse import parse_qs, urlparse
 
 from market_data import CACHE_TTL_SECONDS, fetch_market_data
 
@@ -7,7 +8,11 @@ from market_data import CACHE_TTL_SECONDS, fetch_market_data
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
-            payload = fetch_market_data()
+            params = parse_qs(urlparse(self.path).query)
+            tickers = []
+            for value in params.get("tickers", []):
+                tickers.extend(part.strip() for part in value.split(","))
+            payload = fetch_market_data(extra_tickers=tickers)
             body = json.dumps(payload).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")

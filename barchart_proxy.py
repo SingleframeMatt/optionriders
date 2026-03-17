@@ -17,6 +17,18 @@ cache_lock = threading.Lock()
 options_cache = {"expires_at": 0.0, "payload": None}
 
 
+def _normalize_symbols(symbols):
+    cleaned = []
+    seen = set()
+    for symbol in symbols or []:
+        ticker = str(symbol or "").strip().upper()
+        if not ticker or len(ticker) > 5 or not ticker.isalnum() or ticker in seen:
+            continue
+        cleaned.append(ticker)
+        seen.add(ticker)
+    return cleaned
+
+
 def build_barchart_opener():
     jar = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
@@ -93,6 +105,106 @@ def normalize_most_active_rows(rows):
     return normalized
 
 
+def build_put_call_ratio(rows):
+    call_volume = 0.0
+    put_volume = 0.0
+    call_contracts = 0
+    put_contracts = 0
+
+    for row in rows:
+        if row.get("baseSymbolType") != 1:
+            continue
+
+        option_type = str(row.get("optionType", "")).lower()
+        volume = to_float(row.get("volume")) or 0.0
+
+        if option_type == "call":
+            call_volume += volume
+            call_contracts += 1
+        elif option_type == "put":
+            put_volume += volume
+            put_contracts += 1
+
+    if call_volume <= 0 and put_volume <= 0:
+        return {
+            "callVolume": 0,
+            "putVolume": 0,
+            "callContracts": 0,
+            "putContracts": 0,
+            "ratio": None,
+            "leader": "balanced",
+            "summary": "No put/call volume data available yet.",
+        }
+
+    ratio = round(call_volume / put_volume, 2) if put_volume > 0 else None
+    if call_volume > put_volume * 1.05:
+        leader = "calls"
+    elif put_volume > call_volume * 1.05:
+        leader = "puts"
+    else:
+        leader = "balanced"
+
+    if leader == "calls":
+        summary = f"More calls than puts ({call_volume:,.0f} vs {put_volume:,.0f} contracts)"
+    elif leader == "puts":
+        summary = f"More puts than calls ({put_volume:,.0f} vs {call_volume:,.0f} contracts)"
+    else:
+        summary = f"Calls and puts are roughly balanced ({call_volume:,.0f} vs {put_volume:,.0f})"
+
+    return {
+        "callVolume": int(call_volume),
+        "putVolume": int(put_volume),
+        "callContracts": call_contracts,
+        "putContracts": put_contracts,
+        "ratio": ratio,
+        "leader": leader,
+        "summary": summary,
+    }
+
+
+def build_symbol_put_call_ratio(rows):
+    call_volume = 0.0
+    put_volume = 0.0
+
+    for row in rows:
+        option_type = str(row.get("optionType", "")).lower()
+        volume = to_float(row.get("volume")) or 0.0
+        if option_type == "call":
+            call_volume += volume
+        elif option_type == "put":
+            put_volume += volume
+
+    if call_volume <= 0 and put_volume <= 0:
+        return {
+            "ratio": None,
+            "leader": "balanced",
+            "callVolume": 0,
+            "putVolume": 0,
+            "label": "n/a",
+        }
+
+    ratio = round(call_volume / put_volume, 2) if put_volume > 0 else None
+    if call_volume > put_volume * 1.05:
+        leader = "calls"
+    elif put_volume > call_volume * 1.05:
+        leader = "puts"
+    else:
+        leader = "balanced"
+
+    if ratio is None:
+        label = "Calls only"
+    else:
+        label = f"{ratio:.2f}:1"
+
+    return {
+        "ratio": ratio,
+        "leader": leader,
+        "callVolume": int(call_volume),
+        "putVolume": int(put_volume),
+        "label": label,
+    }
+
+
 def to_float(value):
     try:
         return float(value)
@@ -157,10 +269,11 @@ def build_spread_entry(row):
     }
 
 
-def fetch_atm_spreads(opener, xsrf_token):
+def fetch_atm_spreads(opener, xsrf_token, symbols=None):
     spreads = []
+    tracked_symbols = _normalize_symbols(list(WATCHLIST_SYMBOLS) + list(symbols or []))
 
-    for symbol in WATCHLIST_SYMBOLS:
+    for symbol in tracked_symbols:
         chain = fetch_json(
             opener,
             xsrf_token,
@@ -179,12 +292,14 @@ def fetch_atm_spreads(opener, xsrf_token):
             [value for value in (call_spread["spread"], put_spread["spread"]) if value is not None],
             default=None,
         )
+        put_call_ratio = build_symbol_put_call_ratio(rows)
 
         spreads.append({
             "ticker": symbol,
             "underlyingPrice": format_money(underlying_price),
             "call": call_spread,
             "put": put_spread,
+            "putCallRatio": put_call_ratio,
             "widestSpread": widest_spread,
             "widestSpreadLabel": format_money(widest_spread),
             "isWide": widest_spread is not None and widest_spread > MAX_SPREAD_DOLLARS,
@@ -193,11 +308,17 @@ def fetch_atm_spreads(opener, xsrf_token):
     return spreads
 
 
-def fetch_options_activity():
+def fetch_options_activity(extra_symbols=None):
     now = time.time()
+    extra_symbols = _normalize_symbols(extra_symbols)
+    cache_key = tuple(extra_symbols)
 
     with cache_lock:
-        if options_cache["payload"] and options_cache["expires_at"] > now:
+        if (
+            options_cache.get("payload")
+            and options_cache.get("expires_at", 0.0) > now
+            and options_cache.get("key") == cache_key
+        ):
             return options_cache["payload"]
 
     opener, xsrf_token = build_barchart_opener()
@@ -211,20 +332,23 @@ def fetch_options_activity():
     most_active = fetch_json(
         opener,
         xsrf_token,
-        "/options/get?raw=1&limit=5&baseSymbolType=stock&orderBy=volume&orderDir=desc&fields=symbol,baseSymbol,baseSymbolType,optionType,strikePrice,expirationDate,lastPrice,volume,openInterest",
+        "/options/get?raw=1&limit=100&baseSymbolType=stock&orderBy=volume&orderDir=desc&fields=symbol,baseSymbol,baseSymbolType,optionType,strikePrice,expirationDate,lastPrice,volume,openInterest",
         BARCHART_PAGE,
     )
+    most_active_rows = most_active.get("data", [])
 
     payload = {
         "source": "Barchart",
         "updatedAt": int(now),
         "unusual": normalize_unusual_rows(unusual.get("data", [])),
-        "mostActive": normalize_most_active_rows(most_active.get("data", [])),
-        "atmSpreads": fetch_atm_spreads(opener, xsrf_token),
+        "mostActive": normalize_most_active_rows(most_active_rows),
+        "atmSpreads": fetch_atm_spreads(opener, xsrf_token, symbols=extra_symbols),
         "maxSpreadDollars": MAX_SPREAD_DOLLARS,
+        "putCallRatio": build_put_call_ratio(most_active_rows),
     }
 
     with cache_lock:
+        options_cache["key"] = cache_key
         options_cache["payload"] = payload
         options_cache["expires_at"] = now + CACHE_TTL_SECONDS
 
