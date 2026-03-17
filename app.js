@@ -381,11 +381,13 @@ function renderProductOffer() {
     { config: APP_CONFIG.lifetimePlan, nameEl: lifetimeName, priceEl: lifetimePrice, descEl: lifetimeDescription, buttonEl: lifetimeBuyBtn },
   ];
 
+  const isLiveCheckoutLink = (url) => Boolean(url) && !String(url).includes('replace-with-your');
+
   plans.forEach(({ config, nameEl, priceEl, descEl, buttonEl }) => {
     nameEl.textContent = config.name;
     priceEl.textContent = config.price;
     descEl.textContent = config.description;
-    if (config.link) {
+    if (isLiveCheckoutLink(config.link)) {
       buttonEl.href = config.link;
       buttonEl.setAttribute('aria-disabled', 'false');
     } else {

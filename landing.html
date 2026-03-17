@@ -465,14 +465,14 @@ footer { border-top:1px solid rgba(255,255,255,.05); padding:28px; }
           <div class="plan-name">Monthly</div>
           <div class="plan-price"><span class="plan-amount">$39</span><span class="plan-period">/mo</span></div>
           <p class="plan-note">Recurring access with ongoing updates.</p>
-          <button class="btn-secondary" style="width:100%;padding:13px;border-radius:12px;font-size:14px;font-weight:700;">Get Monthly</button>
+          <a id="landingMonthlyBtn" href="#" class="btn-secondary" style="width:100%;padding:13px;border-radius:12px;font-size:14px;font-weight:700;" aria-disabled="true">Get Monthly</a>
         </div>
         <div class="plan-card plan-hot">
           <div class="plan-best-badge">Best Value</div>
           <div class="plan-name">Lifetime</div>
           <div class="plan-price"><span class="plan-amount price-glow">$120</span><span class="plan-period"> once</span></div>
           <p class="plan-note">One payment. Permanent access. Best deal.</p>
-          <button class="btn-primary" style="width:100%;padding:13px;border-radius:12px;font-size:14px;">Get Lifetime</button>
+          <a id="landingLifetimeBtn" href="#" class="btn-primary" style="width:100%;padding:13px;border-radius:12px;font-size:14px;" aria-disabled="true">Get Lifetime</a>
         </div>
       </div>
     </div>
@@ -576,6 +576,50 @@ footer { border-top:1px solid rgba(255,255,255,.05); padding:28px; }
     window.location.href = 'index.html';
   }
 
+  function isLiveCheckoutLink(url) {
+    return Boolean(url) && !String(url).includes('replace-with-your');
+  }
+
+  async function hydrateTradingViewLinks() {
+    const monthlyBtn = document.getElementById('landingMonthlyBtn');
+    const lifetimeBtn = document.getElementById('landingLifetimeBtn');
+    if (!monthlyBtn || !lifetimeBtn) return;
+
+    try {
+      const response = await fetch('/api/public-config', { cache: 'no-store' });
+      if (!response.ok) return;
+
+      const config = await response.json();
+      const monthlyLink = config.tradingViewMonthlyLink || '';
+      const lifetimeLink = config.tradingViewLifetimeLink || config.stripePaymentLink || '';
+
+      if (isLiveCheckoutLink(monthlyLink)) {
+        monthlyBtn.href = monthlyLink;
+        monthlyBtn.target = '_blank';
+        monthlyBtn.rel = 'noopener noreferrer';
+        monthlyBtn.setAttribute('aria-disabled', 'false');
+      } else {
+        monthlyBtn.addEventListener('click', (event) => event.preventDefault());
+        monthlyBtn.style.opacity = '0.6';
+        monthlyBtn.style.cursor = 'not-allowed';
+      }
+
+      if (isLiveCheckoutLink(lifetimeLink)) {
+        lifetimeBtn.href = lifetimeLink;
+        lifetimeBtn.target = '_blank';
+        lifetimeBtn.rel = 'noopener noreferrer';
+        lifetimeBtn.setAttribute('aria-disabled', 'false');
+      } else {
+        lifetimeBtn.addEventListener('click', (event) => event.preventDefault());
+        lifetimeBtn.style.opacity = '0.6';
+        lifetimeBtn.style.cursor = 'not-allowed';
+      }
+    } catch (error) {
+      monthlyBtn.addEventListener('click', (event) => event.preventDefault());
+      lifetimeBtn.addEventListener('click', (event) => event.preventDefault());
+    }
+  }
+
   // Ticker tape
   const tickers = [
     {t:"SPY",  c:"-0.42%", pos:false},
@@ -607,6 +651,8 @@ footer { border-top:1px solid rgba(255,255,255,.05); padding:28px; }
     row.addEventListener('mouseenter', () => row.style.background = 'rgba(255,255,255,0.035)');
     row.addEventListener('mouseleave', () => row.style.background = orig);
   });
+
+  hydrateTradingViewLinks();
 </script>
 </body>
 </html>
