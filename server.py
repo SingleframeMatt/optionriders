@@ -33,6 +33,9 @@ def load_dotenv(dotenv_path=".env"):
 
 class DashboardHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
+        if self.path in {"/", "/?"}:
+            self.path = "/landing.html"
+            return super().do_GET()
         if self.path.startswith("/api/options-flow"):
             self.handle_options_flow()
             return

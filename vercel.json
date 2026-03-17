@@ -14,6 +14,10 @@
       "dest": "/api/public-config.py"
     },
     {
+      "src": "/$",
+      "dest": "/landing.html"
+    },
+    {
       "handle": "filesystem"
     },
     {
