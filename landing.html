@@ -106,7 +106,7 @@ input:focus { outline: none; }
   overflow: visible;
 }
 .nav-inner { max-width:1280px; margin:0 auto; padding:0 28px; display:flex; align-items:center; justify-content:space-between; height:120px; }
-.nav-logo { display:flex; align-items:center; gap:18px; }
+.nav-logo { display:flex; align-items:center; gap:18px; color:inherit; text-decoration:none; }
 .nav-logo-icon { width:90px; height:90px; border-radius:20px; background:transparent; flex-shrink:0; overflow:hidden; filter:drop-shadow(0 0 20px rgba(0,224,255,0.15)); }
 .nav-logo-text { font-weight:800; font-size:22px; letter-spacing:-.02em; }
 .nav-links { display:flex; gap:28px; }
@@ -256,13 +256,13 @@ footer { border-top:1px solid rgba(255,255,255,.05); padding:28px; }
 <!-- NAV -->
 <nav id="nav">
   <div class="nav-inner">
-    <div class="nav-logo">
+    <a class="nav-logo" href="landing.html" aria-label="Go to landing page">
       <div class="nav-logo-icon" style="margin-bottom:-30px;"><img src="assets/optionriders-horse-transparent.png" alt="OptionRiders" style="width:100%;height:100%;object-fit:contain;display:block;"></div>
       <div>
         <span class="nav-logo-text" style="display:block;">OptionRiders</span>
         <span style="font-size:11px;text-transform:uppercase;letter-spacing:0.28em;color:rgba(255,255,255,0.35);margin-top:4px;display:block;">Trade. Ride. Profit.</span>
       </div>
-    </div>
+    </a>
     <div class="nav-links">
       <a href="#features">Features</a>
       <a href="#access">Access</a>
