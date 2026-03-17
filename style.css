@@ -1922,3 +1922,16 @@ body {
 .signal-neutral     { background: rgba(180,160,80,0.12); color: #c8a84b; border: 1px solid rgba(180,160,80,0.3); }
 .signal-sell        { background: rgba(255,100,80,0.12); color: #ff6644; border: 1px solid rgba(255,100,80,0.3); }
 .signal-strong-sell { background: rgba(255,68,68,0.18);  color: #ff4444; border: 1px solid rgba(255,68,68,0.4); }
+
+/* ── Backtest Table ──────────────────────────────────────────────── */
+.backtest-table td { vertical-align: middle; }
+.bt-strong { color: #00ff88; font-weight: 700; }
+.bt-ok     { color: #7be8a0; }
+.bt-flat   { color: var(--text-secondary); }
+.bt-weak   { color: #ff6644; font-weight: 700; }
+.backtest-note {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 10px;
+  line-height: 1.5;
+}

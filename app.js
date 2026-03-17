@@ -1714,6 +1714,11 @@ async function fetchMarketData() {
         + 'Indicators computed from Yahoo Finance daily bars. Not financial advice.';
     }
 
+    // Render backtest accuracy table
+    if (payload.backtestStats) {
+      renderBacktest(payload.backtestStats, payload.backtestN || 0);
+    }
+
     // Redraw sparkline charts with live OHLCV
     requestAnimationFrame(() => initAllCharts());
 
@@ -1721,6 +1726,65 @@ async function fetchMarketData() {
     // Silent fail — static dashboard data remains visible
     console.warn('[Option Riders] Live market data unavailable:', err.message);
   }
+}
+
+// ============================================
+// Backtest Rendering
+// ============================================
+
+const BACKTEST_BUCKET_ORDER = ['STRONG BUY', 'BUY', 'NEUTRAL', 'SELL', 'STRONG SELL'];
+
+function renderBacktest(stats, totalN) {
+  const tbody = document.getElementById('backtestBody');
+  const meta  = document.getElementById('backtestMeta');
+  const note  = document.getElementById('backtestNote');
+  if (!tbody) return;
+
+  if (!stats || Object.keys(stats).length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--text-muted);text-align:center;">No backtest data — live market data required.</td></tr>`;
+    return;
+  }
+
+  if (meta) meta.textContent = `Walk-forward backtest · ${totalN} signal observations · 90-day window · no lookahead bias`;
+
+  function winCell(pct) {
+    if (pct == null) return '<span style="color:var(--text-muted)">—</span>';
+    const cls = pct >= 60 ? 'bt-strong' : pct >= 52 ? 'bt-ok' : pct < 45 ? 'bt-weak' : 'bt-flat';
+    return `<span class="${cls}">${pct}%</span>`;
+  }
+
+  function retCell(avg) {
+    if (avg == null) return '<span style="color:var(--text-muted)">—</span>';
+    const sign = avg >= 0 ? '+' : '';
+    const cls  = avg >= 0.3 ? 'bt-strong' : avg <= -0.3 ? 'bt-weak' : 'bt-flat';
+    return `<span class="${cls}">${sign}${avg}%</span>`;
+  }
+
+  const scoreForBucket = { 'STRONG BUY': 75, 'BUY': 30, 'NEUTRAL': 0, 'SELL': -30, 'STRONG SELL': -75 };
+
+  tbody.innerHTML = BACKTEST_BUCKET_ORDER.map(name => {
+    const row = stats[name];
+    const badge = renderSignalBadge(scoreForBucket[name]);
+    if (!row || row.n === 0) return `
+      <tr>
+        <td>${badge}</td>
+        <td style="color:var(--text-muted)">—</td>
+        <td colspan="6" style="color:var(--text-muted)">No observations</td>
+      </tr>`;
+    return `
+      <tr>
+        <td>${badge}</td>
+        <td style="color:var(--text-muted);font-weight:600">${row.n}</td>
+        <td>${winCell(row.win1d)}</td>
+        <td>${retCell(row.avg1d)}</td>
+        <td>${winCell(row.win3d)}</td>
+        <td>${retCell(row.avg3d)}</td>
+        <td>${winCell(row.win5d)}</td>
+        <td>${retCell(row.avg5d)}</td>
+      </tr>`;
+  }).join('');
+
+  if (note) note.textContent = 'Win% = % of signals where price closed higher after N days. Avg Ret = mean % return. Computed from Yahoo Finance daily closes. Past performance does not predict future results.';
 }
 
 // ============================================

@@ -301,6 +301,78 @@ def _build_watchlist(ticker_entries):
     return result
 
 
+# ─── Backtesting ──────────────────────────────────────────────────────────────
+
+_BUCKETS = [
+    ("STRONG BUY",  50,  100),
+    ("BUY",         20,   49),
+    ("NEUTRAL",    -19,   19),
+    ("SELL",       -49,  -20),
+    ("STRONG SELL",-100, -50),
+]
+_FWD_DAYS = (1, 3, 5)
+
+
+def _backtest_ticker(highs, lows, closes, lookback=51):
+    """
+    Walk-forward backtest for one ticker.
+
+    For every day from `lookback` to len-max(FWD_DAYS)-1:
+      - compute signal score using only data up to that day  (no lookahead)
+      - record forward returns at 1, 3, 5 days
+
+    Returns list of (score, {1: ret1, 3: ret3, 5: ret5}).
+    """
+    max_fwd = max(_FWD_DAYS)
+    records = []
+    for i in range(lookback, len(closes) - max_fwd):
+        c = closes[:i + 1]
+        h = highs[:i + 1]
+        l = lows[:i + 1]
+        rsi_v = _rsi(c)
+        sma20 = _sma(c, 20)
+        sma50 = _sma(c, 50)
+        score = _signal_score(rsi_v, c[-1], sma20, sma50, c)
+        fwd   = {d: round((closes[i + d] - closes[i]) / closes[i] * 100, 3)
+                 for d in _FWD_DAYS if i + d < len(closes)}
+        records.append((score, fwd))
+    return records
+
+
+def _aggregate_backtest(all_records):
+    """
+    Aggregate walk-forward records across all tickers into per-bucket stats.
+
+    Returns dict keyed by bucket label:
+      { n, win1d, avg1d, win3d, avg3d, win5d, avg5d }
+    """
+    buckets = {name: [] for name, _, _ in _BUCKETS}
+
+    for score, fwd in all_records:
+        for name, lo, hi in _BUCKETS:
+            if lo <= score <= hi:
+                buckets[name].append(fwd)
+                break
+
+    stats = {}
+    for name, _, _ in _BUCKETS:
+        items = buckets[name]
+        if not items:
+            stats[name] = {"n": 0}
+            continue
+        n = len(items)
+        row = {"n": n}
+        for d in _FWD_DAYS:
+            rets = [item[d] for item in items if d in item]
+            if rets:
+                row[f"win{d}d"]  = round(sum(1 for r in rets if r > 0) / len(rets) * 100, 1)
+                row[f"avg{d}d"]  = round(sum(rets) / len(rets), 3)
+                row[f"best{d}d"] = round(max(rets), 2)
+                row[f"worst{d}d"]= round(min(rets), 2)
+        stats[name] = row
+    return stats
+
+
 # ─── Public API ───────────────────────────────────────────────────────────────
 
 def fetch_market_data():
@@ -341,6 +413,8 @@ def fetch_market_data():
 
     # ── Main tickers ─────────────────────────────────────────────
     ticker_entries = []
+    _bt_records    = []   # accumulated walk-forward records for backtest
+
     for rank, sym in enumerate(TICKERS, 1):
         try:
             o = series("Open",  sym)
@@ -352,6 +426,9 @@ def fetch_market_data():
             entry = _build_entry(rank, sym, TICKER_NAMES.get(sym, sym), o, h, l, c)
             if entry:
                 ticker_entries.append(entry)
+            # Accumulate backtest records (needs 51+ bars)
+            if len(c) >= 56:
+                _bt_records.extend(_backtest_ticker(h, l, c))
         except Exception as exc:
             print(f"[market_data] {sym}: {exc}")
 
@@ -380,6 +457,9 @@ def fetch_market_data():
     # ── Auto-generate watchlist ───────────────────────────────────
     watchlist = _build_watchlist(ticker_entries)
 
+    # ── Backtest accuracy stats ───────────────────────────────────
+    backtest_stats = _aggregate_backtest(_bt_records) if _bt_records else {}
+
     # ── Build chartData map and strip _ohlcv from entries ─────────
     chart_data = {}
     all_entries = ticker_entries + [
@@ -393,12 +473,14 @@ def fetch_market_data():
             chart_data[e["ticker"]] = e.pop("_ohlcv")
 
     payload = {
-        "tickers":   ticker_entries,
-        "indexes":   index_entries,
-        "watchlist": watchlist,
-        "chartData": chart_data,
-        "updatedAt": int(now),
-        "liveData":  True,
+        "tickers":       ticker_entries,
+        "indexes":       index_entries,
+        "watchlist":     watchlist,
+        "chartData":     chart_data,
+        "backtestStats": backtest_stats,
+        "backtestN":     len(_bt_records),
+        "updatedAt":     int(now),
+        "liveData":      True,
     }
 
     with _cache_lock:

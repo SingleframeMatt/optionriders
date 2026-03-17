@@ -278,6 +278,39 @@
       </div>
     </section>
 
+    <!-- Signal Accuracy Backtest -->
+    <section class="section is-collapsed" id="backtestSection" data-collapsible>
+      <button class="section-toggle" type="button" aria-expanded="false" aria-controls="backtestBodyWrap">
+        <span class="section-title">Signal Accuracy — Backtest</span>
+        <span class="section-toggle-icon" aria-hidden="true"></span>
+      </button>
+      <div class="section-body" id="backtestBodyWrap" hidden>
+        <div class="section-header-row">
+          <span class="calendar-toolbar-note" id="backtestMeta">Live data required — run server.py to load.</span>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table backtest-table" id="backtestTable">
+            <thead>
+              <tr>
+                <th>Signal</th>
+                <th>Samples</th>
+                <th>1-Day Win%</th>
+                <th>1-Day Avg Ret</th>
+                <th>3-Day Win%</th>
+                <th>3-Day Avg Ret</th>
+                <th>5-Day Win%</th>
+                <th>5-Day Avg Ret</th>
+              </tr>
+            </thead>
+            <tbody id="backtestBody">
+              <tr><td colspan="8" style="color:var(--text-muted); text-align:center;">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="backtest-note" id="backtestNote"></p>
+      </div>
+    </section>
+
     <!-- Footer -->
     <footer class="footer">
       <p class="footer-disclaimer">Data as of Friday March 13, 2026 close. Pre-market levels may differ. Not financial advice.</p>
