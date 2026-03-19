@@ -308,18 +308,19 @@ def fetch_atm_spreads(opener, xsrf_token, symbols=None):
     return spreads
 
 
-def fetch_options_activity(extra_symbols=None):
+def fetch_options_activity(extra_symbols=None, force_refresh=False):
     now = time.time()
     extra_symbols = _normalize_symbols(extra_symbols)
     cache_key = tuple(extra_symbols)
 
-    with cache_lock:
-        if (
-            options_cache.get("payload")
-            and options_cache.get("expires_at", 0.0) > now
-            and options_cache.get("key") == cache_key
-        ):
-            return options_cache["payload"]
+    if not force_refresh:
+        with cache_lock:
+            if (
+                options_cache.get("payload")
+                and options_cache.get("expires_at", 0.0) > now
+                and options_cache.get("key") == cache_key
+            ):
+                return options_cache["payload"]
 
     opener, xsrf_token = build_barchart_opener()
 

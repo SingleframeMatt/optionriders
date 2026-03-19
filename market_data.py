@@ -678,7 +678,7 @@ def _normalize_extra_tickers(extra_tickers=None):
     return normalized
 
 
-def fetch_market_data(extra_tickers=None):
+def fetch_market_data(extra_tickers=None, force_refresh=False):
     """
     Return live market data with computed indicators.
     Cached for CACHE_TTL_SECONDS to avoid excessive Yahoo Finance calls.
@@ -686,10 +686,11 @@ def fetch_market_data(extra_tickers=None):
     now = time.time()
     extra_symbols = _normalize_extra_tickers(extra_tickers)
     cache_key = tuple(extra_symbols)
-    with _cache_lock:
-        cached = _cache.get(cache_key)
-        if cached and cached["expires_at"] > now:
-            return cached["payload"]
+    if not force_refresh:
+        with _cache_lock:
+            cached = _cache.get(cache_key)
+            if cached and cached["expires_at"] > now:
+                return cached["payload"]
 
     try:
         import yfinance as yf

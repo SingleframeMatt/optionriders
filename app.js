@@ -4,6 +4,7 @@
 
 const DASHBOARD_DATA = {
   date: "Monday, March 16, 2026",
+  lastUpdatedTime: "",
   marketStatus: "PRE-MARKET",
   sentiment: "BEARISH",
   
@@ -944,7 +945,12 @@ window.addEventListener('resize', () => {
 // ============================================
 
 function renderHeader() {
-  document.getElementById('headerDate').textContent = DASHBOARD_DATA.date;
+  const headerDate = document.getElementById('headerDate');
+  if (headerDate) {
+    headerDate.textContent = DASHBOARD_DATA.lastUpdatedTime
+      ? `${DASHBOARD_DATA.date} • Last updated ${DASHBOARD_DATA.lastUpdatedTime}`
+      : DASHBOARD_DATA.date;
+  }
   document.getElementById('marketStatus').textContent = DASHBOARD_DATA.marketStatus;
   document.getElementById('marketOpenTime').textContent = getMarketOpenTimeLabel();
   
@@ -1561,12 +1567,17 @@ function renderOptionsFlow() {
     : 'Source: Barchart';
 }
 
-async function fetchOptionsFlow() {
+async function fetchOptionsFlow(forceFresh = false) {
   OPTIONS_FLOW.loading = true;
   renderOptionsFlow();
 
   try {
-    const response = await fetch(`/api/options-flow${buildTickerQuery()}`);
+    const query = buildTickerQuery();
+    const separator = query ? '&' : '?';
+    const source = forceFresh
+      ? `/api/options-flow${query}${separator}fresh=1&t=${Date.now()}`
+      : `/api/options-flow${query}`;
+    const response = await fetch(source, { cache: 'no-store' });
     if (!response.ok) {
       throw new Error('Options activity proxy unavailable.');
     }
@@ -2089,9 +2100,14 @@ function initTickerDetailModal() {
 // Live Market Data
 // ============================================
 
-async function fetchMarketData() {
+async function fetchMarketData(forceFresh = false) {
   try {
-    const response = await fetch(`/api/market-data${buildTickerQuery()}`);
+    const query = buildTickerQuery();
+    const separator = query ? '&' : '?';
+    const source = forceFresh
+      ? `/api/market-data${query}${separator}fresh=1&t=${Date.now()}`
+      : `/api/market-data${query}`;
+    const response = await fetch(source, { cache: 'no-store' });
     if (!response.ok) return;
 
     const payload = await response.json();
@@ -2118,6 +2134,10 @@ async function fetchMarketData() {
       const updatedDate = new Date(payload.updatedAt * 1000);
       DASHBOARD_DATA.date = updatedDate.toLocaleDateString('en-US', {
         weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+      });
+      DASHBOARD_DATA.lastUpdatedTime = updatedDate.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit'
       });
     }
 
@@ -2333,7 +2353,7 @@ async function _autoRefresh() {
   const badge = document.getElementById('refreshCountdown');
   if (badge) badge.textContent = 'Refreshing…';
 
-  await Promise.allSettled([fetchOptionsFlow(), fetchMarketData()]);
+  await Promise.allSettled([fetchOptionsFlow(true), fetchMarketData(true)]);
   mergeOptionsFlowIntoScores();
   requestAnimationFrame(() => initAllCharts());
 }
