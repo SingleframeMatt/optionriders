@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 from barchart_proxy import CACHE_TTL_SECONDS, fetch_options_activity
 from market_data import fetch_market_data
+from top_watch import fetch_top_watch
 
 
 def load_dotenv(dotenv_path=".env"):
@@ -45,6 +46,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/public-config"):
             self.handle_public_config()
             return
+        if self.path.startswith("/api/top-watch"):
+            self.handle_top_watch()
+            return
         super().do_GET()
 
     def handle_options_flow(self):
@@ -76,6 +80,26 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             for value in params.get("tickers", []):
                 tickers.extend(part.strip() for part in value.split(","))
             payload = fetch_market_data(extra_tickers=tickers)
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", f"public, max-age={CACHE_TTL_SECONDS}")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:
+            body = json.dumps({"error": str(exc)}).encode("utf-8")
+            self.send_response(502)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    def handle_top_watch(self):
+        try:
+            params = parse_qs(urlparse(self.path).query)
+            force_refresh = params.get("fresh", ["0"])[0].lower() in {"1", "true", "yes"}
+            payload = fetch_top_watch(force_refresh=force_refresh)
             body = json.dumps(payload).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")

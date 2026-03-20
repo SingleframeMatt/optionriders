@@ -436,6 +436,15 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes, volumes=None, s
                                highs=highs, lows=lows, volumes=volumes,
                                spy_closes=spy_closes)
 
+    rel_strength = None
+    if spy_closes and len(spy_closes) >= 6 and len(closes) >= 6:
+        try:
+            tk_ret  = (closes[-1] - closes[-6]) / closes[-6] * 100.0
+            spy_ret = (spy_closes[-1] - spy_closes[-6]) / spy_closes[-6] * 100.0
+            rel_strength = round(tk_ret - spy_ret, 2)
+        except (ZeroDivisionError, IndexError):
+            pass
+
     bull_trig = f"Break above {resistance[0]}" if resistance else f"Reclaim {round(price * 1.01, 2)}"
     bear_trig = f"Lose {support[0]}"           if support    else f"Break below {round(price * 0.99, 2)}"
 
@@ -501,6 +510,7 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes, volumes=None, s
         "bollingerPctB":  pct_b,
         "week52Position": pos52,
         "signalScore":    sig_score,
+        "relStrength":    rel_strength,
         "liveData":    True,
         "_ohlcv":      ohlcv,   # stripped out before JSON response
     }
@@ -510,12 +520,13 @@ def _build_watchlist_item(entry, pinned=False):
     if not entry:
         return None
 
-    bias   = entry.get("bias", "Range")
-    sup    = entry.get("support", [])
-    res    = entry.get("resistance", [])
-    price  = entry.get("price", 0)
-    atr    = entry.get("atr", 0)
-    score  = entry.get("signalScore", 0)
+    bias         = entry.get("bias", "Range")
+    sup          = entry.get("support", [])
+    res          = entry.get("resistance", [])
+    price        = entry.get("price", 0)
+    atr          = entry.get("atr", 0)
+    score        = entry.get("signalScore", 0)
+    rel_strength = entry.get("relStrength")
 
     if "Bullish" in bias:
         direction = "LONG"
@@ -546,6 +557,7 @@ def _build_watchlist_item(entry, pinned=False):
         "stop":        stop,
         "catalyst":    catalyst,
         "signalScore": score,
+        "relStrength": rel_strength,
         "_strength":   abs(score),
     }
 

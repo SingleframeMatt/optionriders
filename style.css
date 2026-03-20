@@ -1186,6 +1186,112 @@ body {
   color: var(--amber);
 }
 
+/* ── TOP Watch ─────────────────────────────────────────────────────────────── */
+
+.top-watch-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  background: rgba(251,191,36,0.15);
+  color: var(--amber);
+  border: 1px solid rgba(251,191,36,0.3);
+  vertical-align: middle;
+}
+
+.top-watch-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.top-watch-source-bar {
+  display: flex;
+  gap: 14px;
+  padding: 6px 0 10px;
+  flex-wrap: wrap;
+}
+
+.tw-src-status {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+.tw-src-err {
+  color: var(--text-muted);
+}
+
+.top-watch-loading-row td {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.top-watch-row {
+  cursor: pointer;
+}
+
+.top-watch-row:hover .tw-ticker {
+  color: var(--amber) !important;
+}
+
+.tw-ticker {
+  color: var(--text-bright);
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-right: 6px;
+}
+
+.tw-heat {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+}
+
+.tw-heat-max {
+  background: rgba(251,191,36,0.2);
+  color: var(--amber);
+  border: 1px solid rgba(251,191,36,0.35);
+}
+
+.tw-heat-high {
+  background: rgba(52,211,153,0.15);
+  color: var(--green);
+  border: 1px solid rgba(52,211,153,0.3);
+}
+
+.tw-heat-mid {
+  background: rgba(34,211,238,0.12);
+  color: var(--cyan);
+  border: 1px solid rgba(34,211,238,0.25);
+}
+
+.tw-sources-cell {
+  white-space: nowrap;
+}
+
+.tw-source-badge {
+  display: inline-block;
+  font-size: 0.63rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid;
+  margin-right: 4px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
 .options-spread-main {
   color: var(--text-bright);
   font-weight: 700;
@@ -1519,6 +1625,15 @@ body {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
+}
+
+.ticker-loading-state {
+  grid-column: 1 / -1;
+  padding: 32px 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  letter-spacing: 0.3px;
 }
 
 /* --- Ticker Card --- */

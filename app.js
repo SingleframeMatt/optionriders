@@ -61,138 +61,7 @@ const DASHBOARD_DATA = {
     }
   ],
   
-  tickers: [
-    {
-      rank: 1, ticker: "NVDA", name: "NVIDIA", price: 180.25, friChange: -1.59,
-      ahPrice: 180.20, ahChange: -0.03, bias: "Neutral → Bullish", star: true,
-      rsi: 45.2, atr: 5.71, atrPct: 3.17,
-      prevDayHigh: 186.09, prevDayLow: 179.94,
-      fiveDayHigh: 187.62, fiveDayLow: 175.56,
-      support: [179, 176, 174], resistance: [184, 187, 192],
-      bullTrigger: "Break above 184 post-keynote", bearTrigger: "Lose 179",
-      strategy: "Momentum Breakout", 
-      optionsIdea: "ATM calls or 185c for GTC pop; put spreads below 178",
-      expectedMove: "±$5-7 (3-4%)",
-      summary: "NVDA is THE trade of the day. Jensen Huang keynote is a binary event. Long above 184 targeting 190+."
-    },
-    {
-      rank: 2, ticker: "MU", name: "Micron", price: 426.13, friChange: 5.13,
-      ahPrice: 425.00, ahChange: -0.27, bias: "Bullish", star: true,
-      rsi: 57.1, atr: 26.47, atrPct: 6.21,
-      prevDayHigh: 429.35, prevDayLow: 413.00,
-      fiveDayHigh: 429.35, fiveDayLow: 357.67,
-      support: [413, 405, 397], resistance: [429, 437, 445],
-      bullTrigger: "Break above 429.35", bearTrigger: "Lose 413",
-      strategy: "Momentum Continuation",
-      optionsIdea: "Calls above 430 for breakout; call spreads 430/450",
-      expectedMove: "±$25-27 (6%)",
-      summary: "MU is the strongest large-cap semi — #1 rated with 232% EPS growth projected. Continuation above 430 targets 445."
-    },
-    {
-      rank: 3, ticker: "META", name: "Meta Platforms", price: 613.71, friChange: -3.83,
-      ahPrice: 610.90, ahChange: -0.46, bias: "Bearish",
-      rsi: 35.8, atr: 19.94, atrPct: 3.25,
-      prevDayHigh: 629.17, prevDayLow: 609.55,
-      fiveDayHigh: 660.30, fiveDayLow: 609.55,
-      support: [609, 600, 590], resistance: [626, 638, 648],
-      bullTrigger: "Reclaim 626", bearTrigger: "Lose 609",
-      strategy: "Breakdown Short",
-      optionsIdea: "Puts below 609 targeting 595; contrarian call spreads above 625",
-      expectedMove: "±$18-20 (3%)",
-      summary: "META dumped -3.8% on heavy volume into oversold RSI. Watch 609 — lose it and 600 is next."
-    },
-    {
-      rank: 4, ticker: "AVGO", name: "Broadcom", price: 322.16, friChange: -4.11,
-      ahPrice: 321.08, ahChange: -0.34, bias: "Bearish → Neutral",
-      rsi: 44.2, atr: 14.09, atrPct: 4.37,
-      prevDayHigh: 338.32, prevDayLow: 321.43,
-      fiveDayHigh: 353.14, fiveDayLow: 321.43,
-      support: [321, 314, 307], resistance: [332, 338, 345],
-      bullTrigger: "Reclaim 330", bearTrigger: "Lose 321",
-      strategy: "GTC Sympathy Long",
-      optionsIdea: "Calls above 330 for GTC sympathy; puts below 320",
-      expectedMove: "±$13-15 (4%)",
-      summary: "AVGO down 17% from highs — could rally on NVIDIA GTC sympathy above 330 targeting 345."
-    },
-    {
-      rank: 5, ticker: "AMD", name: "AMD", price: 193.39, friChange: -2.20,
-      ahPrice: 192.88, ahChange: -0.26, bias: "Bearish → Neutral",
-      rsi: 41.8, atr: 9.10, atrPct: 4.70,
-      prevDayHigh: 199.68, prevDayLow: 192.27,
-      fiveDayHigh: 209.21, fiveDayLow: 189.02,
-      support: [192, 189, 185], resistance: [198, 203, 209],
-      bullTrigger: "Reclaim 198", bearTrigger: "Lose 192",
-      strategy: "GTC Sympathy",
-      optionsIdea: "Calls above 198; puts below 190",
-      expectedMove: "±$9-10 (4.5%)",
-      summary: "AMD tracking semis lower — GTC catalyst could lift above 198 for a move to 205; below 192 targets 185."
-    },
-    {
-      rank: 6, ticker: "AAPL", name: "Apple", price: 250.12, friChange: -2.21,
-      ahPrice: 249.82, ahChange: -0.12, bias: "Bearish",
-      rsi: 34.4, atr: 5.67, atrPct: 2.27,
-      prevDayHigh: 256.33, prevDayLow: 249.52,
-      fiveDayHigh: 262.48, fiveDayLow: 249.52,
-      support: [249, 245, 240], resistance: [255, 260, 264],
-      bullTrigger: "Reclaim 255", bearTrigger: "Lose 249",
-      strategy: "Oversold Bounce",
-      optionsIdea: "Put spreads 248/242; contrarian calls above 255",
-      expectedMove: "±$5-6 (2.2%)",
-      summary: "AAPL deeply oversold with RSI 34 after 8 straight red days. Watch 249 for bounce or breakdown."
-    },
-    {
-      rank: 7, ticker: "TSLA", name: "Tesla", price: 391.20, friChange: -0.96,
-      ahPrice: 389.80, ahChange: -0.36, bias: "Bearish",
-      rsi: 40.1, atr: 13.98, atrPct: 3.57,
-      prevDayHigh: 400.20, prevDayLow: 389.95,
-      fiveDayHigh: 416.38, fiveDayLow: 381.40,
-      support: [389, 381, 375], resistance: [400, 407, 416],
-      bullTrigger: "Reclaim 400", bearTrigger: "Lose 389",
-      strategy: "Breakdown Short",
-      optionsIdea: "Puts below 388; call spreads above 402",
-      expectedMove: "±$13-14 (3.5%)",
-      summary: "TSLA after-hours pressing 389 support — lose it and 381 is target. Need 400 reclaim for any bullish case."
-    },
-    {
-      rank: 8, ticker: "MSFT", name: "Microsoft", price: 395.55, friChange: -1.57,
-      ahPrice: 395.10, ahChange: -0.11, bias: "Bearish",
-      rsi: 41.0, atr: 8.34, atrPct: 2.11,
-      prevDayHigh: 404.80, prevDayLow: 394.25,
-      fiveDayHigh: 410.21, fiveDayLow: 394.25,
-      support: [394, 390, 385], resistance: [401, 405, 410],
-      bullTrigger: "Reclaim 401", bearTrigger: "Lose 394",
-      strategy: "Breakdown Short",
-      optionsIdea: "Put spreads 393/385; calls above 402",
-      expectedMove: "±$8-9 (2%)",
-      summary: "MSFT broke multi-week range support at 401 — now resistance. Below 394 opens gap to 385."
-    },
-    {
-      rank: 9, ticker: "GOOGL", name: "Alphabet", price: 302.28, friChange: -0.42,
-      ahPrice: 301.74, ahChange: -0.18, bias: "Range",
-      rsi: 43.0, atr: 7.33, atrPct: 2.43,
-      prevDayHigh: 307.69, prevDayLow: 300.44,
-      fiveDayHigh: 311.42, fiveDayLow: 294.08,
-      support: [300, 296, 294], resistance: [307, 311, 313],
-      bullTrigger: "Reclaim 307", bearTrigger: "Lose 300",
-      strategy: "Range Fade",
-      optionsIdea: "Iron condor 295/300/307/312",
-      expectedMove: "±$7 (2.4%)",
-      summary: "GOOGL choppy in 294-311 range. Below 300 targets 294; above 307 targets 311."
-    },
-    {
-      rank: 10, ticker: "AMZN", name: "Amazon", price: 207.67, friChange: -0.89,
-      ahPrice: 207.30, ahChange: -0.18, bias: "Bearish",
-      rsi: 42.0, atr: 5.78, atrPct: 2.78,
-      prevDayHigh: 210.56, prevDayLow: 206.22,
-      fiveDayHigh: 217.00, fiveDayLow: 206.22,
-      support: [206, 203, 200], resistance: [210, 213, 217],
-      bullTrigger: "Reclaim 210", bearTrigger: "Lose 206",
-      strategy: "Breakdown Short",
-      optionsIdea: "Put spreads below 205; calls above 211",
-      expectedMove: "±$5-6 (2.8%)",
-      summary: "AMZN fading steadily — 206 is the line. Lose it and 200 psychological level is in play."
-    }
-  ],
+  tickers: [],
   
   watchlist: [
     { rank: 1, ticker: "SPY", direction: "SHORT", entry: "Below 661", target: "656-652", stop: "668", catalyst: "FOMC week risk + weak breadth" },
@@ -235,6 +104,14 @@ const OPTIONS_FLOW = {
   loading: true,
   error: "",
   updatedAt: ""
+};
+
+const TOP_WATCH = {
+  topWatch: [],
+  sourceStatus: {},
+  updatedAt: "",
+  loading: true,
+  error: "",
 };
 
 const AUTH_STATE = {
@@ -1331,6 +1208,10 @@ function renderIndexCards() {
 
 function renderTickerCards() {
   const grid = document.getElementById('tickerGrid');
+  if (!DASHBOARD_DATA.tickers.length) {
+    grid.innerHTML = '<div class="ticker-loading-state">Fetching best intraday tickers from live market data&hellip;</div>';
+    return;
+  }
   grid.innerHTML = DASHBOARD_DATA.tickers.map((t, i) => `
     <div class="ticker-card ${t.star ? 'star-pick' : ''}" style="animation-delay: ${0.15 + i * 0.04}s">
       ${t.star ? '<div class="star-icon">★</div>' : ''}
@@ -1396,6 +1277,113 @@ function renderTickerCards() {
   `).join('');
 }
 
+const TOP_WATCH_SOURCE_COLORS = {
+  StockTwits:  { bg: 'rgba(105,80,255,0.18)', color: '#a78bfa', border: 'rgba(105,80,255,0.35)' },
+  MarketWatch: { bg: 'rgba(34,211,238,0.12)', color: '#22d3ee', border: 'rgba(34,211,238,0.3)'  },
+  Barchart:    { bg: 'rgba(251,191,36,0.12)', color: '#fbbf24', border: 'rgba(251,191,36,0.3)'  },
+  Finviz:      { bg: 'rgba(52,211,153,0.12)', color: '#34d399', border: 'rgba(52,211,153,0.3)'  },
+};
+
+function renderTopWatchSourceBadge(source) {
+  const c = TOP_WATCH_SOURCE_COLORS[source] || { bg: 'rgba(255,255,255,0.08)', color: 'var(--text-muted)', border: 'rgba(255,255,255,0.15)' };
+  return `<span class="tw-source-badge" style="background:${c.bg};color:${c.color};border-color:${c.border};">${escapeHtml(source)}</span>`;
+}
+
+function renderTopWatchHeat(count) {
+  if (count >= 4) return { label: '4/4', cls: 'tw-heat-max',  title: 'Mentioned on all 4 sources' };
+  if (count === 3) return { label: '3/4', cls: 'tw-heat-high', title: 'Mentioned on 3 of 4 sources' };
+  return               { label: '2/4', cls: 'tw-heat-mid',  title: 'Mentioned on 2 of 4 sources' };
+}
+
+function renderTopWatch() {
+  const tbody  = document.getElementById('topWatchBody');
+  const meta   = document.getElementById('topWatchMeta');
+  const srcBar = document.getElementById('topWatchSourceBar');
+  if (!tbody) return;
+
+  // Source status bar
+  const sources = ['StockTwits', 'MarketWatch', 'Barchart', 'Finviz'];
+  if (srcBar) {
+    if (Object.keys(TOP_WATCH.sourceStatus).length) {
+      srcBar.innerHTML = sources.map(s => {
+        const ok = TOP_WATCH.sourceStatus[s];
+        const c  = TOP_WATCH_SOURCE_COLORS[s];
+        return `<span class="tw-src-status ${ok ? 'tw-src-ok' : 'tw-src-err'}" style="${ok ? `color:${c.color}` : ''}">${ok ? '●' : '○'} ${s}</span>`;
+      }).join('');
+    } else {
+      srcBar.innerHTML = '';
+    }
+  }
+
+  if (TOP_WATCH.loading) {
+    tbody.innerHTML = '<tr class="top-watch-loading-row"><td colspan="7">Scanning StockTwits · MarketWatch · Barchart · Finnviz&hellip;</td></tr>';
+    if (meta) meta.textContent = 'Scanning…';
+    return;
+  }
+
+  if (TOP_WATCH.error) {
+    tbody.innerHTML = `<tr class="top-watch-loading-row"><td colspan="7">${escapeHtml(TOP_WATCH.error)}</td></tr>`;
+    if (meta) meta.textContent = TOP_WATCH.error;
+    return;
+  }
+
+  const items = TOP_WATCH.topWatch;
+
+  if (meta) {
+    meta.textContent = items.length
+      ? `${items.length} cross-source ticker${items.length !== 1 ? 's' : ''} · Updated ${TOP_WATCH.updatedAt}`
+      : `No cross-source matches · Updated ${TOP_WATCH.updatedAt}`;
+  }
+
+  if (!items.length) {
+    tbody.innerHTML = '<tr class="top-watch-loading-row"><td colspan="7">No tickers found on 2+ sources right now.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = items.map(w => {
+    const heat = renderTopWatchHeat(w.sourceCount);
+    const sourceBadges = (w.sources || []).map(renderTopWatchSourceBadge).join('');
+
+    const priceHtml = w.price != null
+      ? `<span style="color:var(--text-bright);font-weight:700;">${formatPrice(w.price)}</span>`
+      : '<span style="color:var(--text-muted);">—</span>';
+
+    const changeHtml = w.changePct != null
+      ? `<span class="${getChangeClass(w.changePct)}">${formatChange(w.changePct)}</span>`
+      : '<span style="color:var(--text-muted);">—</span>';
+
+    // Pull signal data from DASHBOARD_DATA if ticker exists there
+    const existing = (DASHBOARD_DATA.tickers || []).find(t => t.ticker === w.ticker)
+      || (DASHBOARD_DATA.watchlist || []).find(t => t.ticker === w.ticker);
+    const signalHtml = existing?.signalScore != null ? renderSignalBadge(existing.signalScore) : '—';
+    const relHtml    = existing?.relStrength  != null ? renderWatchlistRelStrength(existing.relStrength) : '—';
+    const dirHtml    = existing?.direction
+      ? `<span class="${existing.direction === 'LONG' ? 'direction-long' : 'direction-short'}">${escapeHtml(existing.direction)}</span>`
+      : (existing?.bias
+          ? `<span class="badge badge-bias ${getBiasClass(existing.bias)}" style="font-size:0.7rem;">${escapeHtml(existing.bias)}</span>`
+          : '<span style="color:var(--text-muted);">—</span>');
+
+    return `
+      <tr class="top-watch-row"
+          role="button" tabindex="0"
+          onclick="openTickerDetailModal('${escapeHtml(w.ticker)}')"
+          onkeydown="if(event.key==='Enter')openTickerDetailModal('${escapeHtml(w.ticker)}')"
+          title="Open ${escapeHtml(w.ticker)} detail">
+        <td>
+          <span class="tw-ticker">${escapeHtml(w.ticker)}</span>
+          <span class="tw-heat ${heat.cls}" title="${heat.title}">${heat.label}</span>
+        </td>
+        <td class="tw-sources-cell">${sourceBadges}</td>
+        <td>${priceHtml}</td>
+        <td>${changeHtml}</td>
+        <td>${signalHtml}</td>
+        <td>${relHtml}</td>
+        <td>${dirHtml}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
 function renderWatchlist() {
   const tbody = document.getElementById('watchlistBody');
   tbody.innerHTML = DASHBOARD_DATA.watchlist.map(w => `
@@ -1410,6 +1398,7 @@ function renderWatchlist() {
       <td style="color: var(--text-muted); font-weight:700;">${w.rank}</td>
       <td style="color: var(--text-bright); font-weight:700;">${escapeHtml(w.ticker)}</td>
       <td>${w.signalScore != null ? renderSignalBadge(w.signalScore) : '—'}</td>
+      <td>${renderWatchlistRelStrength(w.relStrength)}</td>
       <td>${renderWatchlistPutCallRatio(w.ticker)}</td>
       <td class="${w.direction === 'LONG' ? 'direction-long' : 'direction-short'}">${escapeHtml(w.direction)}</td>
       <td>${escapeHtml(w.entry)}</td>
@@ -1418,6 +1407,19 @@ function renderWatchlist() {
       <td style="color: var(--text-secondary);">${escapeHtml(w.catalyst)}</td>
     </tr>
   `).join('');
+}
+
+function renderWatchlistRelStrength(rel) {
+  if (rel == null) return '<span style="color: var(--text-muted);">—</span>';
+  const sign = rel >= 0 ? '+' : '';
+  const color = rel > 0.5 ? 'var(--green)' : rel < -0.5 ? 'var(--red)' : 'var(--text-muted)';
+  const label = rel > 0.5 ? 'Outperform' : rel < -0.5 ? 'Underperform' : 'In-line';
+  return `
+    <div style="display:inline-flex;flex-direction:column;gap:2px;min-width:72px;">
+      <span style="color:${color};font-weight:700;">${sign}${rel.toFixed(1)}%</span>
+      <span style="font-size:0.66rem;text-transform:uppercase;letter-spacing:0.7px;color:${color};">${label}</span>
+    </div>
+  `;
 }
 
 function renderWatchlistPutCallRatio(ticker) {
@@ -1610,6 +1612,31 @@ async function fetchOptionsFlow(forceFresh = false) {
   renderOptionsFlow();
   renderWatchlist();
   evaluateTradeAlerts();
+}
+
+async function fetchTopWatch(forceFresh = false) {
+  TOP_WATCH.loading = true;
+  renderTopWatch();
+
+  try {
+    const sep = forceFresh ? `?fresh=1&t=${Date.now()}` : '';
+    const response = await fetch(`/api/top-watch${sep}`, { cache: 'no-store' });
+    if (!response.ok) throw new Error('Top watch endpoint unavailable.');
+
+    const payload = await response.json();
+    TOP_WATCH.topWatch     = payload.topWatch     || [];
+    TOP_WATCH.sourceStatus = payload.sourceStatus || {};
+    TOP_WATCH.updatedAt    = payload.updatedAt    || '';
+    TOP_WATCH.error        = '';
+    TOP_WATCH.loading      = false;
+  } catch (error) {
+    TOP_WATCH.topWatch     = [];
+    TOP_WATCH.sourceStatus = {};
+    TOP_WATCH.loading      = false;
+    TOP_WATCH.error        = 'Run server.py to enable cross-source scanning.';
+  }
+
+  renderTopWatch();
 }
 
 function getTickerDetails(ticker) {
@@ -2395,6 +2422,7 @@ async function init() {
   renderCalendar();
   renderIndexCards();
   renderTickerCards();
+  renderTopWatch();
   renderWatchlist();
   renderThemes();
   renderCustomTickers();
@@ -2406,6 +2434,7 @@ async function init() {
     fetchEconomicCalendar(),
     fetchOptionsFlow(),
     fetchMarketData(),
+    fetchTopWatch(),
   ]);
   // Merge options flow sentiment into signal scores now that both fetches are done
   mergeOptionsFlowIntoScores();

@@ -126,6 +126,38 @@
           </div>
         </section>
 
+        <!-- TOP Watch — Cross-Source Momentum -->
+        <section class="section is-expanded" id="topWatchSection" data-collapsible>
+          <div class="section-header-row">
+            <button class="section-toggle" type="button" aria-expanded="true" aria-controls="topWatchBodyWrap">
+              <span class="section-title">TOP Watch <span class="top-watch-badge">Cross-Source</span></span>
+              <span class="section-toggle-icon" aria-hidden="true"></span>
+            </button>
+            <span class="top-watch-meta" id="topWatchMeta">Scanning StockTwits · MarketWatch · Barchart · Finviz&hellip;</span>
+          </div>
+          <div class="section-body" id="topWatchBodyWrap">
+            <div class="top-watch-source-bar" id="topWatchSourceBar"></div>
+            <div class="table-wrapper">
+              <table class="data-table top-watch-table" id="topWatchTable">
+                <thead>
+                  <tr>
+                    <th>Ticker</th>
+                    <th>Sources</th>
+                    <th>Price</th>
+                    <th>Change</th>
+                    <th>Signal</th>
+                    <th>vs SPY</th>
+                    <th>Direction</th>
+                  </tr>
+                </thead>
+                <tbody id="topWatchBody">
+                  <tr class="top-watch-loading-row"><td colspan="7">Scanning StockTwits · MarketWatch · Barchart · Finviz&hellip;</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         <!-- Quick Watchlist -->
         <section class="section is-expanded" id="watchlistSection" data-collapsible>
           <div class="section-header-row watchlist-header-row">
@@ -146,6 +178,7 @@
                     <th>Rank</th>
                     <th>Ticker</th>
                     <th>Score</th>
+                    <th>vs SPY</th>
                     <th>P/C Ratio</th>
                     <th>Direction</th>
                     <th>Entry</th>
