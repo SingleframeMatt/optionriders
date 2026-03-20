@@ -177,8 +177,7 @@ body {
 }
 
 .header-center {
-  display: flex;
-  align-items: center;
+  display: none;
 }
 
 .header-date {
@@ -313,6 +312,43 @@ body {
   gap: 10px;
   flex-wrap: wrap;
   min-width: 0;
+}
+
+/* ── Session bar (date + last updated) ──────────────────────────────────────── */
+.session-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 24px;
+  background: rgba(255,255,255,0.025);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.session-bar-date {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgba(255,255,255,0.35);
+}
+
+.session-bar-sep {
+  width: 1px;
+  height: 10px;
+  background: rgba(255,255,255,0.12);
+  flex-shrink: 0;
+}
+
+.session-bar-updated {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(34,211,238,0.5);
+}
+
+.session-bar-updated:empty {
+  display: none;
 }
 
 .alert-pill {

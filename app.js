@@ -822,11 +822,18 @@ window.addEventListener('resize', () => {
 // ============================================
 
 function renderHeader() {
-  const headerDate = document.getElementById('headerDate');
-  if (headerDate) {
-    headerDate.textContent = DASHBOARD_DATA.lastUpdatedTime
-      ? `${DASHBOARD_DATA.date} • Last updated ${DASHBOARD_DATA.lastUpdatedTime}`
-      : DASHBOARD_DATA.date;
+  const sessionDate    = document.getElementById('sessionDate');
+  const sessionUpdated = document.getElementById('sessionUpdated');
+  if (sessionDate) {
+    const now = new Date();
+    sessionDate.textContent = now.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+    }).toUpperCase();
+  }
+  if (sessionUpdated) {
+    sessionUpdated.textContent = DASHBOARD_DATA.lastUpdatedTime
+      ? `Updated ${DASHBOARD_DATA.lastUpdatedTime}`
+      : '';
   }
   document.getElementById('marketStatus').textContent = DASHBOARD_DATA.marketStatus;
   document.getElementById('marketOpenTime').textContent = getMarketOpenTimeLabel();
