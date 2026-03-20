@@ -1338,13 +1338,13 @@ function renderTopWatch() {
   }
 
   if (TOP_WATCH.loading) {
-    tbody.innerHTML = '<tr class="top-watch-loading-row"><td colspan="9">Scanning StockTwits · MarketWatch · Barchart · Finnviz&hellip;</td></tr>';
+    tbody.innerHTML = '<tr class="top-watch-loading-row"><td colspan="8">Scanning StockTwits · MarketWatch · Barchart · Finnviz&hellip;</td></tr>';
     if (meta) meta.textContent = 'Scanning…';
     return;
   }
 
   if (TOP_WATCH.error) {
-    tbody.innerHTML = `<tr class="top-watch-loading-row"><td colspan="9">${escapeHtml(TOP_WATCH.error)}</td></tr>`;
+    tbody.innerHTML = `<tr class="top-watch-loading-row"><td colspan="8">${escapeHtml(TOP_WATCH.error)}</td></tr>`;
     if (meta) meta.textContent = TOP_WATCH.error;
     return;
   }
@@ -1358,13 +1358,12 @@ function renderTopWatch() {
   }
 
   if (!items.length) {
-    tbody.innerHTML = '<tr class="top-watch-loading-row"><td colspan="9">No tickers found on 2+ sources right now.</td></tr>';
+    tbody.innerHTML = '<tr class="top-watch-loading-row"><td colspan="8">No tickers found on 2+ sources right now.</td></tr>';
     return;
   }
 
   tbody.innerHTML = items.map(w => {
     const heat = renderTopWatchHeat(w.sourceCount);
-    const sourceBadges = (w.sources || []).map(renderTopWatchSourceBadge).join('');
 
     const priceHtml = w.price != null
       ? `<span style="color:var(--text-bright);font-weight:700;">${formatPrice(w.price)}</span>`
@@ -1412,7 +1411,6 @@ function renderTopWatch() {
           <span class="tw-ticker">${escapeHtml(w.ticker)}</span>
           <span class="tw-heat ${heat.cls}" title="${heat.title}">${heat.label}</span>
         </td>
-        <td class="tw-sources-cell">${sourceBadges}</td>
         <td>${priceHtml}</td>
         <td>${changeHtml}</td>
         <td>${signalHtml}</td>
