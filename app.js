@@ -1782,23 +1782,52 @@ function renderTickerDetailBody(tickerData) {
   `;
 }
 
-function openTickerDetailModal(ticker) {
-  const tickerData = getTickerDetails(ticker);
-  if (!tickerData) return;
-
-  const modal = document.getElementById('tickerDetailModal');
-  const title = document.getElementById('tickerDetailTitle');
+async function openTickerDetailModal(ticker) {
+  const modal   = document.getElementById('tickerDetailModal');
+  const title   = document.getElementById('tickerDetailTitle');
   const subtitle = document.getElementById('tickerDetailSubtitle');
-  const body = document.getElementById('tickerDetailBody');
+  const body    = document.getElementById('tickerDetailBody');
 
-  title.textContent = tickerData.ticker;
+  let tickerData = getTickerDetails(ticker);
+
+  if (!tickerData) {
+    // Show loading state immediately while we fetch
+    title.textContent    = ticker;
+    subtitle.textContent = 'Loading…';
+    body.innerHTML       = '<div class="ticker-detail-loading"><span class="ticker-detail-spinner"></span>Fetching market data…</div>';
+    modal.classList.add('active');
+
+    try {
+      const res = await fetch(`/api/market-data?tickers=${encodeURIComponent(ticker)}&fresh=1`, { cache: 'no-store' });
+      if (res.ok) {
+        const payload = await res.json();
+        if (payload.tickers?.length) {
+          const existing = DASHBOARD_DATA.tickers || [];
+          payload.tickers.forEach(t => {
+            if (!existing.find(e => e.ticker === t.ticker)) existing.push(t);
+          });
+          DASHBOARD_DATA.tickers = existing;
+        }
+        if (payload.chartData) Object.assign(CHART_DATA, payload.chartData);
+        tickerData = getTickerDetails(ticker);
+      }
+    } catch (_) {}
+
+    if (!tickerData) {
+      subtitle.textContent = 'No data available';
+      body.innerHTML = '<div class="ticker-detail-loading" style="color:var(--text-muted)">No market data found for this ticker.</div>';
+      return;
+    }
+  }
+
+  title.textContent    = tickerData.ticker;
   subtitle.textContent = tickerData.name || 'Trading detail';
-  body.innerHTML = renderTickerDetailBody(tickerData);
+  body.innerHTML       = renderTickerDetailBody(tickerData);
   modal.classList.add('active');
 
   requestAnimationFrame(() => {
     const canvas = body.querySelector('.ticker-detail-canvas');
-    const data = CHART_DATA[tickerData.ticker];
+    const data   = CHART_DATA[tickerData.ticker];
     const levels = getLevelsForTicker(tickerData.ticker);
     if (canvas && data) drawCandlestickChart(canvas, data, levels);
   });
