@@ -1361,6 +1361,47 @@ body {
   white-space: nowrap;
 }
 
+.tw-otm-spread {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.tw-otm-type {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.tw-otm-call {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.tw-otm-put {
+  background: rgba(255, 68, 68, 0.15);
+  color: var(--red);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+}
+
+.tw-pcr {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tw-pcr-calls { color: var(--green); }
+.tw-pcr-puts  { color: var(--red); }
+.tw-pcr-balanced { color: var(--text-muted); }
+
 .tw-source-badge {
   display: inline-block;
   font-size: 0.63rem;

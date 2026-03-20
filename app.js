@@ -1338,13 +1338,13 @@ function renderTopWatch() {
   }
 
   if (TOP_WATCH.loading) {
-    tbody.innerHTML = '<tr class="top-watch-loading-row"><td colspan="7">Scanning StockTwits · MarketWatch · Barchart · Finnviz&hellip;</td></tr>';
+    tbody.innerHTML = '<tr class="top-watch-loading-row"><td colspan="9">Scanning StockTwits · MarketWatch · Barchart · Finnviz&hellip;</td></tr>';
     if (meta) meta.textContent = 'Scanning…';
     return;
   }
 
   if (TOP_WATCH.error) {
-    tbody.innerHTML = `<tr class="top-watch-loading-row"><td colspan="7">${escapeHtml(TOP_WATCH.error)}</td></tr>`;
+    tbody.innerHTML = `<tr class="top-watch-loading-row"><td colspan="9">${escapeHtml(TOP_WATCH.error)}</td></tr>`;
     if (meta) meta.textContent = TOP_WATCH.error;
     return;
   }
@@ -1358,7 +1358,7 @@ function renderTopWatch() {
   }
 
   if (!items.length) {
-    tbody.innerHTML = '<tr class="top-watch-loading-row"><td colspan="7">No tickers found on 2+ sources right now.</td></tr>';
+    tbody.innerHTML = '<tr class="top-watch-loading-row"><td colspan="9">No tickers found on 2+ sources right now.</td></tr>';
     return;
   }
 
@@ -1385,6 +1385,23 @@ function renderTopWatch() {
           ? `<span class="badge badge-bias ${getBiasClass(existing.bias)}" style="font-size:0.7rem;">${escapeHtml(existing.bias)}</span>`
           : '<span style="color:var(--text-muted);">—</span>');
 
+    const otm = w.otmSpread;
+    const otmHtml = otm?.spreadLabel
+      ? `<span class="tw-otm-spread" title="${escapeHtml(otm.optionType === 'C' ? 'OTM Call' : 'OTM Put')} ${escapeHtml(String(otm.strike ?? ''))} exp ${escapeHtml(otm.expirationDate ?? '')}">
+           ${escapeHtml(otm.spreadLabel)}&nbsp;<span class="tw-otm-type ${otm.optionType === 'C' ? 'tw-otm-call' : 'tw-otm-put'}">${escapeHtml(otm.optionType)}</span>
+         </span>`
+      : '<span style="color:var(--text-muted);">—</span>';
+
+    const pcr = w.putCallRatio;
+    let pcrHtml = '<span style="color:var(--text-muted);">—</span>';
+    if (pcr?.label && pcr.label !== 'n/a') {
+      const pcrCls = pcr.leader === 'calls' ? 'tw-pcr-calls'
+                   : pcr.leader === 'puts'  ? 'tw-pcr-puts'
+                   : 'tw-pcr-balanced';
+      const pcrTitle = `Calls: ${(pcr.callVolume ?? 0).toLocaleString()}  Puts: ${(pcr.putVolume ?? 0).toLocaleString()}`;
+      pcrHtml = `<span class="tw-pcr ${pcrCls}" title="${escapeHtml(pcrTitle)}">${escapeHtml(pcr.label)}</span>`;
+    }
+
     return `
       <tr class="top-watch-row"
           role="button" tabindex="0"
@@ -1401,6 +1418,8 @@ function renderTopWatch() {
         <td>${signalHtml}</td>
         <td>${relHtml}</td>
         <td>${dirHtml}</td>
+        <td>${otmHtml}</td>
+        <td>${pcrHtml}</td>
       </tr>
     `;
   }).join('');

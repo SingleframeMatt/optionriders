@@ -244,6 +244,99 @@ def pick_atm_contract(rows, option_type):
     return best_row
 
 
+def pick_otm_contract(rows, option_type):
+    """Pick the nearest out-of-the-money contract for the given option type."""
+    candidates = []
+
+    for row in rows:
+        if row.get("optionType") != option_type:
+            continue
+
+        strike = to_float(row.get("strikePrice"))
+        base_price = to_float(row.get("baseLastPrice"))
+        bid = to_float(row.get("bidPrice"))
+        ask = to_float(row.get("askPrice"))
+
+        if strike is None or base_price is None or bid is None or ask is None or ask < bid:
+            continue
+
+        # OTM: calls need strike above price, puts need strike below price
+        if option_type == "Call" and strike <= base_price:
+            continue
+        if option_type == "Put" and strike >= base_price:
+            continue
+
+        spread = ask - bid
+        distance = abs(strike - base_price)
+        candidates.append((distance, spread, row))
+
+    if not candidates:
+        return None
+
+    _, _, best_row = sorted(candidates, key=lambda item: (item[0], item[1]))[0]
+    return best_row
+
+
+def fetch_otm_spreads_for_symbols(symbols):
+    """
+    Return {symbol: {"otmSpread": entry, "putCallRatio": ratio}} for each symbol.
+    Fetches the nearest-expiration options chain once per symbol and derives both
+    the tightest OTM bid-ask spread and the put/call volume ratio from the same data.
+    """
+    symbols = _normalize_symbols(symbols)
+    if not symbols:
+        return {}
+
+    try:
+        opener, xsrf_token = build_barchart_opener()
+    except Exception as exc:
+        print(f"[barchart] OTM auth: {exc}")
+        return {}
+
+    result = {}
+    for symbol in symbols:
+        try:
+            chain = fetch_json(
+                opener,
+                xsrf_token,
+                f"/options/get?raw=1&baseSymbol={urllib.parse.quote(symbol)}"
+                f"&expirationDate=nearest"
+                f"&fields=symbol,baseSymbol,optionType,strikePrice,expirationDate,"
+                f"bidPrice,askPrice,lastPrice,baseLastPrice,volume,openInterest"
+                f"&orderBy=strikePrice&orderDir=asc&limit=200",
+                BARCHART_PAGE,
+            )
+            rows = chain.get("data", [])
+
+            call_row = pick_otm_contract(rows, "Call")
+            put_row  = pick_otm_contract(rows, "Put")
+
+            call_entry = ({**build_spread_entry(call_row), "optionType": "C", "strike": call_row.get("strikePrice")}
+                          if call_row else None)
+            put_entry  = ({**build_spread_entry(put_row),  "optionType": "P", "strike": put_row.get("strikePrice")}
+                          if put_row else None)
+
+            cs = call_entry["spread"] if call_entry else None
+            ps = put_entry["spread"]  if put_entry  else None
+
+            if cs is not None and (ps is None or cs <= ps):
+                otm_spread = call_entry
+            elif ps is not None:
+                otm_spread = put_entry
+            else:
+                otm_spread = None
+
+            result[symbol] = {
+                "otmSpread":    otm_spread,
+                "putCallRatio": build_symbol_put_call_ratio(rows),
+            }
+        except Exception as exc:
+            print(f"[barchart] OTM spread {symbol}: {exc}")
+            result[symbol] = {"otmSpread": None, "putCallRatio": None}
+
+    return result
+
+
 def build_spread_entry(row):
     if not row:
         return {

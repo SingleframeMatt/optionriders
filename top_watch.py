@@ -230,6 +230,20 @@ def fetch_top_watch(force_refresh=False):
             item["price"]     = None
             item["changePct"] = None
 
+    # Enrich with nearest OTM bid-ask spread and put/call ratio from Barchart
+    try:
+        from barchart_proxy import fetch_otm_spreads_for_symbols
+        otm_data = fetch_otm_spreads_for_symbols(syms)
+        for item in cross:
+            entry = otm_data.get(item["ticker"]) or {}
+            item["otmSpread"]    = entry.get("otmSpread")
+            item["putCallRatio"] = entry.get("putCallRatio")
+    except Exception as exc:
+        print(f"[top_watch] OTM spreads: {exc}")
+        for item in cross:
+            item.setdefault("otmSpread", None)
+            item.setdefault("putCallRatio", None)
+
     source_status = {name: bool(tks) for name, tks in results.items()}
 
     payload = {
