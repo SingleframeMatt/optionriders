@@ -1614,6 +1614,16 @@ async function fetchOptionsFlow(forceFresh = false) {
   evaluateTradeAlerts();
 }
 
+async function fetchAppVersion() {
+  try {
+    const r = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const { version } = await r.json();
+    const el = document.getElementById('navVersion');
+    if (el && version) el.textContent = `v${version}`;
+  } catch (_) {}
+}
+
 async function fetchTopWatch(forceFresh = false) {
   TOP_WATCH.loading = true;
   renderTopWatch();
@@ -2430,6 +2440,7 @@ async function init() {
   initCollapsibleSections();
   initAddTickerModal();
   initTickerDetailModal();
+  fetchAppVersion();
   await Promise.allSettled([
     fetchEconomicCalendar(),
     fetchOptionsFlow(),
