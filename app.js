@@ -876,8 +876,18 @@ function renderAuthControls() {
     return;
   }
 
+  const now = new Date();
+  const dateLabel = now.toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+  }).toUpperCase();
+  const timeLabel = now.toLocaleTimeString('en-US', {
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+  });
   controls.innerHTML = `
-    <span class="auth-status-pill signed-in">${escapeHtml(getDisplayName(AUTH_STATE.user))}</span>
+    <span class="auth-status-pill signed-in">
+      <span class="signed-in-name">${escapeHtml(getDisplayName(AUTH_STATE.user))}</span>
+      <span class="signed-in-ts">${escapeHtml(dateLabel)} · ${escapeHtml(timeLabel)}</span>
+    </span>
     <button class="auth-action-btn" type="button" onclick="signOut()">Sign out</button>
   `;
   renderAuthGate();
@@ -922,7 +932,7 @@ function getAlertItems() {
     alerts.push(...todaysEvents);
   } else if (upcomingEvent) {
     alerts.push({
-      type: 'week',
+      type: 'today',
       text: `Next red-folder event ${upcomingEvent.dayLabelShort} ${upcomingEvent.timeLabel}: ${upcomingEvent.title}`
     });
   }
@@ -948,7 +958,12 @@ function renderAlertBar() {
   const track = document.getElementById('alertBarTrack');
   if (!track) return;
 
-  track.innerHTML = getAlertItems().map((alert) => `
+  const items = getAlertItems();
+  const hasRedFolderAlert = ECONOMIC_CALENDAR.events.length > 0;
+  const bar = document.getElementById('alertBar');
+  if (bar) bar.classList.toggle('alert-bar--red', hasRedFolderAlert);
+
+  track.innerHTML = items.map((alert) => `
     <span class="alert-pill ${escapeHtml(alert.type)}">${escapeHtml(alert.text)}</span>
   `).join('');
 }

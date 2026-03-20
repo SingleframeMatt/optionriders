@@ -238,9 +238,24 @@ body {
 }
 
 .auth-status-pill.signed-in {
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
   border-color: rgba(0, 255, 136, 0.22);
   background: rgba(0, 255, 136, 0.09);
   color: var(--green);
+}
+
+.signed-in-name {
+  line-height: 1.2;
+}
+
+.signed-in-ts {
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: rgba(0, 255, 136, 0.5);
+  white-space: nowrap;
 }
 
 .auth-status-pill.warning {
@@ -282,6 +297,21 @@ body {
   border-bottom: 1px solid rgba(255, 170, 0, 0.14);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+}
+
+.alert-bar--red {
+  background:
+    linear-gradient(90deg, rgba(255, 30, 30, 0.32), rgba(255, 68, 68, 0.18) 40%, rgba(10, 10, 15, 0.92));
+  border-bottom-color: rgba(255, 68, 68, 0.28);
+}
+
+.alert-bar--red .alert-bar-label {
+  color: #ffb3b3;
+}
+
+.alert-bar--red .alert-bar-label::before {
+  background: #ff4444;
+  box-shadow: 0 0 14px rgba(255, 68, 68, 0.7);
 }
 
 .alert-bar-label {
