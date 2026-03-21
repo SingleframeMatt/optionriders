@@ -410,12 +410,12 @@ def _strategy(bias, rsi):
 
 # ─── Entry builder ─────────────────────────────────────────────────────────────
 
-def _build_entry(rank, symbol, name, opens, highs, lows, closes, volumes=None, spy_closes=None):
+def _build_entry(rank, symbol, name, opens, highs, lows, closes, volumes=None, spy_closes=None, live_price=None):
     if len(closes) < 22:
         return None
 
-    price      = closes[-1]
     prev_close = closes[-2]
+    price      = live_price if (live_price and live_price > 0) else closes[-1]
     change_pct = round((price - prev_close) / prev_close * 100, 2) if prev_close else 0.0
 
     rsi_val  = _rsi(closes)
@@ -731,6 +731,32 @@ def fetch_market_data(extra_tickers=None, force_refresh=False):
         except Exception:
             return []
 
+    # ── Live 1-minute prices (low latency) ───────────────────────
+    live_prices = {}
+    try:
+        live_raw = yf.download(
+            all_yf_symbols,
+            period="1d",
+            interval="1m",
+            progress=False,
+            auto_adjust=True,
+        )
+
+        def live_series(field, symbol):
+            try:
+                if hasattr(live_raw.columns, "levels"):
+                    return list(live_raw[field][symbol].dropna().astype(float))
+                return list(live_raw[field].dropna().astype(float))
+            except Exception:
+                return []
+
+        for sym in all_yf_symbols:
+            closes_1m = live_series("Close", sym)
+            if closes_1m:
+                live_prices[sym] = closes_1m[-1]
+    except Exception as exc:
+        print(f"[market_data] live 1m fetch error: {exc}")
+
     # ── Fetch SPY closes for relative-strength signal ─────────────
     spy_closes = series("Close", "SPY")   # already in TICKERS; will be populated
 
@@ -750,7 +776,8 @@ def fetch_market_data(extra_tickers=None, force_refresh=False):
                 continue
             spy = spy_closes if sym != "SPY" else None
             entry = _build_entry(rank, sym, TICKER_NAMES.get(sym, sym), o, h, l, c,
-                                 volumes=v or None, spy_closes=spy)
+                                 volumes=v or None, spy_closes=spy,
+                                 live_price=live_prices.get(sym))
             if entry:
                 ticker_entries.append(entry)
             # Accumulate backtest records (needs 56+ bars for full signal)
@@ -803,18 +830,20 @@ def fetch_market_data(extra_tickers=None, force_refresh=False):
                 continue
             if short_key == "VIX":
                 # VIX: just expose current level and 1-day change
+                live_c = live_prices.get(yf_sym, c[-1])
                 prev = c[-2] if len(c) >= 2 else c[-1]
-                chg  = round((c[-1] - prev) / prev * 100, 2) if prev else 0.0
+                chg  = round((live_c - prev) / prev * 100, 2) if prev else 0.0
                 vix_data = {
-                    "price":    round(c[-1], 2),
-                    "change":   round(c[-1] - prev, 2),
+                    "price":    round(live_c, 2),
+                    "change":   round(live_c - prev, 2),
                     "changePct": chg,
-                    "label":    ("Fear" if c[-1] > 25 else "Calm" if c[-1] < 15 else "Normal"),
+                    "label":    ("Fear" if live_c > 25 else "Calm" if live_c < 15 else "Normal"),
                 }
                 continue
             if len(c) < 22:
                 continue
-            entry = _build_entry(0, short_key, TICKER_NAMES.get(short_key, short_key), o, h, l, c)
+            entry = _build_entry(0, short_key, TICKER_NAMES.get(short_key, short_key), o, h, l, c,
+                                 live_price=live_prices.get(yf_sym))
             if entry:
                 index_entries.append(entry)
         except Exception as exc:

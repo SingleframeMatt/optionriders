@@ -27,6 +27,10 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+  <!-- Ticker Tape -->
+  <div id="ticker-bar">
+    <div class="ticker-track" id="ticker-tape"></div>
+  </div>
   <!-- Sticky Header -->
   <header class="header" id="header">
     <div class="header-left">
@@ -338,6 +342,33 @@
           <button class="modal-close" id="tickerDetailClose" aria-label="Close">×</button>
         </div>
         <div class="modal-body ticker-detail-body" id="tickerDetailBody"></div>
+      </div>
+    </div>
+
+    <!-- Ticker Hover Popup -->
+    <div id="tickerHoverPopup" class="thp">
+      <div class="thp-header">
+        <div class="thp-left">
+          <span class="thp-symbol" id="thpSymbol"></span>
+          <span class="thp-name" id="thpName"></span>
+        </div>
+        <div class="thp-right">
+          <span class="thp-price" id="thpPrice"></span>
+          <span class="thp-change" id="thpChange"></span>
+        </div>
+      </div>
+      <div class="thp-chart-wrap">
+        <canvas id="thpCanvas"></canvas>
+      </div>
+      <div class="thp-stats">
+        <div class="thp-stat"><span class="thp-stat-label">RSI (14)</span><span class="thp-stat-val" id="thpRsi"></span></div>
+        <div class="thp-stat"><span class="thp-stat-label">ATR %</span><span class="thp-stat-val" id="thpAtrPct"></span></div>
+        <div class="thp-stat"><span class="thp-stat-label">Exp. Move</span><span class="thp-stat-val" id="thpMove"></span></div>
+        <div class="thp-stat"><span class="thp-stat-label">Bias</span><span class="thp-stat-val" id="thpBias"></span></div>
+      </div>
+      <div class="thp-triggers">
+        <div class="thp-trig-bull" id="thpBull"></div>
+        <div class="thp-trig-bear" id="thpBear"></div>
       </div>
     </div>
 

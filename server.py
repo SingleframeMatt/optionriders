@@ -6,6 +6,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from alpha_vantage import fetch_alpha_vantage_data
 from barchart_proxy import CACHE_TTL_SECONDS, fetch_options_activity
 from market_data import fetch_market_data
 from top_watch import fetch_top_watch
@@ -48,6 +49,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return
         if self.path.startswith("/api/top-watch"):
             self.handle_top_watch()
+            return
+        if self.path.startswith("/api/alpha-vantage"):
+            self.handle_alpha_vantage()
             return
         super().do_GET()
 
@@ -104,6 +108,29 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", f"public, max-age={CACHE_TTL_SECONDS}")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:
+            body = json.dumps({"error": str(exc)}).encode("utf-8")
+            self.send_response(502)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    def handle_alpha_vantage(self):
+        try:
+            params = parse_qs(urlparse(self.path).query)
+            symbols = []
+            for value in params.get("symbols", []):
+                symbols.extend(part.strip().upper() for part in value.split(",") if part.strip())
+            mode = params.get("mode", ["quote"])[0].lower()
+            payload = fetch_alpha_vantage_data(symbols=symbols, mode=mode)
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

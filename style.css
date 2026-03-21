@@ -2,6 +2,26 @@
    Option Riders — Style Sheet
    ============================================ */
 
+/* ── TICKER TAPE ── */
+#ticker-bar {
+  overflow: hidden;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  background: rgba(0,0,0,.4);
+  height: var(--ticker-bar-height);
+  display: flex;
+  align-items: center;
+}
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 40s linear infinite;
+}
+.ticker-track:hover { animation-play-state: paused; }
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 /* --- Custom Properties --- */
 :root {
   --bg-deep: #030508;
@@ -43,6 +63,7 @@
 
   --header-height: 64px;
   --alert-bar-height: 42px;
+  --ticker-bar-height: 32px;
   --content-max: 1480px;
   --gap: 16px;
   --gap-sm: 10px;
@@ -481,7 +502,7 @@ body {
 
 /* --- Main Layout --- */
 .main {
-  height: calc(100vh - var(--header-height) - var(--alert-bar-height));
+  height: calc(100vh - var(--ticker-bar-height) - var(--header-height) - var(--alert-bar-height));
   overflow-y: auto;
   overflow-x: hidden;
   padding: 20px 24px 40px;
@@ -2837,3 +2858,123 @@ body {
 /* ── ADX Indicator Colouring ─────────────────────────────────────── */
 .adx-strong { color: #00ff88; font-weight: 700; }
 .adx-weak   { color: var(--text-muted); }
+
+/* ── Ticker Hover Popup ──────────────────────────────────────────── */
+.thp {
+  position: fixed;
+  z-index: 2000;
+  width: 400px;
+  background: #0c0f1d;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.04);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity .12s ease, visibility .12s ease;
+  pointer-events: none;
+  overflow: hidden;
+}
+.thp.thp-visible {
+  opacity: 1;
+  visibility: visible;
+}
+.thp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  background: rgba(255,255,255,.02);
+}
+.thp-left {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.thp-symbol {
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: .03em;
+}
+.thp-name {
+  font-size: .68rem;
+  color: rgba(255,255,255,.35);
+}
+.thp-right {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.thp-price {
+  font-family: var(--font-mono);
+  font-size: .9rem;
+  font-weight: 600;
+  color: #fff;
+}
+.thp-change {
+  font-family: var(--font-mono);
+  font-size: .8rem;
+  font-weight: 700;
+}
+.thp-chart-wrap {
+  background: #070a12;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.thp-chart-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 190px;
+}
+.thp-stats {
+  display: flex;
+}
+.thp-stat {
+  flex: 1;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-right: 1px solid rgba(255,255,255,.05);
+}
+.thp-stat:last-child { border-right: none; }
+.thp-stat-label {
+  font-size: .58rem;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: rgba(255,255,255,.35);
+}
+.thp-stat-val {
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  font-weight: 700;
+  color: #fff;
+}
+.thp-triggers {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(255,255,255,.05);
+}
+.thp-trig-bull, .thp-trig-bear {
+  flex: 1;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: .7rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.thp-trig-bull {
+  background: rgba(52,211,153,.1);
+  border: 1px solid rgba(52,211,153,.2);
+  color: #34d399;
+}
+.thp-trig-bear {
+  background: rgba(248,113,113,.1);
+  border: 1px solid rgba(248,113,113,.2);
+  color: #f87171;
+}

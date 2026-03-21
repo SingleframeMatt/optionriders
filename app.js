@@ -1174,7 +1174,7 @@ async function fetchEconomicCalendar() {
 function renderIndexCards() {
   const grid = document.getElementById('indexGrid');
   grid.innerHTML = DASHBOARD_DATA.indexes.map((idx, i) => `
-    <div class="index-card" style="animation-delay: ${0.1 + i * 0.05}s">
+    <div class="index-card" style="animation-delay: ${0.1 + i * 0.05}s" data-hover-ticker="${escapeHtml(idx.ticker)}">
       <div class="index-card-header">
         <div class="index-ticker-link" onclick="window.open('${getTradingViewUrl(idx.ticker)}', '_blank')" title="Open ${idx.ticker} on TradingView">
           <div class="index-ticker">${escapeHtml(idx.ticker)} <span style="font-size:0.65rem; color:var(--text-muted);">↗</span></div>
@@ -1235,7 +1235,7 @@ function renderTickerCards() {
     return;
   }
   grid.innerHTML = DASHBOARD_DATA.tickers.map((t, i) => `
-    <div class="ticker-card ${t.star ? 'star-pick' : ''}" style="animation-delay: ${0.15 + i * 0.04}s">
+    <div class="ticker-card ${t.star ? 'star-pick' : ''}" style="animation-delay: ${0.15 + i * 0.04}s" data-hover-ticker="${escapeHtml(t.ticker)}">
       ${t.star ? '<div class="star-icon">★</div>' : ''}
 
       <div class="ticker-rank">#${t.rank}</div>
@@ -1433,6 +1433,7 @@ function renderWatchlist() {
       onclick="openTickerDetailModal('${escapeHtml(w.ticker)}')"
       onkeydown="handleWatchlistKeydown(event, '${escapeHtml(w.ticker)}')"
       title="Open ${escapeHtml(w.ticker)} detail"
+      data-hover-ticker="${escapeHtml(w.ticker)}"
     >
       <td style="color: var(--text-muted); font-weight:700;">${w.rank}</td>
       <td style="color: var(--text-bright); font-weight:700;">${escapeHtml(w.ticker)}</td>
@@ -2202,6 +2203,107 @@ function initTickerDetailModal() {
 }
 
 // ============================================
+// Ticker Hover Popup
+// ============================================
+
+let _thpHideTimer = null;
+let _thpShowTimer = null;
+
+function positionHoverPopup(popup, anchorEl) {
+  const pad = 12;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const rect = anchorEl.getBoundingClientRect();
+  const pw = popup.offsetWidth || 400;
+  const ph = popup.offsetHeight || 320;
+
+  // Prefer right of anchor, fall back to left
+  let left = rect.right + pad;
+  if (left + pw > vw - pad) left = rect.left - pw - pad;
+  left = Math.max(pad, Math.min(left, vw - pw - pad));
+
+  // Vertically center on anchor, clamp to viewport
+  let top = rect.top + rect.height / 2 - ph / 2;
+  top = Math.max(pad, Math.min(top, vh - ph - pad));
+
+  popup.style.left = `${left}px`;
+  popup.style.top  = `${top}px`;
+}
+
+function showTickerHoverPopup(ticker, anchorEl) {
+  clearTimeout(_thpHideTimer);
+  const popup    = document.getElementById('tickerHoverPopup');
+  const tickerData = getTickerDetails(ticker);
+  if (!tickerData) return;
+
+  const changeVal = tickerData.friChange ?? tickerData.change;
+  const isPos = typeof changeVal === 'number' && changeVal >= 0;
+  const changeColor = isPos ? '#34d399' : '#f87171';
+  const changeSign  = isPos ? '+' : '';
+
+  document.getElementById('thpSymbol').textContent  = tickerData.ticker;
+  document.getElementById('thpName').textContent    = tickerData.name || '';
+  document.getElementById('thpPrice').textContent   = typeof tickerData.price === 'number' ? `$${tickerData.price.toFixed(2)}` : '—';
+  const chEl = document.getElementById('thpChange');
+  chEl.textContent  = typeof changeVal === 'number' ? `${changeSign}${changeVal.toFixed(2)}%` : '';
+  chEl.style.color  = changeColor;
+
+  const rsiEl = document.getElementById('thpRsi');
+  rsiEl.textContent = tickerData.rsi ?? '—';
+  rsiEl.className   = `thp-stat-val ${getRsiClass(tickerData.rsi)}`;
+
+  document.getElementById('thpAtrPct').textContent  = tickerData.atrPct ? `${tickerData.atrPct}%` : '—';
+  document.getElementById('thpMove').textContent    = tickerData.expectedMove || '—';
+  const biasEl = document.getElementById('thpBias');
+  biasEl.textContent = tickerData.bias || '—';
+  biasEl.style.color = tickerData.bias?.toLowerCase().includes('bull') ? '#34d399' : '#f87171';
+
+  document.getElementById('thpBull').textContent = `▲ ${tickerData.bullTrigger || '—'}`;
+  document.getElementById('thpBear').textContent = `▼ ${tickerData.bearTrigger || '—'}`;
+
+  // Position before showing so offsetHeight is correct
+  popup.style.opacity    = '0';
+  popup.style.visibility = 'visible';
+  positionHoverPopup(popup, anchorEl);
+  popup.classList.add('thp-visible');
+
+  // Draw chart
+  const canvas = document.getElementById('thpCanvas');
+  const data   = CHART_DATA[ticker];
+  const levels = getLevelsForTicker(ticker);
+  if (canvas && data) {
+    requestAnimationFrame(() => drawCandlestickChart(canvas, data, levels));
+  }
+}
+
+function hideTickerHoverPopup(delay = 120) {
+  clearTimeout(_thpShowTimer);
+  _thpHideTimer = setTimeout(() => {
+    const popup = document.getElementById('tickerHoverPopup');
+    popup.classList.remove('thp-visible');
+  }, delay);
+}
+
+function initTickerHoverPopup() {
+  const popup = document.getElementById('tickerHoverPopup');
+  popup.addEventListener('mouseenter', () => clearTimeout(_thpHideTimer));
+  popup.addEventListener('mouseleave', () => hideTickerHoverPopup());
+
+  // Delegate hover on any [data-hover-ticker] element
+  document.addEventListener('mouseenter', (e) => {
+    const el = e.target.closest('[data-hover-ticker]');
+    if (!el) return;
+    clearTimeout(_thpHideTimer);
+    _thpShowTimer = setTimeout(() => showTickerHoverPopup(el.dataset.hoverTicker, el), 180);
+  }, true);
+
+  document.addEventListener('mouseleave', (e) => {
+    if (!e.target.closest('[data-hover-ticker]')) return;
+    hideTickerHoverPopup();
+  }, true);
+}
+
+// ============================================
 // Live Market Data
 // ============================================
 
@@ -2264,6 +2366,9 @@ async function fetchMarketData(forceFresh = false) {
         + 'Indicators computed from Yahoo Finance daily bars. Not financial advice.';
     }
 
+    // Render ticker tape
+    renderTickerTape(payload.tickers, payload.indexes, payload.vix);
+
     // Render VIX badge and Market Pulse
     if (payload.vix) {
       renderVixBadge(payload.vix);
@@ -2287,6 +2392,47 @@ async function fetchMarketData(forceFresh = false) {
     // Silent fail — static dashboard data remains visible
     console.warn('[Option Riders] Live market data unavailable:', err.message);
   }
+}
+
+// ============================================
+// Ticker Tape
+// ============================================
+
+function renderTickerTape(tickers, indexes, vix) {
+  const track = document.getElementById('ticker-tape');
+  if (!track) return;
+
+  const items = [];
+
+  // Indexes first (SPY, QQQ, ES, NQ)
+  (indexes || []).forEach(idx => {
+    const pct = idx.friChange ?? idx.change;
+    if (pct == null) return;
+    items.push({ t: idx.ticker, pct });
+  });
+
+  // Main tickers
+  (tickers || []).forEach(t => {
+    const pct = t.friChange ?? t.change;
+    if (pct == null) return;
+    items.push({ t: t.ticker, pct });
+  });
+
+  // VIX
+  if (vix && vix.changePct != null) {
+    items.push({ t: 'VIX', pct: vix.changePct });
+  }
+
+  if (!items.length) return;
+
+  // Duplicate for seamless loop
+  const all = [...items, ...items];
+  track.innerHTML = all.map(({ t, pct }) => {
+    const pos = pct >= 0;
+    const sign = pos ? '+' : '';
+    const color = pos ? '#34d399' : '#f87171';
+    return `<span style="margin:0 28px;font-size:12px;font-weight:500;white-space:nowrap;color:${color};font-family:'JetBrains Mono',monospace;">${t}&nbsp;&nbsp;${sign}${pct.toFixed(2)}%</span>`;
+  }).join('');
 }
 
 // ============================================
@@ -2504,10 +2650,12 @@ async function init() {
   renderWatchlist();
   renderThemes();
   renderCustomTickers();
+  renderTickerTape(DASHBOARD_DATA.tickers, DASHBOARD_DATA.indexes, null);
   renderOptionsFlow();
   initCollapsibleSections();
   initAddTickerModal();
   initTickerDetailModal();
+  initTickerHoverPopup();
   fetchAppVersion();
   await Promise.allSettled([
     fetchEconomicCalendar(),

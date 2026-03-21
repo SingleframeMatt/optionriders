@@ -2,6 +2,10 @@
   "version": 2,
   "routes": [
     {
+      "src": "/api/alpha-vantage",
+      "dest": "/api/alpha-vantage.py"
+    },
+    {
       "src": "/api/options-flow",
       "dest": "/api/options-flow.py"
     },
