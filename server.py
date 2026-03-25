@@ -10,6 +10,7 @@ from alpha_vantage import fetch_alpha_vantage_data
 from barchart_proxy import CACHE_TTL_SECONDS, fetch_options_activity
 from market_data import fetch_market_data
 from top_watch import fetch_top_watch
+from bot_core import bot as _bot
 
 
 def load_dotenv(dotenv_path=".env"):
@@ -53,7 +54,51 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/alpha-vantage"):
             self.handle_alpha_vantage()
             return
+        if self.path.startswith("/api/bot-status"):
+            self.handle_bot_status()
+            return
         super().do_GET()
+
+    def do_POST(self):
+        if self.path.startswith("/api/bot-control"):
+            self.handle_bot_control()
+            return
+        self.send_response(404)
+        self.end_headers()
+
+    def handle_bot_status(self):
+        body = json.dumps(_bot.get_state()).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def handle_bot_control(self):
+        try:
+            length  = int(self.headers.get("Content-Length", 0))
+            payload = json.loads(self.rfile.read(length)) if length else {}
+            action  = payload.get("action", "")
+            if action == "start":
+                result = _bot.start()
+            elif action == "stop":
+                result = _bot.stop()
+            else:
+                result = {"ok": False, "message": f"Unknown action: {action}"}
+            body = json.dumps(result).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:
+            body = json.dumps({"ok": False, "message": str(exc)}).encode("utf-8")
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
     def handle_options_flow(self):
         try:

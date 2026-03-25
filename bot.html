@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Option Riders — BTC Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  /* ── BOT PAGE OVERRIDES ── */
+  .bot-page { padding: 24px 20px 60px; max-width: 1280px; margin: 0 auto; }
+
+  .bot-header-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+  }
+  .bot-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.25rem; font-weight: 700; color: var(--cyan);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .bot-title .pair-badge {
+    font-size: .75rem; background: var(--cyan-dim); color: var(--cyan);
+    border: 1px solid var(--cyan); border-radius: 4px;
+    padding: 2px 8px; letter-spacing: .05em;
+  }
+
+  /* Status pill */
+  .bot-status-pill {
+    font-family: 'JetBrains Mono', monospace; font-size: .72rem; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase;
+    border-radius: 20px; padding: 5px 14px;
+    border: 1px solid; transition: all .3s;
+  }
+  .bot-status-pill.stopped  { color: #888; border-color: #444; background: rgba(255,255,255,.04); }
+  .bot-status-pill.scanning { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+  .bot-status-pill.in_trade { color: var(--green); border-color: var(--green); background: var(--green-dim); animation: pulse-green 2s ease-in-out infinite; }
+  .bot-status-pill.error    { color: var(--red);   border-color: var(--red);   background: var(--red-dim); }
+
+  @keyframes pulse-green {
+    0%,100% { box-shadow: 0 0 0 0 var(--green-glow); }
+    50%      { box-shadow: 0 0 10px 3px var(--green-glow); }
+  }
+
+  /* Start/Stop button */
+  .bot-control-btn {
+    font-family: 'Inter', sans-serif; font-size: .85rem; font-weight: 600;
+    border: none; border-radius: 8px; padding: 9px 22px; cursor: pointer;
+    transition: all .2s; letter-spacing: .02em;
+  }
+  .bot-control-btn.start { background: var(--green); color: #000; }
+  .bot-control-btn.start:hover { background: #00e07a; transform: translateY(-1px); }
+  .bot-control-btn.stop  { background: var(--red);   color: #fff; }
+  .bot-control-btn.stop:hover  { background: #e03030; transform: translateY(-1px); }
+
+  /* Metric cards row */
+  .bot-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px; margin-bottom: 16px;
+  }
+  .metric-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px;
+  }
+  .metric-label {
+    font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .1em; color: #555; margin-bottom: 6px;
+  }
+  .metric-value {
+    font-family: 'JetBrains Mono', monospace; font-size: 1.3rem;
+    font-weight: 700; color: #e0e0e0;
+  }
+  .metric-value.green { color: var(--green); }
+  .metric-value.red   { color: var(--red); }
+  .metric-value.cyan  { color: var(--cyan); }
+  .metric-value.amber { color: var(--amber); }
+
+  /* Key levels grid */
+  .levels-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;
+  }
+  .levels-title {
+    font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .1em; color: #555; margin-bottom: 12px;
+  }
+  .levels-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+  }
+  .level-item { text-align: center; }
+  .level-name {
+    font-size: .65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .08em; color: #666; margin-bottom: 4px;
+  }
+  .level-price {
+    font-family: 'JetBrains Mono', monospace; font-size: .95rem;
+    font-weight: 600; color: #bbb;
+  }
+  .level-item.pdh .level-price { color: var(--green); }
+  .level-item.pdl .level-price { color: var(--red); }
+  .level-item.pwh .level-price { color: var(--cyan); }
+  .level-item.pwl .level-price { color: var(--amber); }
+
+  /* Active trade card */
+  .trade-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px; margin-bottom: 16px;
+    transition: border-color .3s;
+  }
+  .trade-card.active { border-color: var(--green); }
+  .trade-card-title {
+    font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .1em; color: #555; margin-bottom: 14px;
+  }
+  .trade-empty {
+    font-size: .9rem; color: #444; font-style: italic; text-align: center;
+    padding: 14px 0;
+  }
+  .trade-details {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 14px;
+  }
+  .trade-field-label {
+    font-size: .65rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .08em; color: #555; margin-bottom: 4px;
+  }
+  .trade-field-value {
+    font-family: 'JetBrains Mono', monospace; font-size: .95rem; font-weight: 600;
+  }
+  .trade-field-value.long  { color: var(--green); }
+  .trade-field-value.short { color: var(--red); }
+  .trade-field-value.entry { color: #ddd; }
+  .trade-field-value.sl    { color: var(--red); }
+  .trade-field-value.tp    { color: var(--green); }
+  .trade-field-value.level { color: var(--cyan); }
+  .trade-field-value.time  { color: var(--amber); }
+
+  /* Log */
+  .log-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px;
+  }
+  .log-title {
+    font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .1em; color: #555; margin-bottom: 12px;
+  }
+  .log-table { width: 100%; border-collapse: collapse; }
+  .log-table td {
+    padding: 6px 8px; font-size: .8rem; border-bottom: 1px solid var(--border-subtle);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .log-table td:first-child { color: #555; white-space: nowrap; width: 70px; }
+  .log-row.info  td:last-child { color: #888; }
+  .log-row.signal td:last-child { color: var(--amber); }
+  .log-row.trade td:last-child { color: var(--green); font-weight: 700; }
+  .log-row.exit  td:last-child { color: var(--cyan); }
+  .log-row.error td:last-child { color: var(--red); }
+  .log-empty { color: #444; font-size: .85rem; text-align: center; padding: 18px 0; font-style: italic; }
+
+  /* Testnet banner */
+  .testnet-banner {
+    background: rgba(255,170,0,.08); border: 1px solid rgba(255,170,0,.3);
+    border-radius: 8px; padding: 8px 16px; font-size: .78rem;
+    color: var(--amber); margin-bottom: 16px; text-align: center; font-weight: 500;
+  }
+
+  .last-update {
+    font-size: .7rem; color: #444; text-align: right; margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+</style>
+</head>
+<body>
+
+<!-- Ticker Tape (reuse existing) -->
+<div id="ticker-bar"><div class="ticker-track" id="ticker-tape"></div></div>
+
+<!-- Header -->
+<header class="header" id="header">
+  <div class="header-left">
+    <a class="logo" href="landing.html" aria-label="Go to landing page">
+      <img class="logo-image" src="assets/optionriders-horse-transparent.png" alt="Option Riders">
+      <div class="logo-copy">
+        <span class="logo-title">OptionRiders</span>
+        <span class="logo-tagline">Trade. Ride. Profit.</span>
+      </div>
+    </a>
+  </div>
+  <div class="header-center">
+    <nav style="display:flex;gap:8px;">
+      <a href="index.html" style="font-size:.82rem;color:#666;text-decoration:none;padding:6px 12px;border-radius:6px;transition:color .2s;" onmouseover="this.style.color='#aaa'" onmouseout="this.style.color='#666'">Dashboard</a>
+      <a href="bot.html"   style="font-size:.82rem;color:var(--cyan);text-decoration:none;padding:6px 12px;border-radius:6px;background:var(--cyan-dim);border:1px solid rgba(0,212,255,.2);">BTC Bot</a>
+    </nav>
+  </div>
+  <div class="header-right">
+    <span class="bot-status-pill stopped" id="headerStatusPill">● Stopped</span>
+  </div>
+</header>
+
+<!-- Main -->
+<main class="bot-page">
+
+  <!-- Page title row -->
+  <div class="bot-header-row">
+    <div class="bot-title">
+      BTC Bot
+      <span class="pair-badge">BTC/USDT · 3m</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span class="bot-status-pill stopped" id="statusPill">● Stopped</span>
+      <button class="bot-control-btn start" id="controlBtn" onclick="toggleBot()">Start Bot</button>
+    </div>
+  </div>
+
+  <!-- Testnet banner (shown when testnet=true) -->
+  <div class="testnet-banner" id="testnetBanner" style="display:none">
+    ⚠️ TESTNET MODE — Paper trading only. No real money at risk.
+  </div>
+
+  <!-- Metric cards -->
+  <div class="bot-metrics">
+    <div class="metric-card">
+      <div class="metric-label">BTC Price</div>
+      <div class="metric-value" id="metricPrice">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">VWAP</div>
+      <div class="metric-value cyan" id="metricVwap">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">9 EMA</div>
+      <div class="metric-value amber" id="metricEma">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Last Candle</div>
+      <div class="metric-value" id="metricCandle" style="font-size:.95rem">—</div>
+    </div>
+  </div>
+
+  <!-- Key Levels -->
+  <div class="levels-card">
+    <div class="levels-title">Key Levels</div>
+    <div class="levels-grid">
+      <div class="level-item pdh">
+        <div class="level-name">PDH</div>
+        <div class="level-price" id="levelPDH">—</div>
+      </div>
+      <div class="level-item pdl">
+        <div class="level-name">PDL</div>
+        <div class="level-price" id="levelPDL">—</div>
+      </div>
+      <div class="level-item pwh">
+        <div class="level-name">PWH</div>
+        <div class="level-price" id="levelPWH">—</div>
+      </div>
+      <div class="level-item pwl">
+        <div class="level-name">PWL</div>
+        <div class="level-price" id="levelPWL">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Trade -->
+  <div class="trade-card" id="tradeCard">
+    <div class="trade-card-title">Active Trade</div>
+    <div class="trade-empty" id="tradeEmpty">No active trade — bot is scanning</div>
+    <div class="trade-details" id="tradeDetails" style="display:none">
+      <div>
+        <div class="trade-field-label">Direction</div>
+        <div class="trade-field-value" id="tradeDir">—</div>
+      </div>
+      <div>
+        <div class="trade-field-label">Entry</div>
+        <div class="trade-field-value entry" id="tradeEntry">—</div>
+      </div>
+      <div>
+        <div class="trade-field-label">Stop Loss</div>
+        <div class="trade-field-value sl" id="tradeSL">—</div>
+      </div>
+      <div>
+        <div class="trade-field-label">Take Profit</div>
+        <div class="trade-field-value tp" id="tradeTP">—</div>
+      </div>
+      <div>
+        <div class="trade-field-label">Level</div>
+        <div class="trade-field-value level" id="tradeLevel">—</div>
+      </div>
+      <div>
+        <div class="trade-field-label">Entry Time</div>
+        <div class="trade-field-value time" id="tradeTime">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="log-card">
+    <div class="log-title">Signal & Trade Log</div>
+    <div id="logEmpty" class="log-empty">Start the bot to see live activity</div>
+    <table class="log-table" id="logTable" style="display:none">
+      <tbody id="logBody"></tbody>
+    </table>
+  </div>
+
+  <div class="last-update" id="lastUpdate"></div>
+
+</main>
+
+<script>
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let botRunning = false;
+
+// ── FETCH STATUS ──────────────────────────────────────────────────────────────
+async function fetchStatus() {
+  try {
+    const res  = await fetch('/api/bot-status');
+    const data = await res.json();
+    renderState(data);
+  } catch (e) {
+    console.warn('Status fetch failed:', e);
+  }
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function renderState(s) {
+  const status = s.status || 'stopped';
+  botRunning   = status !== 'stopped';
+
+  // Status pills
+  const label = { stopped: '● Stopped', scanning: '● Scanning', in_trade: '● In Trade', error: '● Error' }[status] || status;
+  ['statusPill','headerStatusPill'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent  = label;
+    el.className    = `bot-status-pill ${status}`;
+  });
+
+  // Control button
+  const btn       = document.getElementById('controlBtn');
+  btn.textContent = botRunning ? 'Stop Bot' : 'Start Bot';
+  btn.className   = `bot-control-btn ${botRunning ? 'stop' : 'start'}`;
+
+  // Testnet banner
+  document.getElementById('testnetBanner').style.display = s.testnet ? 'block' : 'none';
+
+  // Metrics
+  const fmt = v => v != null ? Number(v).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
+  document.getElementById('metricPrice').textContent  = s.last_price  != null ? '$' + fmt(s.last_price)  : '—';
+  document.getElementById('metricVwap').textContent   = s.vwap        != null ? '$' + fmt(s.vwap)        : '—';
+  document.getElementById('metricEma').textContent    = s.ema         != null ? '$' + fmt(s.ema)         : '—';
+  document.getElementById('metricCandle').textContent = s.last_candle_time || '—';
+
+  // Levels
+  const lvl = s.levels || {};
+  document.getElementById('levelPDH').textContent = lvl.PDH != null ? '$' + fmt(lvl.PDH) : '—';
+  document.getElementById('levelPDL').textContent = lvl.PDL != null ? '$' + fmt(lvl.PDL) : '—';
+  document.getElementById('levelPWH').textContent = lvl.PWH != null ? '$' + fmt(lvl.PWH) : '—';
+  document.getElementById('levelPWL').textContent = lvl.PWL != null ? '$' + fmt(lvl.PWL) : '—';
+
+  // Active trade
+  const pos = s.position;
+  if (pos) {
+    document.getElementById('tradeCard').classList.add('active');
+    document.getElementById('tradeEmpty').style.display   = 'none';
+    document.getElementById('tradeDetails').style.display = 'grid';
+    const dir = pos.direction || '';
+    document.getElementById('tradeDir').textContent   = dir.toUpperCase();
+    document.getElementById('tradeDir').className     = `trade-field-value ${dir}`;
+    document.getElementById('tradeEntry').textContent = pos.entry     != null ? '$' + fmt(pos.entry)       : '—';
+    document.getElementById('tradeSL').textContent    = pos.stop_level!= null ? '$' + fmt(pos.stop_level)  : '—';
+    document.getElementById('tradeTP').textContent    = pos.take_profit!=null ? '$' + fmt(pos.take_profit) : '—';
+    document.getElementById('tradeLevel').textContent = pos.level_name || '—';
+    document.getElementById('tradeTime').textContent  = pos.entry_time
+      ? new Date(pos.entry_time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
+      : '—';
+  } else {
+    document.getElementById('tradeCard').classList.remove('active');
+    document.getElementById('tradeEmpty').style.display   = 'block';
+    document.getElementById('tradeEmpty').textContent     = status === 'stopped' ? 'Bot is not running' : 'No active trade — bot is scanning';
+    document.getElementById('tradeDetails').style.display = 'none';
+  }
+
+  // Log
+  const log = s.trade_log || [];
+  if (log.length === 0) {
+    document.getElementById('logEmpty').style.display  = 'block';
+    document.getElementById('logTable').style.display  = 'none';
+  } else {
+    document.getElementById('logEmpty').style.display  = 'none';
+    document.getElementById('logTable').style.display  = 'table';
+    const tbody = document.getElementById('logBody');
+    tbody.innerHTML = log.map(entry =>
+      `<tr class="log-row ${entry.kind}">
+        <td>${entry.time}</td>
+        <td>${entry.msg}</td>
+      </tr>`
+    ).join('');
+  }
+
+  document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+
+// ── CONTROL ───────────────────────────────────────────────────────────────────
+async function toggleBot() {
+  const action = botRunning ? 'stop' : 'start';
+  try {
+    const res = await fetch('/api/bot-control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ action }),
+    });
+    // Guard: if not JSON, show the raw status so we know what went wrong
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const text = await res.text();
+      alert('Server returned unexpected response (HTTP ' + res.status + ').\n\nMake sure you restarted server.py after the latest changes.\n\n' + text.substring(0, 200));
+      return;
+    }
+    const result = await res.json();
+    if (!result.ok) alert(result.message);
+    await fetchStatus();
+  } catch (e) {
+    alert('Could not reach server. Is server.py running?\n\n' + e.message);
+  }
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+fetchStatus();
+setInterval(fetchStatus, 10000);   // refresh every 10s
+</script>
+
+</body>
+</html>
