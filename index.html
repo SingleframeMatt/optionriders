@@ -462,11 +462,13 @@
     const BOT_NAV_WRAPPER = document.getElementById('adminBotNavWrapper');
     const BOT_SHORTCUTS = document.getElementById('adminBotShortcuts');
     function isAdmin() {
-      // Primary: check live AUTH_STATE from app.js
-      if (window.AUTH_STATE && window.AUTH_STATE.user && window.AUTH_STATE.user.email) {
-        return window.AUTH_STATE.user.email === ADMIN_EMAIL;
-      }
-      // Fallback: check localStorage
+      // Primary: check live AUTH_STATE from app.js (declared as const in global script scope)
+      try {
+        if (typeof AUTH_STATE !== 'undefined' && AUTH_STATE.user && AUTH_STATE.user.email) {
+          return AUTH_STATE.user.email === ADMIN_EMAIL;
+        }
+      } catch(e) {}
+      // Fallback: check localStorage (covers Google sign-in)
       try {
         const stored = localStorage.getItem('optionriders-google-user-v1');
         const user = stored ? JSON.parse(stored) : null;

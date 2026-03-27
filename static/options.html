@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Option Riders — Options Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ── Design tokens (dark theme) ── */
+  :root {
+    --bg:          #0d0f14;
+    --bg2:         #131720;
+    --bg3:         #1a1f2e;
+    --border:      rgba(255,255,255,.07);
+    --border-sub:  rgba(255,255,255,.04);
+    --text:        #e2e8f0;
+    --text2:       #94a3b8;
+    --green:       #22c55e;
+    --green-dim:   rgba(34,197,94,.12);
+    --red:         #ef4444;
+    --red-dim:     rgba(239,68,68,.12);
+    --amber:       #f59e0b;
+    --amber-dim:   rgba(245,158,11,.12);
+    --cyan:        #06b6d4;
+    --cyan-dim:    rgba(6,182,212,.12);
+    --purple:      #a855f7;
+    --purple-dim:  rgba(168,85,247,.12);
+    --mono:        'JetBrains Mono', monospace;
+    --sans:        'Inter', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  .page { max-width: 1400px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  /* ── Header ── */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 28px; flex-wrap: wrap; gap: 12px;
+  }
+  .title {
+    font-family: var(--mono); font-size: 1.1rem; font-weight: 700;
+    color: var(--cyan); display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .badge {
+    font-size: .68rem; padding: 2px 8px; border-radius: 4px; border: 1px solid;
+    font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  }
+  .badge-cyan   { color: var(--cyan);   border-color: var(--cyan);   background: var(--cyan-dim); }
+  .badge-amber  { color: var(--amber);  border-color: var(--amber);  background: var(--amber-dim); }
+  .badge-green  { color: var(--green);  border-color: var(--green);  background: var(--green-dim); }
+  .badge-red    { color: var(--red);    border-color: var(--red);    background: var(--red-dim); }
+  .badge-purple { color: var(--purple); border-color: var(--purple); background: var(--purple-dim); }
+
+  /* ── Status pill ── */
+  .status-pill {
+    font-family: var(--mono); font-size: .7rem; font-weight: 700;
+    letter-spacing: .1em; text-transform: uppercase;
+    border-radius: 20px; padding: 5px 16px; border: 1px solid; transition: all .3s;
+  }
+  .status-pill.running     { color: var(--green);  border-color: var(--green);  background: var(--green-dim);  animation: pulse-g 2s ease-in-out infinite; }
+  .status-pill.connecting  { color: var(--amber);  border-color: var(--amber);  background: var(--amber-dim); }
+  .status-pill.stopped     { color: var(--text2);  border-color: #333;          background: rgba(255,255,255,.03); }
+  .status-pill.error       { color: var(--red);    border-color: var(--red);    background: var(--red-dim); }
+  .status-pill.halted      { color: #ff8800;       border-color: #ff8800;       background: rgba(255,136,0,.15); }
+  .status-pill.unavailable { color: var(--text2);  border-color: #333;          background: rgba(255,255,255,.03); }
+  @keyframes pulse-g {
+    0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,.3); }
+    50%      { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    font-family: var(--sans); font-size: .82rem; font-weight: 600;
+    padding: 7px 18px; border-radius: 6px; border: 1px solid; cursor: pointer;
+    transition: all .2s; letter-spacing: .02em;
+  }
+  .btn-start { color: var(--green); border-color: var(--green); background: var(--green-dim); }
+  .btn-start:hover { background: rgba(34,197,94,.25); }
+  .btn-stop  { color: var(--red);   border-color: var(--red);   background: var(--red-dim); }
+  .btn-stop:hover  { background: rgba(239,68,68,.25); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* ── Halted banner ── */
+  .halted-banner {
+    background: rgba(255,68,68,.1); border: 1px solid rgba(255,68,68,.3);
+    border-radius: 8px; padding: 12px 18px; margin-bottom: 16px;
+    color: var(--red); font-size: .88rem; font-weight: 600;
+    display: none; align-items: center; gap: 10px;
+  }
+  .halted-banner.visible { display: flex; }
+
+  /* ── Grid layouts ── */
+  .grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr;       gap: 14px; margin-bottom: 16px; }
+  @media (max-width: 1000px) { .grid-4 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width:  800px) { .grid-3 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width:  600px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+  /* ── Card ── */
+  .card {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px;
+  }
+  .card-title {
+    font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--text2); margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+  }
+  .card-title .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); flex-shrink: 0; }
+
+  /* ── Stat tiles ── */
+  .stat-val   { font-family: var(--mono); font-size: 1.55rem; font-weight: 700; line-height: 1; }
+  .stat-label { font-size: .7rem; color: var(--text2); margin-top: 5px; }
+  .stat-val.green  { color: var(--green); }
+  .stat-val.red    { color: var(--red); }
+  .stat-val.amber  { color: var(--amber); }
+  .stat-val.cyan   { color: var(--cyan); }
+
+  /* ── Symbol panels ── */
+  .sym-panels { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .sym-panel {
+    flex: 1 1 200px; background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .sym-name  { font-family: var(--mono); font-size: .9rem; font-weight: 700; color: var(--cyan); display: flex; align-items: center; gap: 8px; }
+  .sym-price { font-family: var(--mono); font-size: 1.3rem; font-weight: 700; margin-top: 4px; }
+  .sym-vwap  { font-size: .72rem; color: var(--text2); margin-top: 2px; }
+  .sym-vwap span { font-family: var(--mono); color: var(--amber); }
+  .sym-signal-state { font-size: .68rem; margin-top: 6px; color: var(--text2); }
+
+  /* ── Levels chips ── */
+  .levels-wrap { display: flex; flex-wrap: wrap; gap: 8px; }
+  .lvl-chip {
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 7px; padding: 8px 11px; text-align: center; min-width: 90px;
+  }
+  .lvl-chip .lname { font-size: .65rem; color: var(--text2); text-transform: uppercase; letter-spacing: .07em; }
+  .lvl-chip .lval  { font-family: var(--mono); font-size: .9rem; font-weight: 600; margin-top: 1px; }
+  .lvl-chip.pdh .lval { color: var(--green); }
+  .lvl-chip.pdl .lval { color: var(--red); }
+  .lvl-chip.pwh .lval { color: var(--cyan); }
+  .lvl-chip.pwl .lval { color: var(--amber); }
+  .lvl-chip.orb_h .lval, .lvl-chip.orb_l .lval { color: var(--purple); }
+  .lvl-chip.vwap .lval { color: var(--amber); }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th {
+    text-align: left; font-size: .68rem; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text2); padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 8px 10px; border-bottom: 1px solid var(--border-sub);
+    font-family: var(--mono); font-size: .8rem; vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.022); }
+
+  .no-data { color: var(--text2); font-size: .82rem; padding: 18px 0; text-align: center; font-style: italic; }
+
+  .pnl-pos { color: var(--green); font-weight: 600; }
+  .pnl-neg { color: var(--red);   font-weight: 600; }
+  .dir-long  { color: var(--green); font-weight: 700; }
+  .dir-short { color: var(--red);   font-weight: 700; }
+  .tag-call  { color: var(--green); font-weight: 700; }
+  .tag-put   { color: var(--red);   font-weight: 700; }
+
+  /* ── Confluence badge ── */
+  .conf-badge {
+    display: inline-block; font-family: var(--mono); font-size: .7rem; font-weight: 700;
+    padding: 2px 7px; border-radius: 4px;
+  }
+  .conf-high { color: var(--green); background: var(--green-dim); }
+  .conf-med  { color: var(--amber); background: var(--amber-dim); }
+  .conf-low  { color: var(--red);   background: var(--red-dim); }
+
+  /* ── Signal rows ── */
+  .sig-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-sub); }
+  .sig-row:last-child { border-bottom: none; }
+  .sig-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .sig-dot.long  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .sig-dot.short { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+  .sig-meta { font-size: .76rem; color: var(--text2); }
+
+  /* ── Event log ── */
+  .log-box {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    max-height: 300px; overflow-y: auto; padding: 12px;
+    font-family: var(--mono); font-size: .76rem; line-height: 1.6;
+  }
+  .log-line       { color: var(--text2); }
+  .log-line.entry { color: var(--green); }
+  .log-line.exit  { color: var(--cyan); }
+  .log-line.error { color: var(--red); }
+  .log-line.warn  { color: var(--amber); }
+  .log-time { color: #444; margin-right: 8px; }
+
+  .refresh-info { font-size: .7rem; color: var(--text2); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── Header ── -->
+  <div class="header">
+    <div class="title">
+      <span>OPTION RIDERS</span>
+      <span class="badge badge-cyan">OPTIONS BOT</span>
+      <span class="badge badge-purple">S&amp;D BREAK+RETEST</span>
+      <span class="badge badge-amber">PAPER TRADING</span>
+      <span id="statusPill" class="status-pill stopped">Stopped</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span class="refresh-info">Refresh: <span id="countdown">10s</span></span>
+      <button class="btn btn-start" id="btnStart" onclick="controlBot('start')">Start Bot</button>
+      <button class="btn btn-stop"  id="btnStop"  onclick="controlBot('stop')"  disabled>Stop Bot</button>
+    </div>
+  </div>
+
+  <!-- ── Halted banner ── -->
+  <div class="halted-banner" id="haltedBanner">
+    &#9940; Bot halted — $600 daily loss limit reached. Will reset at midnight ET.
+  </div>
+
+  <!-- ── Daily stats ── -->
+  <div class="grid-4">
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Daily P&amp;L</div>
+      <div id="dailyPnl" class="stat-val cyan">$0.00</div>
+      <div class="stat-label">Today's realised P&amp;L</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Win / Loss</div>
+      <div id="winLoss" class="stat-val">0 / 0</div>
+      <div class="stat-label">Trades closed today</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Open Positions</div>
+      <div id="openCount" class="stat-val">0</div>
+      <div class="stat-label">of <span id="maxPos">3</span> max</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Account Balance</div>
+      <div id="netLiq" class="stat-val cyan">—</div>
+      <div class="stat-label">Net Liquidation (paper)</div>
+    </div>
+  </div>
+
+  <!-- ── Symbol panels ── -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-title"><span class="dot"></span>Tracked Symbols — SPY · QQQ · SPX</div>
+    <div id="symPanels" class="sym-panels">
+      <span class="no-data">Waiting for IBKR data…</span>
+    </div>
+  </div>
+
+  <!-- ── Key levels ── -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-title"><span class="dot"></span>Key Levels (PDH · PDL · PWH · PWL · ORB · VWAP)</div>
+    <div id="levelsArea"><span class="no-data">Waiting for data…</span></div>
+  </div>
+
+  <!-- ── Open positions + Active signals ── -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Open Positions</div>
+      <div id="posNoData" class="no-data">No open positions</div>
+      <table id="posTable" style="display:none">
+        <thead><tr>
+          <th>Symbol</th><th>Dir</th><th>Option</th><th>Strike</th><th>Exp</th>
+          <th>Qty</th><th>Entry</th><th>SL</th><th>TP</th><th>Live P&amp;L</th>
+        </tr></thead>
+        <tbody id="posBody"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Recent Signals</div>
+      <div id="signalsArea"><span class="no-data">No signals yet</span></div>
+    </div>
+  </div>
+
+  <!-- ── Trade log ── -->
+  <div class="card" style="margin-bottom:16px;margin-top:16px;">
+    <div class="card-title"><span class="dot"></span>Today's Trade Log</div>
+    <div id="tradesNoData" class="no-data">No closed trades today</div>
+    <table id="tradesTable" style="display:none">
+      <thead><tr>
+        <th>Time</th><th>Symbol</th><th>Dir</th><th>Option</th>
+        <th>Strike</th><th>Exp</th><th>Qty</th>
+        <th>Entry</th><th>Exit</th><th>Reason</th><th>P&amp;L</th>
+      </tr></thead>
+      <tbody id="tradesBody"></tbody>
+    </table>
+  </div>
+
+  <!-- ── Event log ── -->
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>Bot Event Log</div>
+    <div class="log-box" id="logBox"><span class="log-line">Waiting for events…</span></div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+// ── Helpers ────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+function fmt(n, dp=2) {
+  if (n == null || isNaN(n)) return '—';
+  return parseFloat(n).toFixed(dp);
+}
+function fmtPnl(n) {
+  if (n == null || isNaN(n)) return '—';
+  const v = parseFloat(n), sign = v >= 0 ? '+$' : '-$';
+  return sign + Math.abs(v).toFixed(2);
+}
+function pnlCls(n) { return n > 0 ? 'pnl-pos' : n < 0 ? 'pnl-neg' : ''; }
+function confCls(s) { return s >= 6 ? 'conf-high' : s >= 4 ? 'conf-med' : 'conf-low'; }
+function fmtTime(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+  catch { return iso.substring(11,19)||'—'; }
+}
+
+// ── API calls ──────────────────────────────────────────────────────────────
+async function fetchState() {
+  try {
+    const r = await fetch('/api/options');
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) { console.warn('fetchState:', e); return null; }
+}
+
+async function controlBot(action) {
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnStop').disabled  = true;
+  try {
+    await fetch('/api/options/' + action, { method: 'POST' });
+    await refresh();
+  } catch(e) { console.warn('controlBot:', e); }
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function render(d) {
+  if (!d) return;
+
+  // Status pill
+  const pill   = document.getElementById('statusPill');
+  const status = d.halted ? 'halted' : (d.status || 'stopped');
+  pill.className   = `status-pill ${status}`;
+  pill.textContent = d.halted ? 'HALTED' : status.charAt(0).toUpperCase() + status.slice(1);
+
+  // Halted banner
+  document.getElementById('haltedBanner').classList.toggle('visible', !!d.halted);
+
+  // Buttons
+  const active = ['running','connecting'].includes(d.status) && !d.halted;
+  document.getElementById('btnStart').disabled = active;
+  document.getElementById('btnStop').disabled  = !active;
+
+  // Stats
+  const pnl   = d.daily_pnl || 0;
+  const pnlEl = document.getElementById('dailyPnl');
+  pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toFixed(2);
+  pnlEl.className   = 'stat-val ' + (pnl > 0 ? 'green' : pnl < 0 ? 'red' : 'cyan');
+
+  document.getElementById('winLoss').textContent =
+    `${d.daily_wins||0} / ${d.daily_losses||0}`;
+
+  const posCount = Object.keys(d.positions||{}).length;
+  const ocEl = document.getElementById('openCount');
+  ocEl.textContent = posCount;
+  ocEl.className   = 'stat-val ' + (posCount > 0 ? 'amber' : 'cyan');
+
+  const acct = d.account || {};
+  if (acct.NetLiquidation != null) {
+    document.getElementById('netLiq').textContent =
+      '$' + parseFloat(acct.NetLiquidation).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  }
+
+  // Symbol panels
+  const syms   = d.symbols || [];
+  const prices = d.last_price || {};
+  const vwaps  = d.vwap || {};
+  const sigSt  = d.signal_states || {};
+  const symDiv = document.getElementById('symPanels');
+  if (syms.length) {
+    symDiv.innerHTML = syms.map(s => {
+      const p  = prices[s], v = vwaps[s];
+      const ss = sigSt[s] || {};
+      const abv = p && v ? (p > v ? 'above' : 'below') : '';
+      const brkBadge = ss.break_dir
+        ? `<span class="badge badge-${ss.break_dir==='long'?'green':'red'}" style="font-size:.6rem">${ss.break_dir.toUpperCase()} BREAK</span>`
+        : '';
+      const stateStr = ss.state && ss.state !== 'idle'
+        ? `${ss.state.replace('_',' ')} @ ${fmt(ss.break_level)} (${ss.bars_since||0} bars ago)`
+        : 'watching';
+      return `<div class="sym-panel">
+        <div class="sym-name">${esc(s)} ${brkBadge}</div>
+        <div class="sym-price">${p!=null?'$'+fmt(p):'—'}</div>
+        <div class="sym-vwap">VWAP <span>${v!=null?'$'+fmt(v):'—'}</span>
+          ${abv ? `<span style="font-size:.62rem;color:var(--${abv==='above'?'green':'red'})">(${abv})</span>` : ''}
+        </div>
+        <div class="sym-signal-state">State: ${esc(stateStr)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Key levels
+  const lvls = d.levels || {};
+  const levDiv = document.getElementById('levelsArea');
+  const chips = [];
+  for (const [sym, map] of Object.entries(lvls)) {
+    for (const [name, val] of Object.entries(map)) {
+      chips.push({ sym, name, val });
+    }
+  }
+  if (chips.length) {
+    levDiv.innerHTML = `<div class="levels-wrap">` +
+      chips.map(({sym, name, val}) => {
+        const cls = name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        return `<div class="lvl-chip ${cls}">
+          <div class="lname">${esc(sym)} ${esc(name)}</div>
+          <div class="lval">$${fmt(val)}</div>
+        </div>`;
+      }).join('') + `</div>`;
+  } else {
+    levDiv.innerHTML = `<span class="no-data">No levels yet — connect IBKR to populate</span>`;
+  }
+
+  // Open positions
+  const pos     = d.positions || {};
+  const posKeys = Object.keys(pos);
+  const noData  = document.getElementById('posNoData');
+  const table   = document.getElementById('posTable');
+  const body    = document.getElementById('posBody');
+  if (!posKeys.length) {
+    noData.style.display = 'block'; table.style.display = 'none';
+  } else {
+    noData.style.display = 'none'; table.style.display = 'table';
+    body.innerHTML = posKeys.map(sym => {
+      const p = pos[sym];
+      const livePnl = p.pnl || 0;
+      const rightCls = p.right === 'C' ? 'tag-call' : 'tag-put';
+      const rightLbl = p.right === 'C' ? 'CALL' : 'PUT';
+      return `<tr>
+        <td>${esc(sym)}</td>
+        <td class="dir-${p.direction}">${(p.direction||'').toUpperCase()}</td>
+        <td class="${rightCls}">${rightLbl}</td>
+        <td>$${fmt(p.strike,0)}</td>
+        <td>${esc(p.expiry||'—')}</td>
+        <td>${p.qty}</td>
+        <td>$${fmt(p.entry_price)}</td>
+        <td style="color:var(--red)">$${fmt(p.stop_price)}</td>
+        <td style="color:var(--green)">$${fmt(p.tp_price)}</td>
+        <td class="${pnlCls(livePnl)}">${fmtPnl(livePnl)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Recent signals
+  const sigs   = d.signals || [];
+  const sigDiv = document.getElementById('signalsArea');
+  if (!sigs.length) {
+    sigDiv.innerHTML = `<span class="no-data">No signals detected yet</span>`;
+  } else {
+    sigDiv.innerHTML = sigs.slice(0,12).map(s => {
+      const ts = s.timestamp ? fmtTime(s.timestamp) : '—';
+      const sc = s.confluence || 0;
+      return `<div class="sig-row">
+        <div class="sig-dot ${s.direction||''}"></div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:.83rem">
+            ${esc(s.symbol||'')} <span class="dir-${s.direction}">${(s.direction||'').toUpperCase()}</span>
+          </div>
+          <div class="sig-meta">${esc(s.level_name||'')}@${fmt(s.level_price)} · VWAP=${fmt(s.vwap)} · ${ts}</div>
+        </div>
+        <span class="conf-badge ${confCls(sc)}">${sc}/7</span>
+      </div>`;
+    }).join('');
+  }
+
+  // Trades
+  const trades  = (d.today_trades || []).slice().reverse();
+  const tNoData = document.getElementById('tradesNoData');
+  const tTable  = document.getElementById('tradesTable');
+  const tBody   = document.getElementById('tradesBody');
+  if (!trades.length) {
+    tNoData.style.display = 'block'; tTable.style.display = 'none';
+  } else {
+    tNoData.style.display = 'none'; tTable.style.display = 'table';
+    tBody.innerHTML = trades.map(t => {
+      const tPnl = t.pnl || 0;
+      const rightLbl = t.right === 'C' ? 'CALL' : 'PUT';
+      let reasonCls = '';
+      const r = t.exit_reason || '';
+      if (r.includes('STOP'))   reasonCls = 'style="color:var(--red)"';
+      if (r.includes('PROFIT')) reasonCls = 'style="color:var(--green)"';
+      if (r.includes('EOD'))    reasonCls = 'style="color:var(--amber)"';
+      return `<tr>
+        <td>${fmtTime(t.exit_time)}</td>
+        <td>${esc(t.symbol||'')}</td>
+        <td class="dir-${t.direction}">${(t.direction||'').toUpperCase()}</td>
+        <td class="${t.right==='C'?'tag-call':'tag-put'}">${rightLbl}</td>
+        <td>$${fmt(t.strike,0)}</td>
+        <td>${esc(t.expiry||'—')}</td>
+        <td>${t.qty}</td>
+        <td>$${fmt(t.entry_price)}</td>
+        <td>$${fmt(t.exit_price)}</td>
+        <td ${reasonCls}>${esc(r)}</td>
+        <td class="${pnlCls(tPnl)}">${fmtPnl(tPnl)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Event log
+  const logEntries = (d.log || []).slice().reverse();
+  const logBox = document.getElementById('logBox');
+  if (!logEntries.length) {
+    logBox.innerHTML = `<span class="log-line">No events yet</span>`;
+  } else {
+    logBox.innerHTML = logEntries.map(e =>
+      `<div class="log-line ${esc(e.kind||'')}"><span class="log-time">${esc(e.time||'')}</span>${esc(e.msg||'')}</div>`
+    ).join('');
+  }
+}
+
+// ── Refresh loop ───────────────────────────────────────────────────────────
+let _cd = 10;
+
+async function refresh() {
+  const d = await fetchState();
+  if (d) render(d);
+  _cd = 10;
+  document.getElementById('countdown').textContent = '10s';
+}
+
+function startLoop() {
+  refresh();
+  setInterval(() => {
+    _cd--;
+    document.getElementById('countdown').textContent = _cd + 's';
+    if (_cd <= 0) refresh();
+  }, 1000);
+}
+
+document.addEventListener('DOMContentLoaded', startLoop);
+</script>
+</body>
+</html>
