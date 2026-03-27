@@ -1,0 +1,40 @@
+{
+  "version": 2,
+  "routes": [
+    {
+      "src": "/api/alpha-vantage",
+      "dest": "/api/alpha-vantage.py"
+    },
+    {
+      "src": "/api/options-flow",
+      "dest": "/api/options-flow.py"
+    },
+    {
+      "src": "/api/market-data",
+      "dest": "/api/market-data.py"
+    },
+    {
+      "src": "/api/public-config",
+      "dest": "/api/public-config.py"
+    },
+    {
+      "src": "/crypto-bot",
+      "dest": "/crypto-bot.html"
+    },
+    {
+      "src": "/options-bot",
+      "dest": "/options-bot.html"
+    },
+    {
+      "src": "/$",
+      "dest": "/landing.html"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}

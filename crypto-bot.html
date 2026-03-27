@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crypto Bot — OptionRiders</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #030508; color: #fff; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { text-decoration: none; color: inherit; }
+
+/* NAV */
+nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(3,5,8,.9); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,.06); height: 56px; display: flex; align-items: center; }
+.nav-inner { max-width: 1400px; margin: 0 auto; padding: 0 24px; width: 100%; display: flex; align-items: center; justify-content: space-between; }
+.nav-logo { font-weight: 800; font-size: 16px; letter-spacing: -.02em; color: #fff; display: flex; align-items: center; gap: 10px; }
+.nav-logo img { width: 32px; height: 32px; object-fit: contain; }
+.nav-links { display: flex; gap: 6px; align-items: center; }
+.nav-links a { font-size: 13px; color: rgba(255,255,255,.4); padding: 6px 12px; border-radius: 8px; transition: all .2s; }
+.nav-links a:hover { color: #fff; background: rgba(255,255,255,.06); }
+.nav-links a.active { color: #00e0ff; background: rgba(0,224,255,.08); }
+.nav-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-family: 'JetBrains Mono', monospace; background: rgba(0,224,255,.1); color: #00e0ff; padding: 3px 8px; border-radius: 20px; border: 1px solid rgba(0,224,255,.2); }
+.pulse { width: 6px; height: 6px; background: #00e0ff; border-radius: 50%; animation: pulse-dot 1.5s ease infinite; }
+@keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+
+/* CONTENT */
+.page { display: flex; flex-direction: column; height: 100vh; padding-top: 56px; }
+.bot-frame { flex: 1; border: none; width: 100%; background: #0a0d12; }
+
+/* OFFLINE STATE */
+.offline-banner { display: none; background: rgba(255,100,50,.08); border-bottom: 1px solid rgba(255,100,50,.2); padding: 10px 24px; text-align: center; font-size: 13px; color: rgba(255,150,100,.8); }
+.offline-banner.show { display: block; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a class="nav-logo" href="landing.html">
+      <img src="assets/optionriders-horse-transparent.png" alt="OptionRiders">
+      OptionRiders
+    </a>
+    <div class="nav-links">
+      <a href="index.html">Dashboard</a>
+      <a href="crypto-bot.html" class="active">Crypto Bot</a>
+      <a href="options-bot.html">Options Bot</a>
+      <div class="nav-badge"><div class="pulse"></div> LIVE</div>
+    </div>
+  </div>
+</nav>
+
+<div class="offline-banner" id="offlineBanner">
+  Machine offline or bot not running — connect to TheMonster to view live data
+</div>
+
+<div class="page">
+  <iframe
+    class="bot-frame"
+    id="botFrame"
+    src="https://themonster.tail7741c4.ts.net/crypto/"
+    title="Crypto Bot Dashboard"
+    allow="fullscreen"
+  ></iframe>
+</div>
+
+<script>
+  // Show offline banner if iframe fails to load
+  const frame = document.getElementById('botFrame');
+  const banner = document.getElementById('offlineBanner');
+  const timeout = setTimeout(() => { banner.classList.add('show'); }, 8000);
+  frame.addEventListener('load', () => { clearTimeout(timeout); banner.classList.remove('show'); });
+</script>
+</body>
+</html>
