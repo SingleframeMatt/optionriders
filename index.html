@@ -457,37 +457,37 @@
   <script src="app.js"></script>
   <script>
     // Show bot nav buttons only for the admin account
+    // Uses AUTH_STATE directly (set by app.js) — more reliable than localStorage
     const ADMIN_EMAIL = 'thedirectmatt@gmail.com';
     const BOT_NAV_WRAPPER = document.getElementById('adminBotNavWrapper');
     const BOT_SHORTCUTS = document.getElementById('adminBotShortcuts');
-    function refreshBotNav() {
+    function isAdmin() {
+      // Primary: check live AUTH_STATE from app.js
+      if (window.AUTH_STATE && window.AUTH_STATE.user && window.AUTH_STATE.user.email) {
+        return window.AUTH_STATE.user.email === ADMIN_EMAIL;
+      }
+      // Fallback: check localStorage
       try {
         const stored = localStorage.getItem('optionriders-google-user-v1');
         const user = stored ? JSON.parse(stored) : null;
-        const isAdmin = user && user.email === ADMIN_EMAIL;
-        BOT_NAV_WRAPPER.style.display = isAdmin ? 'flex' : 'none';
-        BOT_SHORTCUTS.style.display = isAdmin ? 'flex' : 'none';
-      } catch(e) {
-        BOT_NAV_WRAPPER.style.display = 'none';
-        BOT_SHORTCUTS.style.display = 'none';
-      }
+        return user && user.email === ADMIN_EMAIL;
+      } catch(e) { return false; }
+    }
+    function refreshBotNav() {
+      const admin = isAdmin();
+      BOT_NAV_WRAPPER.style.display = admin ? 'flex' : 'none';
+      BOT_SHORTCUTS.style.display = admin ? 'flex' : 'none';
     }
     // Handle ?return= redirect after sign-in
     const returnUrl = new URLSearchParams(window.location.search).get('return');
     function checkReturnRedirect() {
       if (!returnUrl) return;
-      try {
-        const stored = localStorage.getItem('optionriders-google-user-v1');
-        const user = stored ? JSON.parse(stored) : null;
-        if (user && user.email === ADMIN_EMAIL) {
-          window.location.href = returnUrl;
-        }
-      } catch(e) {}
+      if (isAdmin()) window.location.href = returnUrl;
     }
 
     refreshBotNav();
     checkReturnRedirect();
-    // Re-check when auth state changes
+    // Re-check when auth state changes (DOM mutation = renderAuthControls fired)
     const authEl = document.getElementById('authControls');
     if (authEl) {
       new MutationObserver(function() { refreshBotNav(); checkReturnRedirect(); })
@@ -495,12 +495,12 @@
     }
     // Also re-check on storage events (sign-in from another tab)
     window.addEventListener('storage', function() { refreshBotNav(); checkReturnRedirect(); });
-    // Poll for 30 seconds after load to catch async sign-in
+    // Poll every 500ms for 60s — catches async Google auth callback
     let pollCount = 0;
     const poll = setInterval(function() {
       refreshBotNav();
       checkReturnRedirect();
-      if (++pollCount >= 60) clearInterval(poll);
+      if (++pollCount >= 120) clearInterval(poll);
     }, 500);
   </script>
 
