@@ -465,13 +465,19 @@
       } catch(e) { BOT_NAV.style.display = 'none'; }
     }
     refreshBotNav();
-    // Re-check when auth state changes (sign in / sign out updates authControls)
+    // Re-check when auth state changes
     const authEl = document.getElementById('authControls');
     if (authEl) {
-      new MutationObserver(refreshBotNav).observe(authEl, { childList: true, subtree: true });
+      new MutationObserver(refreshBotNav).observe(authEl, { childList: true, subtree: true, characterData: true, attributes: true });
     }
     // Also re-check on storage events (sign-in from another tab)
     window.addEventListener('storage', refreshBotNav);
+    // Poll for 10 seconds after load to catch async sign-in
+    let pollCount = 0;
+    const poll = setInterval(function() {
+      refreshBotNav();
+      if (++pollCount >= 20) clearInterval(poll);
+    }, 500);
   </script>
 
 </body>
