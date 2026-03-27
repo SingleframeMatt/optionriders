@@ -32,6 +32,14 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba
 /* OFFLINE STATE */
 .offline-banner { display: none; background: rgba(255,100,50,.08); border-bottom: 1px solid rgba(255,100,50,.2); padding: 10px 24px; text-align: center; font-size: 13px; color: rgba(255,150,100,.8); }
 .offline-banner.show { display: block; }
+
+/* AUTH GATE */
+.auth-gate { display: none; position: fixed; inset: 0; z-index: 200; background: #030508; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+.auth-gate.show { display: flex; }
+.auth-gate h2 { font-size: 20px; font-weight: 700; color: #fff; }
+.auth-gate p { font-size: 14px; color: rgba(255,255,255,.4); }
+.auth-gate a { font-size: 14px; color: #a78bfa; padding: 10px 24px; border: 1px solid rgba(167,139,250,.3); border-radius: 8px; transition: background .2s; }
+.auth-gate a:hover { background: rgba(167,139,250,.08); }
 </style>
 </head>
 <body>
@@ -51,11 +59,17 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba
   </div>
 </nav>
 
+<div class="auth-gate" id="authGate">
+  <h2>Access Restricted</h2>
+  <p>Sign in with your authorised account to view the bot dashboard.</p>
+  <a href="index.html">Go to Dashboard</a>
+</div>
+
 <div class="offline-banner" id="offlineBanner">
   Machine offline or TWS not running — connect to TheMonster to view live data
 </div>
 
-<div class="page">
+<div class="page" id="pageContent" style="display:none">
   <iframe
     class="bot-frame"
     id="botFrame"
@@ -66,18 +80,24 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba
 </div>
 
 <script>
-  // Auth guard — only accessible to admin account
   (function() {
     const ADMIN_EMAIL = 'thedirectmatt@gmail.com';
-    try {
-      const stored = localStorage.getItem('optionriders-google-user-v1');
-      const user = stored ? JSON.parse(stored) : null;
-      if (!user || user.email !== ADMIN_EMAIL) {
-        window.location.replace('index.html');
-      }
-    } catch(e) {
-      window.location.replace('index.html');
+    function checkAuth() {
+      try {
+        const stored = localStorage.getItem('optionriders-google-user-v1');
+        const user = stored ? JSON.parse(stored) : null;
+        if (user && user.email === ADMIN_EMAIL) {
+          document.getElementById('authGate').classList.remove('show');
+          document.getElementById('pageContent').style.display = 'flex';
+          return true;
+        }
+      } catch(e) {}
+      document.getElementById('authGate').classList.add('show');
+      document.getElementById('pageContent').style.display = 'none';
+      return false;
     }
+    checkAuth();
+    const interval = setInterval(() => { if (checkAuth()) clearInterval(interval); }, 500);
   })();
 
   const frame = document.getElementById('botFrame');
