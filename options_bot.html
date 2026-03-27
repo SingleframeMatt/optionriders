@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Option Riders — Options Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0d0f14;
+    --bg2:       #131720;
+    --bg3:       #1a1f2e;
+    --border:    rgba(255,255,255,.07);
+    --text:      #e2e8f0;
+    --text2:     #94a3b8;
+    --green:     #22c55e;
+    --green-dim: rgba(34,197,94,.12);
+    --red:       #ef4444;
+    --red-dim:   rgba(239,68,68,.12);
+    --amber:     #f59e0b;
+    --amber-dim: rgba(245,158,11,.12);
+    --cyan:      #06b6d4;
+    --cyan-dim:  rgba(6,182,212,.12);
+    --purple:    #a855f7;
+    --purple-dim:rgba(168,85,247,.12);
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  .page     { max-width: 1380px; margin: 0 auto; padding: 24px 20px 60px; }
+  .header   { display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; flex-wrap:wrap; gap:12px; }
+  .title    { font-family:var(--mono); font-size:1.15rem; font-weight:700; color:var(--cyan); display:flex; align-items:center; gap:10px; }
+  .badge    { font-size:.7rem; padding:2px 8px; border-radius:4px; border:1px solid; font-weight:600; letter-spacing:.06em; text-transform:uppercase; }
+  .badge-cyan   { color:var(--cyan);   border-color:var(--cyan);   background:var(--cyan-dim); }
+  .badge-amber  { color:var(--amber);  border-color:var(--amber);  background:var(--amber-dim); }
+  .badge-green  { color:var(--green);  border-color:var(--green);  background:var(--green-dim); }
+  .badge-red    { color:var(--red);    border-color:var(--red);    background:var(--red-dim); }
+  .badge-purple { color:var(--purple); border-color:var(--purple); background:var(--purple-dim); }
+
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:16px; }
+  .grid-4 { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:16px; }
+  @media (max-width:900px)  { .grid-3,.grid-4 { grid-template-columns:1fr 1fr; } }
+  @media (max-width:600px)  { .grid-2,.grid-3,.grid-4 { grid-template-columns:1fr; } }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card-title {
+    font-size:.72rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--text2); margin-bottom:14px; display:flex; align-items:center; gap:8px;
+  }
+  .card-title .dot {
+    width:6px; height:6px; border-radius:50%; background:var(--cyan);
+  }
+
+  /* ── Stat tiles ── */
+  .stat-value { font-family:var(--mono); font-size:1.6rem; font-weight:700; line-height:1; }
+  .stat-label { font-size:.72rem; color:var(--text2); margin-top:4px; }
+  .stat-value.green  { color:var(--green); }
+  .stat-value.red    { color:var(--red); }
+  .stat-value.amber  { color:var(--amber); }
+  .stat-value.cyan   { color:var(--cyan); }
+
+  /* ── Status pill ── */
+  .status-pill {
+    font-family:var(--mono); font-size:.7rem; font-weight:700;
+    letter-spacing:.1em; text-transform:uppercase;
+    border-radius:20px; padding:5px 16px; border:1px solid;
+    transition: all .3s;
+  }
+  .status-pill.running     { color:var(--green);  border-color:var(--green);  background:var(--green-dim); animation:pulse-g 2s ease-in-out infinite; }
+  .status-pill.connecting  { color:var(--amber);  border-color:var(--amber);  background:var(--amber-dim); }
+  .status-pill.stopped     { color:var(--text2);  border-color:#333;          background:rgba(255,255,255,.03); }
+  .status-pill.error       { color:var(--red);    border-color:var(--red);    background:var(--red-dim); }
+  .status-pill.halted      { color:var(--red);    border-color:var(--red);    background:var(--red-dim); }
+  .status-pill.unavailable { color:var(--text2);  border-color:#333;          background:rgba(255,255,255,.03); }
+  @keyframes pulse-g { 0%,100% { box-shadow:0 0 0 0 rgba(34,197,94,.3); } 50% { box-shadow:0 0 0 6px rgba(34,197,94,0); } }
+
+  /* ── Tables ── */
+  table   { width:100%; border-collapse:collapse; font-size:.84rem; }
+  th      { text-align:left; font-size:.7rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--text2); padding:6px 10px; border-bottom:1px solid var(--border); }
+  td      { padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.04); font-family:var(--mono); font-size:.82rem; vertical-align:middle; }
+  tr:last-child td { border-bottom:none; }
+  tr:hover td { background:rgba(255,255,255,.025); }
+  .no-data { color:var(--text2); font-size:.82rem; padding:16px 0; text-align:center; font-style:italic; }
+
+  .pnl-pos { color:var(--green); }
+  .pnl-neg { color:var(--red); }
+  .dir-long  { color:var(--green); font-weight:700; }
+  .dir-short { color:var(--red);   font-weight:700; }
+
+  /* ── Levels grid ── */
+  .levels-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; }
+  .level-chip  {
+    background:var(--bg3); border:1px solid var(--border); border-radius:8px;
+    padding:10px 12px; text-align:center;
+  }
+  .level-chip .lname { font-size:.68rem; color:var(--text2); text-transform:uppercase; letter-spacing:.07em; }
+  .level-chip .lval  { font-family:var(--mono); font-size:.95rem; font-weight:600; color:var(--text); margin-top:2px; }
+
+  /* ── Signal watch list ── */
+  .signal-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid rgba(255,255,255,.04); }
+  .signal-row:last-child { border-bottom:none; }
+  .signal-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .signal-dot.long  { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .signal-dot.short { background:var(--red);   box-shadow:0 0 6px var(--red); }
+  .signal-meta { font-size:.78rem; color:var(--text2); }
+  .signal-score { margin-left:auto; font-family:var(--mono); font-size:.78rem; }
+
+  /* ── Log ── */
+  .log-box {
+    background:var(--bg); border:1px solid var(--border); border-radius:8px;
+    max-height:280px; overflow-y:auto; padding:12px;
+    font-family:var(--mono); font-size:.78rem; line-height:1.6;
+  }
+  .log-line       { color:var(--text2); }
+  .log-line.entry { color:var(--green); }
+  .log-line.exit  { color:var(--cyan); }
+  .log-line.error { color:var(--red); }
+  .log-line.warn  { color:var(--amber); }
+  .log-time { color:#555; margin-right:8px; }
+
+  /* ── Confluence badge ── */
+  .conf-badge {
+    display:inline-block; font-family:var(--mono); font-size:.72rem; font-weight:700;
+    padding:2px 7px; border-radius:4px; line-height:1.4;
+  }
+  .conf-high { color:var(--green); background:var(--green-dim); }
+  .conf-med  { color:var(--amber); background:var(--amber-dim); }
+  .conf-low  { color:var(--red);   background:var(--red-dim); }
+
+  /* ── Watchlist panel ── */
+  .wl-grid {
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap:10px;
+  }
+  .wl-card {
+    background:var(--bg3); border:1px solid var(--border); border-radius:8px;
+    padding:12px 14px; position:relative;
+  }
+  .wl-card.active-scan  { border-color:var(--cyan);   box-shadow:0 0 0 1px var(--cyan-dim); }
+  .wl-card.status-primary { border-color:var(--cyan);  }
+  .wl-card.status-curated { border-color:rgba(168,85,247,.35); }
+  .wl-card.status-dynamic { border-color:rgba(34,197,94,.35);  }
+  .wl-card.status-excluded{ opacity:.5; }
+  .wl-sym {
+    font-family:var(--mono); font-size:.95rem; font-weight:700;
+    color:var(--text); display:flex; align-items:center; gap:6px; margin-bottom:6px;
+  }
+  .wl-scanning-dot {
+    width:7px; height:7px; border-radius:50%; background:var(--cyan);
+    box-shadow:0 0 5px var(--cyan); animation:pulse-g 1.5s ease-in-out infinite; flex-shrink:0;
+  }
+  .wl-price { font-family:var(--mono); font-size:.88rem; color:var(--text2); margin-bottom:6px; }
+  .wl-stats { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+  .wl-stat  { font-size:.7rem; }
+  .wl-stat .sk { color:var(--text2); }
+  .wl-stat .sv { font-family:var(--mono); color:var(--text); font-weight:600; }
+  .wl-score-bar {
+    margin-top:8px; height:4px; border-radius:2px;
+    background:rgba(255,255,255,.08);
+  }
+  .wl-score-fill { height:100%; border-radius:2px; transition:width .4s; }
+  .wl-status-badge {
+    position:absolute; top:10px; right:10px;
+    font-size:.6rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    padding:1px 6px; border-radius:3px;
+  }
+  .wl-status-primary { color:var(--cyan);   background:var(--cyan-dim); }
+  .wl-status-curated { color:var(--purple); background:var(--purple-dim); }
+  .wl-status-dynamic { color:var(--green);  background:var(--green-dim); }
+  .wl-status-excluded{ color:var(--text2);  background:rgba(255,255,255,.06); }
+  .wl-choppy-warn { color:var(--amber); font-size:.68rem; margin-top:4px; }
+  .wl-expand-info {
+    font-size:.75rem; color:var(--text2); margin-top:10px; padding:8px 12px;
+    background:var(--bg3); border-radius:6px; border:1px solid var(--border);
+  }
+  .wl-expand-info .highlight { color:var(--cyan); font-weight:600; }
+
+  /* ── Controls ── */
+  .btn {
+    font-family:var(--sans); font-size:.82rem; font-weight:600;
+    padding:7px 18px; border-radius:6px; border:1px solid; cursor:pointer;
+    transition:all .2s; letter-spacing:.02em;
+  }
+  .btn-start { color:var(--green); border-color:var(--green); background:var(--green-dim); }
+  .btn-start:hover { background:rgba(34,197,94,.25); }
+  .btn-stop  { color:var(--red); border-color:var(--red); background:var(--red-dim); }
+  .btn-stop:hover { background:rgba(239,68,68,.25); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+
+  .refresh-info { font-size:.72rem; color:var(--text2); }
+  a { color:var(--cyan); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── Header ── -->
+  <div class="header">
+    <div class="title">
+      <span>OPTION RIDERS</span>
+      <span class="badge badge-cyan">OPTIONS BOT</span>
+      <span class="badge badge-purple">S&amp;D BREAK+RETEST</span>
+      <span id="statusPill" class="status-pill stopped">Stopped</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span class="refresh-info">Auto-refresh: <span id="refreshCountdown">10s</span></span>
+      <button class="btn btn-start" id="btnStart" onclick="controlBot('start')">Start Bot</button>
+      <button class="btn btn-stop"  id="btnStop"  onclick="controlBot('stop')" disabled>Stop Bot</button>
+    </div>
+  </div>
+
+  <!-- ── Account / Daily P&L strip ── -->
+  <div class="grid-4" style="margin-bottom:16px;">
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Daily P&amp;L</div>
+      <div id="dailyPnl" class="stat-value cyan">$0.00</div>
+      <div class="stat-label">Today's realised P&amp;L</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Win / Loss</div>
+      <div id="winLoss" class="stat-value">0 / 0</div>
+      <div class="stat-label">Trades today</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Open Positions</div>
+      <div id="openCount" class="stat-value">0</div>
+      <div class="stat-label">of <span id="maxPos">2</span> max</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Account Balance</div>
+      <div id="netLiq" class="stat-value cyan">—</div>
+      <div class="stat-label">Net Liquidation (paper)</div>
+    </div>
+  </div>
+
+  <!-- ── Symbols: prices + VWAP ── -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-title"><span class="dot"></span>Tracked Symbols</div>
+    <div id="symbolsRow" style="display:flex;gap:20px;flex-wrap:wrap;">
+      <span class="no-data">Waiting for data…</span>
+    </div>
+  </div>
+
+  <!-- ── Watchlist Panel ── -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-title" style="justify-content:space-between;">
+      <span style="display:flex;align-items:center;gap:8px;"><span class="dot"></span>Dynamic Watchlist</span>
+      <span id="wlUpdated" style="font-size:.68rem;color:var(--text2);font-weight:400;text-transform:none;letter-spacing:0;font-family:var(--mono)"></span>
+    </div>
+    <div id="wlExpandInfo" class="wl-expand-info" style="display:none;margin-bottom:12px;"></div>
+    <div id="wlGrid" class="wl-grid"><span class="no-data">Building watchlist…</span></div>
+  </div>
+
+  <!-- ── Key Levels ── -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-title"><span class="dot"></span>Key Levels Being Tracked</div>
+    <div id="levelsArea"><span class="no-data">Waiting for data…</span></div>
+  </div>
+
+  <!-- ── Open Positions + Active Signals side-by-side ── -->
+  <div class="grid-2" style="margin-bottom:16px;">
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Open Positions</div>
+      <table id="posTable">
+        <thead><tr>
+          <th>Symbol</th><th>Dir</th><th>Strike</th><th>Exp</th>
+          <th>Qty</th><th>Entry</th><th>SL</th><th>TP</th><th>Live P&amp;L</th>
+        </tr></thead>
+        <tbody id="posBody"><tr><td colspan="9" class="no-data">No open positions</td></tr></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Active Signals Watched</div>
+      <div id="signalsList"><span class="no-data">No signals detected yet</span></div>
+    </div>
+  </div>
+
+  <!-- ── Trade Log ── -->
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-title"><span class="dot"></span>Today's Trade Log</div>
+    <table id="tradeTable">
+      <thead><tr>
+        <th>Time</th><th>Symbol</th><th>Dir</th><th>Right</th>
+        <th>Strike</th><th>Exp</th><th>Qty</th>
+        <th>Entry</th><th>Exit</th><th>Reason</th><th>P&amp;L</th>
+      </tr></thead>
+      <tbody id="tradeBody"><tr><td colspan="11" class="no-data">No closed trades today</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- ── Event Log ── -->
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>Bot Event Log</div>
+    <div class="log-box" id="logBox"><span class="log-line">Waiting…</span></div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+// ── BASE URL (works both locally and via proxy path prefix) ───────────────────
+const BASE_URL = location.pathname.replace(/\/[^/]*$/, '/');
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let _data     = null;
+let _countdown = 10;
+let _intervalId = null;
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function fetchState() {
+  try {
+    const r = await fetch(BASE_URL + 'api/options');
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) {
+    console.warn('fetchState failed:', e);
+    return null;
+  }
+}
+
+async function controlBot(action) {
+  try {
+    const r = await fetch(BASE_URL + `api/options/${action}`, { method: 'POST' });
+    const j = await r.json();
+    console.log('controlBot', action, j);
+    await refresh();
+  } catch (e) {
+    console.warn('controlBot failed:', e);
+  }
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function fmt$(n) {
+  if (n == null || isNaN(n)) return '—';
+  const s = Math.abs(n).toFixed(2);
+  return (n >= 0 ? '+$' : '-$') + s.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+function fmtN(n, dp=2) {
+  if (n == null || isNaN(n)) return '—';
+  return parseFloat(n).toFixed(dp);
+}
+function pnlCls(n) { return n > 0 ? 'pnl-pos' : n < 0 ? 'pnl-neg' : ''; }
+function confCls(s) { return s >= 6 ? 'conf-high' : s >= 4 ? 'conf-med' : 'conf-low'; }
+
+function render(d) {
+  if (!d) return;
+  _data = d;
+
+  // ── Status pill
+  const pill = document.getElementById('statusPill');
+  const status = d.halted ? 'halted' : (d.status || 'stopped');
+  pill.className = `status-pill ${status}`;
+  pill.textContent = d.halted ? 'HALTED — Loss Limit' : (status.charAt(0).toUpperCase() + status.slice(1));
+
+  // ── Buttons
+  const running = ['running', 'connecting'].includes(d.status) && !d.halted;
+  document.getElementById('btnStart').disabled = running;
+  document.getElementById('btnStop').disabled  = !running;
+
+  // ── Daily stats
+  const pnl = d.daily_pnl || 0;
+  const pnlEl = document.getElementById('dailyPnl');
+  pnlEl.textContent = fmt$(pnl);
+  pnlEl.className   = 'stat-value ' + (pnl > 0 ? 'green' : pnl < 0 ? 'red' : 'cyan');
+
+  document.getElementById('winLoss').textContent =
+    `${d.daily_wins || 0} / ${d.daily_losses || 0}`;
+  document.getElementById('openCount').textContent =
+    Object.keys(d.positions || {}).length;
+
+  const acct = d.account || {};
+  const nlEl = document.getElementById('netLiq');
+  if (acct.NetLiquidation != null) {
+    nlEl.textContent = '$' + parseFloat(acct.NetLiquidation).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+
+  // ── Symbols row
+  const syms = d.symbols || [];
+  const prices = d.last_price || {};
+  const vwaps  = d.vwap || {};
+  const sigStates = d.signal_states || {};
+  const symRow = document.getElementById('symbolsRow');
+  if (syms.length) {
+    symRow.innerHTML = syms.map(s => {
+      const p = prices[s];
+      const v = vwaps[s];
+      const ss = sigStates[s] || {};
+      const brk = ss.break_dir ? `<span class="badge ${ss.break_dir === 'long' ? 'badge-green' : 'badge-red'}" style="font-size:.65rem">${ss.break_dir.toUpperCase()} BREAK</span>` : '';
+      return `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:160px;">
+        <div style="font-family:var(--mono);font-size:.85rem;font-weight:700;color:var(--cyan)">${s} ${brk}</div>
+        <div style="font-family:var(--mono);font-size:1.1rem;font-weight:700;margin-top:4px">${p != null ? '$'+fmtN(p,2) : '—'}</div>
+        <div style="font-size:.72rem;color:var(--text2);margin-top:2px">VWAP&nbsp;<span style="color:var(--amber)">${v != null ? '$'+fmtN(v,2) : '—'}</span></div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Watchlist panel
+  const wl = d.watchlist || [];
+  const wlGrid = document.getElementById('wlGrid');
+  const wlUpdated = document.getElementById('wlUpdated');
+  const wlExpandInfo = document.getElementById('wlExpandInfo');
+
+  if (d.watchlist_updated) {
+    const ts = String(d.watchlist_updated).substring(11,19);
+    wlUpdated.textContent = 'updated ' + ts;
+  }
+
+  // Show expansion info banner
+  const fhe = d.first_hour_elapsed || false;
+  const primaryFired = d.primary_signal_fired || false;
+  if (fhe && !primaryFired) {
+    wlExpandInfo.style.display = '';
+    wlExpandInfo.innerHTML =
+      'No signal fired on <span class="highlight">SPY / QQQ</span> in the first hour. ' +
+      'Scan expanded to <span class="highlight">curated + trending</span> symbols.';
+  } else if (!fhe) {
+    wlExpandInfo.style.display = '';
+    wlExpandInfo.innerHTML =
+      'Scanning <span class="highlight">SPY + QQQ</span> (primary). ' +
+      'Curated & dynamic symbols will activate if no signal fires within the first hour.';
+  } else {
+    wlExpandInfo.style.display = 'none';
+  }
+
+  if (wl.length === 0) {
+    wlGrid.innerHTML = '<span class="no-data">Building watchlist…</span>';
+  } else {
+    wlGrid.innerHTML = wl.map(e => {
+      const scanning = e.active_scan ? '<span class="wl-scanning-dot"></span>' : '';
+      const statusCls = 'status-' + (e.status || 'excluded');
+      const activeCls = e.active_scan ? ' active-scan' : '';
+      const score = e.trend_score || 0;
+      const barPct = Math.min(score, 100);
+      const barColor = score >= 60 ? 'var(--green)' : score >= 35 ? 'var(--amber)' : 'var(--red)';
+      const chopWarn = e.choppy ? '<div class="wl-choppy-warn">choppy / sideways</div>' : '';
+      const priceStr = e.price != null ? '$' + fmtN(e.price, 2) : '—';
+      const adxStr   = e.adx != null  ? fmtN(e.adx, 1)  : '—';
+      const rvolStr  = e.rel_vol != null ? fmtN(e.rel_vol, 2) + 'x' : '—';
+      const atrStr   = e.atr_pct != null ? fmtN(e.atr_pct, 2) + '%' : '—';
+      const statusLabel = (e.status || 'excluded');
+      const oiOk = e.oi_ok ? '<span style="color:var(--green)">OI ok</span>' : '<span style="color:var(--red)">low OI</span>';
+      return `<div class="wl-card ${statusCls}${activeCls}">
+        <span class="wl-status-badge wl-status-${statusLabel}">${statusLabel}</span>
+        <div class="wl-sym">${scanning}${escHtml(e.symbol)}</div>
+        <div class="wl-price">${priceStr}</div>
+        <div class="wl-stats">
+          <div class="wl-stat"><span class="sk">ADX </span><span class="sv">${adxStr}</span></div>
+          <div class="wl-stat"><span class="sk">RVol </span><span class="sv">${rvolStr}</span></div>
+          <div class="wl-stat"><span class="sk">ATR </span><span class="sv">${atrStr}</span></div>
+          <div class="wl-stat">${oiOk}</div>
+        </div>
+        ${chopWarn}
+        <div class="wl-score-bar"><div class="wl-score-fill" style="width:${barPct}%;background:${barColor}"></div></div>
+        <div style="font-size:.65rem;color:var(--text2);margin-top:3px;font-family:var(--mono)">trend score ${fmtN(score,1)}/100</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Key levels
+  const levels = d.levels || {};
+  const levArea = document.getElementById('levelsArea');
+  const allLevs = [];
+  for (const [sym, lvMap] of Object.entries(levels)) {
+    for (const [name, val] of Object.entries(lvMap)) {
+      allLevs.push({ sym, name, val });
+    }
+  }
+  if (allLevs.length) {
+    levArea.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;">` +
+      allLevs.map(({sym, name, val}) =>
+        `<div class="level-chip">
+          <div class="lname">${sym} ${name}</div>
+          <div class="lval">$${fmtN(val,2)}</div>
+        </div>`
+      ).join('') + `</div>`;
+  } else {
+    levArea.innerHTML = `<span class="no-data">No levels yet</span>`;
+  }
+
+  // ── Open positions
+  const pos = d.positions || {};
+  const posBody = document.getElementById('posBody');
+  const posEntries = Object.entries(pos);
+  if (posEntries.length === 0) {
+    posBody.innerHTML = `<tr><td colspan="9" class="no-data">No open positions</td></tr>`;
+  } else {
+    posBody.innerHTML = posEntries.map(([sym, p]) => {
+      const livePnl = p.pnl || 0;
+      return `<tr>
+        <td>${sym}</td>
+        <td class="dir-${p.direction}">${p.direction.toUpperCase()}</td>
+        <td>${p.right} ${fmtN(p.strike,0)}</td>
+        <td>${p.expiry || '—'}</td>
+        <td>${p.qty}</td>
+        <td>$${fmtN(p.entry_price,2)}</td>
+        <td style="color:var(--red)">$${fmtN(p.stop_price,2)}</td>
+        <td style="color:var(--green)">$${fmtN(p.tp_price,2)}</td>
+        <td class="${pnlCls(livePnl)}">${fmt$(livePnl)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── Active signals watch list
+  const sigs = d.signals || [];
+  const sigList = document.getElementById('signalsList');
+  if (sigs.length === 0) {
+    sigList.innerHTML = `<span class="no-data">No signals detected yet</span>`;
+  } else {
+    sigList.innerHTML = sigs.slice(0, 10).map(s => {
+      const ts = s.timestamp ? s.timestamp.substring(11,19) : '—';
+      const score = s.confluence || 0;
+      return `<div class="signal-row">
+        <div class="signal-dot ${s.direction}"></div>
+        <div>
+          <div style="font-weight:600">${s.symbol} <span class="dir-${s.direction}">${s.direction.toUpperCase()}</span></div>
+          <div class="signal-meta">${s.level_name}@${fmtN(s.level_price,2)} | RSI ${fmtN(s.rsi,1)} | ${ts}</div>
+        </div>
+        <span class="conf-badge ${confCls(score)} signal-score">${score}/7</span>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Today's trade log
+  const trades = (d.today_trades || []).slice().reverse();
+  const tradeBody = document.getElementById('tradeBody');
+  if (trades.length === 0) {
+    tradeBody.innerHTML = `<tr><td colspan="11" class="no-data">No closed trades today</td></tr>`;
+  } else {
+    tradeBody.innerHTML = trades.map(t => {
+      const et = (t.exit_time || '').substring(11, 19);
+      const tPnl = t.pnl || 0;
+      return `<tr>
+        <td>${et}</td>
+        <td>${t.symbol}</td>
+        <td class="dir-${t.direction}">${t.direction.toUpperCase()}</td>
+        <td>${t.right}</td>
+        <td>${fmtN(t.strike,0)}</td>
+        <td>${t.expiry || '—'}</td>
+        <td>${t.qty}</td>
+        <td>$${fmtN(t.entry_price,2)}</td>
+        <td>$${fmtN(t.exit_price,2)}</td>
+        <td>${t.exit_reason || '—'}</td>
+        <td class="${pnlCls(tPnl)}">${fmt$(tPnl)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // ── Event log
+  const logEntries = (d.log || []).slice().reverse();
+  const logBox = document.getElementById('logBox');
+  if (logEntries.length === 0) {
+    logBox.innerHTML = `<span class="log-line">No events yet</span>`;
+  } else {
+    logBox.innerHTML = logEntries.map(e =>
+      `<div class="log-line ${e.kind || ''}"><span class="log-time">${e.time}</span>${escHtml(e.msg)}</div>`
+    ).join('');
+  }
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+// ── Refresh loop ──────────────────────────────────────────────────────────────
+async function refresh() {
+  const d = await fetchState();
+  if (d) render(d);
+  _countdown = 10;
+}
+
+function startRefreshLoop() {
+  refresh();
+  setInterval(() => {
+    _countdown--;
+    document.getElementById('refreshCountdown').textContent = _countdown + 's';
+    if (_countdown <= 0) {
+      _countdown = 10;
+      refresh();
+    }
+  }, 1000);
+}
+
+document.addEventListener('DOMContentLoaded', startRefreshLoop);
+</script>
+</body>
+</html>

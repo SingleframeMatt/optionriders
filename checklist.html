@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Option Riders — Pre-Trade Checklist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  /* ── CHECKLIST PAGE OVERRIDES ── */
+  body { overflow-y: auto !important; height: auto !important; }
+
+  .cl-page {
+    padding: 24px 20px 80px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  .cl-page-title {
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--amber);
+    letter-spacing: .04em;
+    margin-bottom: 4px;
+  }
+  .cl-page-sub {
+    font-size: .8rem;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+  }
+
+  /* ── TWO-COLUMN LAYOUT ── */
+  .cl-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 32px;
+  }
+  @media (max-width: 700px) {
+    .cl-layout { grid-template-columns: 1fr; }
+  }
+
+  /* ── CARDS ── */
+  .cl-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+  }
+  .cl-card-title {
+    font-family: var(--font-mono);
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cl-card-title .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    flex-shrink: 0;
+  }
+  .cl-card-title .dot.green { background: var(--green); }
+
+  /* ── CHECKLIST ITEMS ── */
+  .cl-items { display: flex; flex-direction: column; gap: 10px; }
+
+  .cl-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    padding: 11px 14px;
+    transition: border-color .2s, background .2s;
+  }
+  .cl-item.answered-yes {
+    border-color: rgba(0,255,136,.25);
+    background: rgba(0,255,136,.04);
+  }
+  .cl-item.answered-no {
+    border-color: rgba(255,68,68,.25);
+    background: rgba(255,68,68,.04);
+  }
+
+  .cl-item-text {
+    flex: 1;
+    font-size: .83rem;
+    color: var(--text-primary);
+    line-height: 1.35;
+  }
+
+  .cl-btn-group {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .cl-btn {
+    font-family: var(--font-mono);
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    padding: 5px 12px;
+    border-radius: 5px;
+    border: 1px solid;
+    cursor: pointer;
+    background: transparent;
+    transition: all .15s;
+  }
+  .cl-btn.yes {
+    color: #555;
+    border-color: #333;
+  }
+  .cl-btn.yes.active {
+    color: var(--green);
+    border-color: var(--green);
+    background: var(--green-dim);
+    box-shadow: 0 0 8px var(--green-glow);
+  }
+  .cl-btn.no {
+    color: #555;
+    border-color: #333;
+  }
+  .cl-btn.no.active {
+    color: var(--red);
+    border-color: var(--red);
+    background: var(--red-dim);
+  }
+
+  /* ── WARNING BANNER ── */
+  .cl-warning {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,68,68,.08);
+    border: 1px solid rgba(255,68,68,.3);
+    border-radius: var(--radius-md);
+    padding: 10px 14px;
+    margin-top: 14px;
+    font-size: .82rem;
+    color: var(--red);
+    font-weight: 600;
+  }
+  .cl-warning.visible { display: flex; }
+  .cl-warning-icon { font-size: 1rem; }
+
+  /* ── CHECKLIST PROGRESS ── */
+  .cl-progress {
+    margin-top: 14px;
+    font-size: .75rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .cl-progress-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .cl-progress-fill {
+    height: 100%;
+    background: var(--amber);
+    border-radius: 2px;
+    transition: width .3s, background .3s;
+    width: 0%;
+  }
+  .cl-progress-fill.done { background: var(--green); }
+
+  /* ── FORM ── */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  @media (max-width: 500px) {
+    .form-grid { grid-template-columns: 1fr; }
+  }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group.full { grid-column: 1 / -1; }
+  .form-label {
+    font-size: .7rem;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .form-input, .form-select, .form-textarea {
+    font-family: var(--font-sans);
+    font-size: .85rem;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 9px 12px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .form-input:focus, .form-select:focus, .form-textarea:focus {
+    border-color: rgba(0,212,255,.4);
+  }
+  .form-textarea { resize: vertical; min-height: 64px; line-height: 1.5; }
+  .form-select option { background: #0a0d18; }
+
+  /* direction toggle */
+  .dir-toggle {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .dir-toggle-btn {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    padding: 9px 0;
+    border: none;
+    background: transparent;
+    color: #555;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .dir-toggle-btn.call.active { background: var(--green-dim); color: var(--green); }
+  .dir-toggle-btn.put.active  { background: var(--red-dim);   color: var(--red);   }
+
+  /* ticker quick-select */
+  .ticker-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .ticker-chip {
+    font-family: var(--font-mono);
+    font-size: .72rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .ticker-chip.active {
+    border-color: var(--cyan);
+    color: var(--cyan);
+    background: var(--cyan-dim);
+  }
+
+  /* rules badge */
+  .rules-badge {
+    font-family: var(--font-mono);
+    font-size: .8rem;
+    font-weight: 700;
+    padding: 9px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+  }
+  .rules-badge.yes { color: var(--green); border-color: rgba(0,255,136,.3); background: var(--green-dim); }
+  .rules-badge.no  { color: var(--red);   border-color: rgba(255,68,68,.3);  background: var(--red-dim); }
+
+  /* log button */
+  .log-btn {
+    width: 100%;
+    margin-top: 18px;
+    padding: 13px;
+    font-family: var(--font-mono);
+    font-size: .9rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .log-btn:enabled {
+    background: var(--green);
+    color: #000;
+    box-shadow: 0 0 20px var(--green-glow);
+  }
+  .log-btn:enabled:hover { background: #00e07a; transform: translateY(-1px); }
+  .log-btn:disabled {
+    background: #1a1d26;
+    color: #444;
+    cursor: not-allowed;
+    border: 1px solid #2a2d36;
+  }
+
+  /* reset button */
+  .reset-btn {
+    width: 100%;
+    margin-top: 8px;
+    padding: 9px;
+    font-family: var(--font-mono);
+    font-size: .75rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-secondary);
+    transition: all .2s;
+  }
+  .reset-btn:hover { border-color: rgba(255,255,255,.2); color: var(--text-primary); }
+
+  /* ── SUCCESS TOAST ── */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    background: var(--bg-card);
+    border: 1px solid var(--green);
+    color: var(--green);
+    font-family: var(--font-mono);
+    font-size: .8rem;
+    font-weight: 700;
+    padding: 12px 20px;
+    border-radius: var(--radius-md);
+    box-shadow: 0 0 20px var(--green-glow);
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all .3s ease;
+    z-index: 999;
+    pointer-events: none;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* ── STATS BAR ── */
+  .stats-bar {
+    display: flex;
+    gap: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+  .stat-cell {
+    flex: 1;
+    padding: 14px 16px;
+    border-right: 1px solid var(--border);
+    text-align: center;
+  }
+  .stat-cell:last-child { border-right: none; }
+  .stat-label {
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+  .stat-value {
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-bright);
+  }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red   { color: var(--red); }
+  .stat-value.amber { color: var(--amber); }
+  .stat-value.cyan  { color: var(--cyan); }
+
+  /* ── TRADE TABLE ── */
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .78rem;
+    min-width: 900px;
+  }
+  thead tr {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    font-family: var(--font-mono);
+    font-size: .65rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    padding: 10px 12px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: var(--bg-row-alt); }
+
+  .tag-call { color: var(--green); font-family: var(--font-mono); font-weight: 700; }
+  .tag-put  { color: var(--red);   font-family: var(--font-mono); font-weight: 700; }
+  .tag-y    { color: var(--green); font-weight: 700; }
+  .tag-n    { color: var(--red);   font-weight: 700; }
+  .tag-open   { color: var(--amber); font-size: .7rem; font-weight: 700; font-family: var(--font-mono); }
+  .tag-closed { color: #555;         font-size: .7rem; font-weight: 700; font-family: var(--font-mono); }
+
+  .pnl-input {
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    width: 80px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: 4px;
+    padding: 4px 7px;
+    outline: none;
+  }
+  .pnl-input:focus { border-color: rgba(0,212,255,.4); }
+  .pnl-positive { color: var(--green); font-family: var(--font-mono); font-weight: 700; }
+  .pnl-negative { color: var(--red);   font-family: var(--font-mono); font-weight: 700; }
+
+  .status-toggle {
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 4px;
+    border: 1px solid;
+    cursor: pointer;
+    background: transparent;
+    transition: all .15s;
+  }
+  .status-toggle.open   { color: var(--amber); border-color: rgba(255,170,0,.4); }
+  .status-toggle.closed { color: #555; border-color: #333; }
+  .status-toggle:hover  { opacity: .75; }
+
+  .del-btn {
+    font-family: var(--font-mono);
+    font-size: .68rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,68,68,.3);
+    color: rgba(255,68,68,.5);
+    background: transparent;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .del-btn:hover { color: var(--red); border-color: var(--red); }
+
+  .export-btn {
+    font-family: var(--font-mono);
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    padding: 8px 18px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .export-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .section-title {
+    font-family: var(--font-mono);
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); flex-shrink: 0; }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+    font-size: .82rem;
+  }
+  .empty-state .big { font-size: 2rem; margin-bottom: 8px; opacity: .4; }
+
+  /* notes in table */
+  td.notes-cell {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-secondary);
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header" id="header">
+  <div class="header-left">
+    <a class="logo" href="landing.html" aria-label="Go to landing page">
+      <img class="logo-image" src="assets/optionriders-horse-transparent.png" alt="Option Riders">
+      <div class="logo-copy">
+        <span class="logo-title">OptionRiders</span>
+        <span class="logo-tagline">Trade. Ride. Profit.</span>
+      </div>
+    </a>
+  </div>
+  <div class="header-center">
+    <nav style="display:flex;gap:8px;">
+      <a href="index.html"     style="font-size:.82rem;color:#666;text-decoration:none;padding:6px 12px;border-radius:6px;transition:color .2s;" onmouseover="this.style.color='#aaa'" onmouseout="this.style.color='#666'">Dashboard</a>
+      <a href="bot.html"       style="font-size:.82rem;color:#666;text-decoration:none;padding:6px 12px;border-radius:6px;transition:color .2s;" onmouseover="this.style.color='#aaa'" onmouseout="this.style.color='#666'">BTC Bot</a>
+      <a href="checklist.html" style="font-size:.82rem;color:var(--amber);text-decoration:none;padding:6px 12px;border-radius:6px;background:var(--amber-dim);border:1px solid rgba(255,170,0,.2);">Checklist</a>
+    </nav>
+  </div>
+  <div class="header-right">
+    <span id="checklistBadge" style="font-family:var(--font-mono);font-size:.7rem;font-weight:700;color:#555;">0 / 6 checks</span>
+  </div>
+</header>
+
+<div class="cl-page">
+
+  <div class="cl-page-title">Pre-Trade Checklist</div>
+  <div class="cl-page-sub">Answer every question before logging a trade. No shortcuts.</div>
+
+  <!-- Two-column: checklist + entry form -->
+  <div class="cl-layout">
+
+    <!-- LEFT: Checklist -->
+    <div class="cl-card">
+      <div class="cl-card-title"><span class="dot"></span>Trade Rules</div>
+
+      <div class="cl-items" id="checklistItems">
+
+        <div class="cl-item" data-index="0">
+          <span class="cl-item-text">Has the level broken <em>and</em> retested?</span>
+          <div class="cl-btn-group">
+            <button class="cl-btn yes" onclick="setAnswer(0,'yes',this)">YES</button>
+            <button class="cl-btn no"  onclick="setAnswer(0,'no',this)">NO</button>
+          </div>
+        </div>
+
+        <div class="cl-item" data-index="1">
+          <span class="cl-item-text">Is my indicator confirming direction?</span>
+          <div class="cl-btn-group">
+            <button class="cl-btn yes" onclick="setAnswer(1,'yes',this)">YES</button>
+            <button class="cl-btn no"  onclick="setAnswer(1,'no',this)">NO</button>
+          </div>
+        </div>
+
+        <div class="cl-item" data-index="2">
+          <span class="cl-item-text">Did I wait for confirmation (not chasing)?</span>
+          <div class="cl-btn-group">
+            <button class="cl-btn yes" onclick="setAnswer(2,'yes',this)">YES</button>
+            <button class="cl-btn no"  onclick="setAnswer(2,'no',this)">NO</button>
+          </div>
+        </div>
+
+        <div class="cl-item" data-index="3">
+          <span class="cl-item-text">Is IV rank reasonable? (not buying expensive premium)</span>
+          <div class="cl-btn-group">
+            <button class="cl-btn yes" onclick="setAnswer(3,'yes',this)">YES</button>
+            <button class="cl-btn no"  onclick="setAnswer(3,'no',this)">NO</button>
+          </div>
+        </div>
+
+        <div class="cl-item" data-index="4">
+          <span class="cl-item-text">Do I know my stop?</span>
+          <div class="cl-btn-group">
+            <button class="cl-btn yes" onclick="setAnswer(4,'yes',this)">YES</button>
+            <button class="cl-btn no"  onclick="setAnswer(4,'no',this)">NO</button>
+          </div>
+        </div>
+
+        <div class="cl-item" data-index="5">
+          <span class="cl-item-text">Is my size within my daily risk limit?</span>
+          <div class="cl-btn-group">
+            <button class="cl-btn yes" onclick="setAnswer(5,'yes',this)">YES</button>
+            <button class="cl-btn no"  onclick="setAnswer(5,'no',this)">NO</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Warning -->
+      <div class="cl-warning" id="clWarning">
+        <span class="cl-warning-icon">&#9888;</span>
+        <span>Not yet — wait for the setup.</span>
+      </div>
+
+      <!-- Progress -->
+      <div class="cl-progress">
+        <span id="progressLabel">0 / 6 answered</span>
+        <div class="cl-progress-bar">
+          <div class="cl-progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Entry Form -->
+    <div class="cl-card">
+      <div class="cl-card-title"><span class="dot green"></span>Trade Entry</div>
+
+      <div class="form-grid">
+
+        <!-- Ticker -->
+        <div class="form-group full">
+          <label class="form-label">Ticker</label>
+          <div class="ticker-chips" id="tickerChips">
+            <button class="ticker-chip active" data-ticker="SPY"  onclick="selectTicker('SPY',this)">SPY</button>
+            <button class="ticker-chip"        data-ticker="QQQ"  onclick="selectTicker('QQQ',this)">QQQ</button>
+            <button class="ticker-chip"        data-ticker="SPX"  onclick="selectTicker('SPX',this)">SPX</button>
+            <button class="ticker-chip"        data-ticker=""     onclick="selectTicker('',this)" id="customChip">Custom</button>
+          </div>
+          <input class="form-input" id="tickerInput" type="text" value="SPY" placeholder="e.g. NVDA" autocomplete="off" oninput="onTickerCustomInput()">
+        </div>
+
+        <!-- Direction -->
+        <div class="form-group">
+          <label class="form-label">Direction</label>
+          <div class="dir-toggle">
+            <button class="dir-toggle-btn call active" id="btnCall" onclick="setDirection('CALL')">CALL</button>
+            <button class="dir-toggle-btn put"         id="btnPut"  onclick="setDirection('PUT')">PUT</button>
+          </div>
+        </div>
+
+        <!-- Expiry -->
+        <div class="form-group">
+          <label class="form-label">Expiry Date</label>
+          <input class="form-input" id="expiryInput" type="date">
+        </div>
+
+        <!-- Strike -->
+        <div class="form-group">
+          <label class="form-label">Strike</label>
+          <input class="form-input" id="strikeInput" type="number" step="0.5" placeholder="500">
+        </div>
+
+        <!-- Entry Price -->
+        <div class="form-group">
+          <label class="form-label">Entry Price ($)</label>
+          <input class="form-input" id="entryInput" type="number" step="0.01" placeholder="2.35" oninput="calcMaxLoss()">
+        </div>
+
+        <!-- Contracts -->
+        <div class="form-group">
+          <label class="form-label">Contracts (#)</label>
+          <input class="form-input" id="contractsInput" type="number" min="1" value="1" oninput="calcMaxLoss()">
+        </div>
+
+        <!-- Max Loss -->
+        <div class="form-group">
+          <label class="form-label">Max Loss ($) <span style="color:#555;font-weight:400;font-size:.65rem;text-transform:none;">auto-calc</span></label>
+          <input class="form-input" id="maxLossInput" type="number" step="0.01" placeholder="0.00">
+        </div>
+
+        <!-- Rules Followed -->
+        <div class="form-group">
+          <label class="form-label">Followed Rules?</label>
+          <div class="rules-badge" id="rulesBadge">— answer checklist</div>
+        </div>
+
+        <!-- Notes -->
+        <div class="form-group full">
+          <label class="form-label">Notes</label>
+          <textarea class="form-textarea" id="notesInput" placeholder="Setup context, levels, thesis..."></textarea>
+        </div>
+
+      </div>
+
+      <button class="log-btn" id="logBtn" disabled onclick="logTrade()">Log Trade</button>
+      <button class="reset-btn" onclick="resetAll()">Reset Checklist</button>
+    </div>
+
+  </div>
+
+  <!-- Trade Log -->
+  <div>
+    <div class="section-header">
+      <div class="section-title"><span class="dot"></span>Trade Log</div>
+      <button class="export-btn" onclick="exportCSV()">Export CSV</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-bar" id="statsBar">
+      <div class="stat-cell">
+        <div class="stat-label">Total Trades</div>
+        <div class="stat-value" id="statTotal">0</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">Rules Followed</div>
+        <div class="stat-value amber" id="statRules">—</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">Win Rate</div>
+        <div class="stat-value" id="statWinRate">—</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">Avg P&L</div>
+        <div class="stat-value" id="statAvgPnl">—</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="tradeTable">
+        <thead>
+          <tr>
+            <th>Date / Time</th>
+            <th>Ticker</th>
+            <th>Dir</th>
+            <th>Strike</th>
+            <th>Expiry</th>
+            <th>Entry $</th>
+            <th>Qty</th>
+            <th>Max Loss $</th>
+            <th>Rules</th>
+            <th>Notes</th>
+            <th>P&L $</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tradeTableBody">
+        </tbody>
+      </table>
+      <div class="empty-state" id="emptyState">
+        <div class="big">&#9723;</div>
+        No trades logged yet. Complete the checklist and log your first trade.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// =====================================================================
+//  STATE
+// =====================================================================
+const STORAGE_KEY = 'or_checklist_trades_v1';
+const TOTAL_CHECKS = 6;
+
+let answers = new Array(TOTAL_CHECKS).fill(null); // null | 'yes' | 'no'
+let direction = 'CALL';
+let trades = [];
+
+// =====================================================================
+//  INIT
+// =====================================================================
+(function init() {
+  // Load saved trades
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) trades = JSON.parse(raw);
+  } catch(e) { trades = []; }
+
+  // Set today as default expiry
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2,'0');
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  document.getElementById('expiryInput').value = `${today.getFullYear()}-${mm}-${dd}`;
+
+  renderTable();
+  renderStats();
+  updateUI();
+})();
+
+// =====================================================================
+//  CHECKLIST LOGIC
+// =====================================================================
+function setAnswer(index, val, btn) {
+  answers[index] = val;
+
+  // Update item styling
+  const item = document.querySelector(`.cl-item[data-index="${index}"]`);
+  item.classList.remove('answered-yes','answered-no');
+  item.classList.add(val === 'yes' ? 'answered-yes' : 'answered-no');
+
+  // Update button styling in that row
+  const group = btn.closest('.cl-btn-group');
+  group.querySelectorAll('.cl-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  updateUI();
+}
+
+function updateUI() {
+  const answeredCount  = answers.filter(a => a !== null).length;
+  const allAnswered    = answeredCount === TOTAL_CHECKS;
+  const allYes         = answers.every(a => a === 'yes');
+  const anyNo          = answers.some(a => a === 'no');
+
+  // Progress
+  const pct = Math.round((answeredCount / TOTAL_CHECKS) * 100);
+  const fill = document.getElementById('progressFill');
+  fill.style.width = pct + '%';
+  fill.classList.toggle('done', allAnswered && allYes);
+  document.getElementById('progressLabel').textContent = `${answeredCount} / ${TOTAL_CHECKS} answered`;
+  document.getElementById('checklistBadge').textContent = `${answeredCount} / ${TOTAL_CHECKS} checks`;
+
+  // Warning
+  const warn = document.getElementById('clWarning');
+  warn.classList.toggle('visible', anyNo);
+
+  // Log button
+  const logBtn = document.getElementById('logBtn');
+  logBtn.disabled = !allAnswered;
+
+  // Rules badge
+  const badge = document.getElementById('rulesBadge');
+  if (!allAnswered) {
+    badge.textContent = '— answer checklist';
+    badge.className = 'rules-badge';
+  } else if (allYes) {
+    badge.textContent = 'Y — All rules followed';
+    badge.className = 'rules-badge yes';
+  } else {
+    badge.textContent = 'N — Rules broken';
+    badge.className = 'rules-badge no';
+  }
+}
+
+// =====================================================================
+//  TICKER & FORM
+// =====================================================================
+function selectTicker(ticker, btn) {
+  document.querySelectorAll('.ticker-chip').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  if (ticker !== '') {
+    document.getElementById('tickerInput').value = ticker;
+  } else {
+    document.getElementById('tickerInput').value = '';
+    document.getElementById('tickerInput').focus();
+  }
+}
+
+function onTickerCustomInput() {
+  document.querySelectorAll('.ticker-chip').forEach(c => c.classList.remove('active'));
+  const val = document.getElementById('tickerInput').value.toUpperCase();
+  const chip = document.querySelector(`.ticker-chip[data-ticker="${val}"]`);
+  if (chip) chip.classList.add('active');
+  else document.getElementById('customChip').classList.add('active');
+}
+
+function setDirection(dir) {
+  direction = dir;
+  document.getElementById('btnCall').classList.toggle('active', dir === 'CALL');
+  document.getElementById('btnPut').classList.toggle('active',  dir === 'PUT');
+}
+
+function calcMaxLoss() {
+  const entry     = parseFloat(document.getElementById('entryInput').value);
+  const contracts = parseInt(document.getElementById('contractsInput').value, 10);
+  if (!isNaN(entry) && !isNaN(contracts) && contracts > 0) {
+    // Max loss = full premium paid (entry price × 100 × contracts)
+    const maxLoss = (entry * 100 * contracts).toFixed(2);
+    document.getElementById('maxLossInput').value = maxLoss;
+  }
+}
+
+// =====================================================================
+//  LOG TRADE
+// =====================================================================
+function logTrade() {
+  const allAnswered = answers.filter(a => a !== null).length === TOTAL_CHECKS;
+  if (!allAnswered) return;
+
+  const ticker    = document.getElementById('tickerInput').value.trim().toUpperCase() || 'SPY';
+  const expiry    = document.getElementById('expiryInput').value;
+  const strike    = document.getElementById('strikeInput').value;
+  const entry     = document.getElementById('entryInput').value;
+  const contracts = document.getElementById('contractsInput').value;
+  const maxLoss   = document.getElementById('maxLossInput').value;
+  const notes     = document.getElementById('notesInput').value.trim();
+  const allYes    = answers.every(a => a === 'yes');
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { month:'2-digit', day:'2-digit', year:'numeric' });
+  const timeStr = now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', hour12: true });
+
+  const trade = {
+    id:        Date.now(),
+    datetime:  `${dateStr} ${timeStr}`,
+    ticker,
+    direction,
+    strike,
+    expiry,
+    entry,
+    contracts,
+    maxLoss,
+    rulesFollowed: allYes ? 'Y' : 'N',
+    notes,
+    pnl:    '',
+    status: 'OPEN',
+    checklist: answers.slice()
+  };
+
+  trades.unshift(trade);
+  saveTrades();
+  renderTable();
+  renderStats();
+  showToast('Trade logged.');
+}
+
+// =====================================================================
+//  RESET
+// =====================================================================
+function resetAll() {
+  answers = new Array(TOTAL_CHECKS).fill(null);
+
+  // Reset item styling
+  document.querySelectorAll('.cl-item').forEach(item => {
+    item.classList.remove('answered-yes','answered-no');
+  });
+  // Reset buttons
+  document.querySelectorAll('.cl-btn').forEach(btn => {
+    btn.classList.remove('active');
+  });
+
+  // Reset form fields
+  document.getElementById('tickerInput').value   = 'SPY';
+  document.getElementById('strikeInput').value   = '';
+  document.getElementById('entryInput').value    = '';
+  document.getElementById('contractsInput').value = '1';
+  document.getElementById('maxLossInput').value  = '';
+  document.getElementById('notesInput').value    = '';
+  setDirection('CALL');
+  selectTicker('SPY', document.querySelector('.ticker-chip[data-ticker="SPY"]'));
+
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2,'0');
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  document.getElementById('expiryInput').value = `${today.getFullYear()}-${mm}-${dd}`;
+
+  updateUI();
+}
+
+// =====================================================================
+//  TABLE RENDERING
+// =====================================================================
+function renderTable() {
+  const tbody = document.getElementById('tradeTableBody');
+  const empty = document.getElementById('emptyState');
+
+  if (trades.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = trades.map(t => {
+    const dirClass  = t.direction === 'CALL' ? 'tag-call' : 'tag-put';
+    const ruleClass = t.rulesFollowed === 'Y' ? 'tag-y'   : 'tag-n';
+    const statusClass = t.status === 'OPEN' ? 'open' : 'closed';
+    const pnlNum = parseFloat(t.pnl);
+    const pnlDisplay = t.pnl !== '' && !isNaN(pnlNum)
+      ? `<span class="${pnlNum >= 0 ? 'pnl-positive' : 'pnl-negative'}">${pnlNum >= 0 ? '+' : ''}${pnlNum.toFixed(2)}</span>`
+      : '';
+
+    return `<tr>
+      <td style="color:var(--text-secondary);font-family:var(--font-mono);font-size:.72rem;">${t.datetime}</td>
+      <td style="font-family:var(--font-mono);font-weight:700;color:var(--cyan);">${t.ticker}</td>
+      <td class="${dirClass}">${t.direction}</td>
+      <td style="font-family:var(--font-mono);">${t.strike || '—'}</td>
+      <td style="color:var(--text-secondary);">${t.expiry || '—'}</td>
+      <td style="font-family:var(--font-mono);">${t.entry ? '$' + parseFloat(t.entry).toFixed(2) : '—'}</td>
+      <td style="font-family:var(--font-mono);">${t.contracts || '—'}</td>
+      <td style="font-family:var(--font-mono);">${t.maxLoss ? '$' + parseFloat(t.maxLoss).toFixed(0) : '—'}</td>
+      <td class="${ruleClass}">${t.rulesFollowed}</td>
+      <td class="notes-cell" title="${escHtml(t.notes)}">${escHtml(t.notes) || '<span style="color:#333;">—</span>'}</td>
+      <td>
+        ${pnlDisplay}
+        <input class="pnl-input" type="number" step="0.01" value="${t.pnl}"
+          placeholder="0.00"
+          onchange="updatePnl(${t.id}, this.value)"
+          style="${t.pnl !== '' ? 'display:none;' : ''}">
+        ${t.pnl !== '' ? `<button onclick="editPnl(${t.id}, this)" style="background:none;border:none;color:#555;cursor:pointer;font-size:.7rem;padding:2px 4px;" title="Edit">✎</button>` : ''}
+      </td>
+      <td>
+        <button class="status-toggle ${statusClass}" onclick="toggleStatus(${t.id}, this)">
+          ${t.status}
+        </button>
+      </td>
+      <td>
+        <button class="del-btn" onclick="deleteTrade(${t.id})">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// =====================================================================
+//  INLINE EDITS
+// =====================================================================
+function updatePnl(id, val) {
+  const t = trades.find(x => x.id === id);
+  if (!t) return;
+  t.pnl = val;
+  if (t.status === 'OPEN' && val !== '') t.status = 'CLOSED';
+  saveTrades();
+  renderTable();
+  renderStats();
+}
+
+function editPnl(id, btn) {
+  const td = btn.closest('td');
+  const input = td.querySelector('.pnl-input');
+  input.style.display = 'inline-block';
+  input.focus();
+  btn.style.display = 'none';
+  td.querySelectorAll('span').forEach(s => s.style.display = 'none');
+}
+
+function toggleStatus(id, btn) {
+  const t = trades.find(x => x.id === id);
+  if (!t) return;
+  t.status = t.status === 'OPEN' ? 'CLOSED' : 'OPEN';
+  saveTrades();
+  btn.textContent = t.status;
+  btn.className = `status-toggle ${t.status === 'OPEN' ? 'open' : 'closed'}`;
+}
+
+function deleteTrade(id) {
+  trades = trades.filter(x => x.id !== id);
+  saveTrades();
+  renderTable();
+  renderStats();
+}
+
+// =====================================================================
+//  STATS
+// =====================================================================
+function renderStats() {
+  const total = trades.length;
+  document.getElementById('statTotal').textContent = total;
+
+  if (total === 0) {
+    document.getElementById('statRules').textContent   = '—';
+    document.getElementById('statWinRate').textContent = '—';
+    document.getElementById('statAvgPnl').textContent  = '—';
+    document.getElementById('statRules').className     = 'stat-value amber';
+    document.getElementById('statWinRate').className   = 'stat-value';
+    document.getElementById('statAvgPnl').className    = 'stat-value';
+    return;
+  }
+
+  // Rules followed %
+  const ruleCount = trades.filter(t => t.rulesFollowed === 'Y').length;
+  const rulePct   = Math.round((ruleCount / total) * 100);
+  document.getElementById('statRules').textContent = `${rulePct}%`;
+  document.getElementById('statRules').className   = `stat-value ${rulePct >= 80 ? 'green' : rulePct >= 50 ? 'amber' : 'red'}`;
+
+  // Win rate (only closed trades with P&L)
+  const closed = trades.filter(t => t.pnl !== '' && !isNaN(parseFloat(t.pnl)));
+  if (closed.length === 0) {
+    document.getElementById('statWinRate').textContent = '—';
+    document.getElementById('statWinRate').className   = 'stat-value';
+    document.getElementById('statAvgPnl').textContent  = '—';
+    document.getElementById('statAvgPnl').className    = 'stat-value';
+  } else {
+    const wins    = closed.filter(t => parseFloat(t.pnl) > 0).length;
+    const winRate = Math.round((wins / closed.length) * 100);
+    document.getElementById('statWinRate').textContent = `${winRate}%`;
+    document.getElementById('statWinRate').className   = `stat-value ${winRate >= 50 ? 'green' : 'red'}`;
+
+    const totalPnl = closed.reduce((sum, t) => sum + parseFloat(t.pnl), 0);
+    const avgPnl   = totalPnl / closed.length;
+    const avgEl    = document.getElementById('statAvgPnl');
+    avgEl.textContent = `${avgPnl >= 0 ? '+' : ''}$${avgPnl.toFixed(0)}`;
+    avgEl.className   = `stat-value ${avgPnl >= 0 ? 'green' : 'red'}`;
+  }
+}
+
+// =====================================================================
+//  PERSISTENCE
+// =====================================================================
+function saveTrades() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(trades)); } catch(e) {}
+}
+
+// =====================================================================
+//  EXPORT CSV
+// =====================================================================
+function exportCSV() {
+  if (trades.length === 0) { showToast('No trades to export.'); return; }
+
+  const headers = ['Date/Time','Ticker','Direction','Strike','Expiry','Entry $','Contracts','Max Loss $','Rules Followed','P&L $','Status','Notes'];
+  const rows = trades.map(t => [
+    t.datetime,
+    t.ticker,
+    t.direction,
+    t.strike,
+    t.expiry,
+    t.entry,
+    t.contracts,
+    t.maxLoss,
+    t.rulesFollowed,
+    t.pnl,
+    t.status,
+    `"${(t.notes||'').replace(/"/g,'""')}"`
+  ]);
+
+  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `option_riders_trades_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV exported.');
+}
+
+// =====================================================================
+//  TOAST
+// =====================================================================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2400);
+}
+</script>
+</body>
+</html>
