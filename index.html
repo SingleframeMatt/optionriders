@@ -464,19 +464,35 @@
         }
       } catch(e) { BOT_NAV_WRAPPER.style.display = 'none'; }
     }
+    // Handle ?return= redirect after sign-in
+    const returnUrl = new URLSearchParams(window.location.search).get('return');
+    function checkReturnRedirect() {
+      if (!returnUrl) return;
+      try {
+        const stored = localStorage.getItem('optionriders-google-user-v1');
+        const user = stored ? JSON.parse(stored) : null;
+        if (user && user.email === ADMIN_EMAIL) {
+          window.location.href = returnUrl;
+        }
+      } catch(e) {}
+    }
+
     refreshBotNav();
+    checkReturnRedirect();
     // Re-check when auth state changes
     const authEl = document.getElementById('authControls');
     if (authEl) {
-      new MutationObserver(refreshBotNav).observe(authEl, { childList: true, subtree: true, characterData: true, attributes: true });
+      new MutationObserver(function() { refreshBotNav(); checkReturnRedirect(); })
+        .observe(authEl, { childList: true, subtree: true, characterData: true, attributes: true });
     }
     // Also re-check on storage events (sign-in from another tab)
-    window.addEventListener('storage', refreshBotNav);
-    // Poll for 10 seconds after load to catch async sign-in
+    window.addEventListener('storage', function() { refreshBotNav(); checkReturnRedirect(); });
+    // Poll for 30 seconds after load to catch async sign-in
     let pollCount = 0;
     const poll = setInterval(function() {
       refreshBotNav();
-      if (++pollCount >= 20) clearInterval(poll);
+      checkReturnRedirect();
+      if (++pollCount >= 60) clearInterval(poll);
     }, 500);
   </script>
 
