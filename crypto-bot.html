@@ -66,6 +66,20 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba
 </div>
 
 <script>
+  // Auth guard — only accessible to admin account
+  (function() {
+    const ADMIN_EMAIL = 'thedirectmatt@gmail.com';
+    try {
+      const stored = localStorage.getItem('optionriders-google-user-v1');
+      const user = stored ? JSON.parse(stored) : null;
+      if (!user || user.email !== ADMIN_EMAIL) {
+        window.location.replace('index.html');
+      }
+    } catch(e) {
+      window.location.replace('index.html');
+    }
+  })();
+
   // Show offline banner if iframe fails to load
   const frame = document.getElementById('botFrame');
   const banner = document.getElementById('offlineBanner');
