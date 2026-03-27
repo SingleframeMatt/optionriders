@@ -456,23 +456,17 @@
 
   <script src="app.js"></script>
   <script>
-    // Show bot nav buttons only for the admin account
-    // Uses AUTH_STATE directly (set by app.js) — more reliable than localStorage
-    const ADMIN_EMAIL = 'thedirectmatt@gmail.com';
+    // Show bot nav buttons to any signed-in user
     const BOT_NAV_WRAPPER = document.getElementById('adminBotNavWrapper');
     const BOT_SHORTCUTS = document.getElementById('adminBotShortcuts');
     function isAdmin() {
-      // Primary: check live AUTH_STATE from app.js (declared as const in global script scope)
+      // Any signed-in Google user sees the bot buttons
       try {
-        if (typeof AUTH_STATE !== 'undefined' && AUTH_STATE.user && AUTH_STATE.user.email) {
-          return AUTH_STATE.user.email === ADMIN_EMAIL;
-        }
+        if (typeof AUTH_STATE !== 'undefined' && AUTH_STATE.user) return true;
       } catch(e) {}
-      // Fallback: check localStorage (covers Google sign-in)
       try {
         const stored = localStorage.getItem('optionriders-google-user-v1');
-        const user = stored ? JSON.parse(stored) : null;
-        return user && user.email === ADMIN_EMAIL;
+        return !!stored && !!JSON.parse(stored);
       } catch(e) { return false; }
     }
     function refreshBotNav() {

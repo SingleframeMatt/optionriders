@@ -1,0 +1,272 @@
+2026-03-27 00:46:19  INFO      Options Bot starting — symbols=['SPY', 'QQQ', 'SPX'] IBKR=127.0.0.1:7497 clientId=1
+2026-03-27 00:46:19  INFO      Options bot thread started.
+2026-03-27 00:46:19  INFO      Risk: max_trade=$200  max_premium=$2.00  max_pos=2  daily_loss=$600  SL=50%  TP=100%  DTE=2–5
+2026-03-27 00:46:19  INFO      Bot auto-start: Bot started
+2026-03-27 00:46:19  INFO      Session: 09:30–15:45 ET | EOD close 15:45 ET
+2026-03-27 00:46:19  INFO      Option Riders Options Bot dashboard: http://0.0.0.0:8126
+2026-03-27 00:46:19  INFO      API: http://0.0.0.0:8126/api/options
+ * Tip: There are .env files present. Install python-dotenv to use them.
+ * Serving Flask app 'server'
+ * Debug mode: off
+2026-03-27 00:46:20  INFO      SPY weekly: PWH=672.60 PWL=642.96
+2026-03-27 00:46:20  INFO      QQQ weekly: PWH=605.14 PWL=577.81
+2026-03-27 00:46:20  INFO      SPX weekly: PWH=6754.30 PWL=6473.52
+2026-03-27 00:46:20  INFO      Connecting to IBKR 127.0.0.1:7497 clientId=1 …
+2026-03-27 00:46:20  INFO      Connecting to 127.0.0.1:7497 with clientId 1...
+2026-03-27 00:46:20  INFO      Connected
+2026-03-27 00:46:20  INFO      Logged on to server version 176
+2026-03-27 00:46:20  INFO      API connection ready
+2026-03-27 00:46:20  INFO      Warning 2104, reqId -1: Market data farm connection is OK:uscrypto
+2026-03-27 00:46:20  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm.nj
+2026-03-27 00:46:20  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfuture
+2026-03-27 00:46:20  INFO      position: Position(account='DU6954684', contract=Stock(conId=320227571, symbol='QQQ', exchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, avgCost=523.82566405)
+2026-03-27 00:46:20  INFO      Warning 2104, reqId -1: Market data farm connection is OK:cashfarm
+2026-03-27 00:46:20  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm
+2026-03-27 00:46:20  INFO      Warning 2106, reqId -1: HMDS data farm connection is OK:ushmds
+2026-03-27 00:46:20  INFO      Warning 2158, reqId -1: Sec-def data farm connection is OK:secdefil
+2026-03-27 00:46:21  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 00:46:21  INFO      Synchronization complete
+2026-03-27 00:46:21  INFO      Connected to IBKR paper trading.
+2026-03-27 00:46:21  INFO      Connected to IBKR paper trading (port 7497)
+2026-03-27 00:49:09  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 00:52:09  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 00:55:09  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 00:56:21  ERROR     Error 322, reqId 5: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 00:58:09  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 01:01:09  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 01:01:21  ERROR     Error 322, reqId 6: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 01:04:09  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 01:06:21  ERROR     Error 322, reqId 7: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 01:07:09  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 01:11:21  ERROR     Error 322, reqId 8: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 01:13:09  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 02:54:35  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm.nj
+2026-03-27 02:54:35  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm
+2026-03-27 02:54:35  INFO      Warning 2103, reqId -1: Market data farm connection is broken:cashfarm
+2026-03-27 02:54:35  ERROR     Error 322, reqId 9: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 02:54:35  INFO      Warning 2103, reqId -1: Market data farm connection is broken:uscrypto
+2026-03-27 02:54:35  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfuture
+2026-03-27 02:54:35  INFO      Warning 2157, reqId -1: Sec-def data farm connection is broken:secdefil
+2026-03-27 02:54:35  INFO      Warning 2105, reqId -1: HMDS data farm connection is broken:ushmds
+2026-03-27 02:54:36  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 02:55:05  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 02:55:06  INFO      position: Position(account='DU6954684', contract=Stock(conId=320227571, symbol='QQQ', exchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, avgCost=523.82566405)
+2026-03-27 02:55:06  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 02:55:07  INFO      Warning 2106, reqId -1: HMDS data farm connection is OK:ushmds
+2026-03-27 02:55:07  INFO      Warning 2158, reqId -1: Sec-def data farm connection is OK:secdefil
+2026-03-27 02:55:07  INFO      Warning 2104, reqId -1: Market data farm connection is OK:uscrypto
+2026-03-27 02:55:07  INFO      Warning 2104, reqId -1: Market data farm connection is OK:cashfarm
+2026-03-27 02:55:07  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfuture
+2026-03-27 02:55:07  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm.nj
+2026-03-27 02:55:07  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm
+2026-03-27 02:55:07  ERROR     Error 322, reqId 5: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 02:55:07  ERROR     Error 322, reqId 6: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 02:55:07  ERROR     Error 322, reqId 7: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 02:55:07  ERROR     Error 322, reqId 8: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 02:55:07  ERROR     Error 322, reqId 9: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 02:55:07  ERROR     Error 1102, reqId -1: Connectivity between IBKR and Trader Workstation has been restored - data maintained. All data farms are connected: uscrypto; usfarm.nj; usfuture; cashfarm; usfarm; ushmds; secdefil.
+2026-03-27 02:55:07  ERROR     Error 322, reqId 10: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 02:55:51  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 04:54:33  INFO      Warning 2103, reqId -1: Market data farm connection is broken:cashfarm
+2026-03-27 04:54:33  INFO      Daily P&L reset — new trading day: 2026-03-27
+2026-03-27 04:54:33  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm.nj
+2026-03-27 04:54:33  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 04:54:33  INFO      Warning 2105, reqId -1: HMDS data farm connection is broken:ushmds
+2026-03-27 04:54:33  INFO      Warning 2157, reqId -1: Sec-def data farm connection is broken:secdefil
+2026-03-27 04:54:33  INFO      Warning 2103, reqId -1: Market data farm connection is broken:uscrypto
+2026-03-27 04:54:33  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm
+2026-03-27 04:54:33  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfuture
+2026-03-27 04:54:47  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 04:54:48  INFO      position: Position(account='DU6954684', contract=Stock(conId=320227571, symbol='QQQ', exchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, avgCost=523.82566405)
+2026-03-27 04:54:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 04:54:49  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm.nj
+2026-03-27 04:54:49  INFO      Warning 2158, reqId -1: Sec-def data farm connection is OK:secdefil
+2026-03-27 04:54:49  INFO      Warning 2106, reqId -1: HMDS data farm connection is OK:ushmds
+2026-03-27 04:54:49  INFO      Warning 2104, reqId -1: Market data farm connection is OK:cashfarm
+2026-03-27 04:54:49  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfuture
+2026-03-27 04:54:49  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm
+2026-03-27 04:54:49  INFO      Warning 2104, reqId -1: Market data farm connection is OK:uscrypto
+2026-03-27 04:54:50  ERROR     Error 322, reqId 10: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 04:54:50  ERROR     Error 322, reqId 11: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 04:54:50  ERROR     Error 1102, reqId -1: Connectivity between IBKR and Trader Workstation has been restored - data maintained. All data farms are connected: uscrypto; usfarm.nj; usfuture; cashfarm; usfarm; ushmds; secdefil.
+2026-03-27 04:54:50  ERROR     Error 322, reqId 12: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 04:55:57  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 06:54:32  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm
+2026-03-27 06:54:32  INFO      Warning 2105, reqId -1: HMDS data farm connection is broken:ushmds
+2026-03-27 06:54:32  INFO      Warning 2103, reqId -1: Market data farm connection is broken:uscrypto
+2026-03-27 06:54:32  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 06:54:32  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfuture
+2026-03-27 06:54:32  INFO      Warning 2103, reqId -1: Market data farm connection is broken:cashfarm
+2026-03-27 06:54:32  INFO      Warning 2157, reqId -1: Sec-def data farm connection is broken:secdefil
+2026-03-27 06:54:32  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm.nj
+2026-03-27 06:55:04  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 06:55:05  INFO      Warning 2108, reqId -1: Market data farm connection is inactive but should be available upon demand.uscrypto
+2026-03-27 06:55:05  INFO      Warning 2108, reqId -1: Market data farm connection is inactive but should be available upon demand.cashfarm
+2026-03-27 06:55:05  INFO      position: Position(account='DU6954684', contract=Stock(conId=320227571, symbol='QQQ', exchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, avgCost=523.82566405)
+2026-03-27 06:55:05  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 06:55:06  INFO      Warning 2106, reqId -1: HMDS data farm connection is OK:ushmds
+2026-03-27 06:55:06  INFO      Warning 2158, reqId -1: Sec-def data farm connection is OK:secdefil
+2026-03-27 06:55:06  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfuture
+2026-03-27 06:55:06  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm.nj
+2026-03-27 06:55:06  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm
+2026-03-27 06:55:06  ERROR     Error 322, reqId 12: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 06:55:06  ERROR     Error 322, reqId 13: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 06:55:06  ERROR     Error 1102, reqId -1: Connectivity between IBKR and Trader Workstation has been restored - data maintained. All data farms are connected: usfarm.nj; usfuture; usfarm; ushmds; secdefil.
+2026-03-27 06:55:06  ERROR     Error 322, reqId 14: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 06:55:08  INFO      Warning 2104, reqId -1: Market data farm connection is OK:cashfarm
+2026-03-27 06:55:08  INFO      Warning 2104, reqId -1: Market data farm connection is OK:uscrypto
+2026-03-27 06:55:46  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 07:54:33  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 07:54:42  INFO      Warning 2103, reqId -1: Market data farm connection is broken:cashfarm
+2026-03-27 07:54:42  INFO      Warning 2103, reqId -1: Market data farm connection is broken:uscrypto
+2026-03-27 07:54:43  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm
+2026-03-27 07:54:44  INFO      Warning 2105, reqId -1: HMDS data farm connection is broken:ushmds
+2026-03-27 07:54:44  INFO      Warning 2157, reqId -1: Sec-def data farm connection is broken:secdefil
+2026-03-27 07:54:44  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfuture
+2026-03-27 07:54:44  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm.nj
+2026-03-27 07:54:46  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 07:54:47  INFO      position: Position(account='DU6954684', contract=Stock(conId=320227571, symbol='QQQ', exchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, avgCost=523.82566405)
+2026-03-27 07:54:47  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 07:54:48  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfuture
+2026-03-27 07:54:48  INFO      Warning 2104, reqId -1: Market data farm connection is OK:cashfarm
+2026-03-27 07:54:48  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm.nj
+2026-03-27 07:54:48  INFO      Warning 2104, reqId -1: Market data farm connection is OK:uscrypto
+2026-03-27 07:54:48  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm
+2026-03-27 07:54:48  INFO      Warning 2106, reqId -1: HMDS data farm connection is OK:ushmds
+2026-03-27 07:54:49  INFO      Warning 2158, reqId -1: Sec-def data farm connection is OK:secdefil
+2026-03-27 07:54:49  ERROR     Error 322, reqId 14: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 07:54:49  ERROR     Error 322, reqId 15: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 07:54:49  ERROR     Error 1102, reqId -1: Connectivity between IBKR and Trader Workstation has been restored - data maintained. All data farms are connected: uscrypto; usfarm.nj; usfuture; cashfarm; usfarm; ushmds; secdefil.
+2026-03-27 07:54:49  ERROR     Error 322, reqId 16: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 07:55:46  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=575.8200073, marketValue=-4149934.79, averageCost=523.82566405, unrealizedPNL=-374723.23, realizedPNL=0.0, account='DU6954684')
+2026-03-27 08:54:34  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 08:54:43  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfuture
+2026-03-27 08:54:43  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm.nj
+2026-03-27 08:54:43  INFO      Warning 2103, reqId -1: Market data farm connection is broken:cashfarm
+2026-03-27 08:54:43  INFO      Warning 2103, reqId -1: Market data farm connection is broken:uscrypto
+2026-03-27 08:54:43  INFO      Warning 2105, reqId -1: HMDS data farm connection is broken:ushmds
+2026-03-27 08:54:43  INFO      Warning 2157, reqId -1: Sec-def data farm connection is broken:secdefil
+2026-03-27 08:54:43  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm
+2026-03-27 08:55:07  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 08:55:08  INFO      position: Position(account='DU6954684', contract=Stock(conId=320227571, symbol='QQQ', exchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, avgCost=523.82566405)
+2026-03-27 08:55:08  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=573.8499756, marketValue=-4135736.77, averageCost=523.82566405, unrealizedPNL=-360525.21, realizedPNL=0.0, account='DU6954684')
+2026-03-27 08:55:09  INFO      Warning 2158, reqId -1: Sec-def data farm connection is OK:secdefil
+2026-03-27 08:55:09  INFO      Warning 2106, reqId -1: HMDS data farm connection is OK:ushmds
+2026-03-27 08:55:09  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfuture
+2026-03-27 08:55:09  INFO      Warning 2104, reqId -1: Market data farm connection is OK:cashfarm
+2026-03-27 08:55:09  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm
+2026-03-27 08:55:09  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm.nj
+2026-03-27 08:55:10  INFO      Warning 2104, reqId -1: Market data farm connection is OK:uscrypto
+2026-03-27 08:55:10  ERROR     Error 322, reqId 16: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 08:55:10  ERROR     Error 322, reqId 17: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 08:55:10  ERROR     Error 1102, reqId -1: Connectivity between IBKR and Trader Workstation has been restored - data maintained. All data farms are connected: uscrypto; usfarm.nj; usfuture; cashfarm; usfarm; ushmds; secdefil.
+2026-03-27 08:55:10  ERROR     Error 322, reqId 18: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 08:55:47  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=573.69995115, marketValue=-4134655.55, averageCost=523.82566405, unrealizedPNL=-359443.99, realizedPNL=0.0, account='DU6954684')
+2026-03-27 09:57:33  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfuture
+2026-03-27 09:57:33  ERROR     Error 322, reqId 19: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 09:57:33  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 09:57:34  INFO      Warning 2103, reqId -1: Market data farm connection is broken:cashfarm
+2026-03-27 09:57:34  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm.nj
+2026-03-27 09:57:34  INFO      Warning 2103, reqId -1: Market data farm connection is broken:uscrypto
+2026-03-27 09:57:34  INFO      Warning 2157, reqId -1: Sec-def data farm connection is broken:secdefil
+2026-03-27 09:57:34  INFO      Warning 2105, reqId -1: HMDS data farm connection is broken:ushmds
+2026-03-27 09:57:34  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm
+2026-03-27 09:57:46  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 09:57:48  INFO      position: Position(account='DU6954684', contract=Stock(conId=320227571, symbol='QQQ', exchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, avgCost=523.82566405)
+2026-03-27 09:57:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=572.9699707, marketValue=-4129394.58, averageCost=523.82566405, unrealizedPNL=-354183.02, realizedPNL=0.0, account='DU6954684')
+2026-03-27 09:57:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=573.09002685, marketValue=-4130259.82, averageCost=523.82566405, unrealizedPNL=-355048.26, realizedPNL=0.0, account='DU6954684')
+2026-03-27 09:57:49  INFO      Warning 2158, reqId -1: Sec-def data farm connection is OK:secdefil
+2026-03-27 09:57:49  INFO      Warning 2106, reqId -1: HMDS data farm connection is OK:ushmds
+2026-03-27 09:57:49  INFO      Warning 2104, reqId -1: Market data farm connection is OK:cashfarm
+2026-03-27 09:57:49  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfuture
+2026-03-27 09:57:49  INFO      Warning 2104, reqId -1: Market data farm connection is OK:uscrypto
+2026-03-27 09:57:49  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm.nj
+2026-03-27 09:57:49  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm
+2026-03-27 09:57:50  ERROR     Error 322, reqId 18: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 09:57:50  ERROR     Error 322, reqId 19: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 09:57:50  ERROR     Error 1102, reqId -1: Connectivity between IBKR and Trader Workstation has been restored - data maintained. All data farms are connected: uscrypto; usfarm.nj; usfuture; cashfarm; usfarm; ushmds; secdefil.
+2026-03-27 09:57:50  ERROR     Error 322, reqId 20: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 10:27:34  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 10:27:42  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm
+2026-03-27 10:27:49  ERROR     Error 1100, reqId -1: Connectivity between IBKR and Trader Workstation has been lost.
+2026-03-27 10:27:50  INFO      Warning 2103, reqId -1: Market data farm connection is broken:uscrypto
+2026-03-27 10:27:50  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfarm.nj
+2026-03-27 10:27:50  INFO      Warning 2103, reqId -1: Market data farm connection is broken:usfuture
+2026-03-27 10:27:50  INFO      Warning 2103, reqId -1: Market data farm connection is broken:cashfarm
+2026-03-27 10:27:50  INFO      Warning 2157, reqId -1: Sec-def data farm connection is broken:secdefil
+2026-03-27 10:27:50  INFO      Warning 2105, reqId -1: HMDS data farm connection is broken:ushmds
+2026-03-27 10:27:51  INFO      position: Position(account='DU6954684', contract=Stock(conId=320227571, symbol='QQQ', exchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, avgCost=523.82566405)
+2026-03-27 10:27:51  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=572.8300781, marketValue=-4128386.37, averageCost=523.82566405, unrealizedPNL=-353174.81, realizedPNL=0.0, account='DU6954684')
+2026-03-27 10:27:52  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm
+2026-03-27 10:27:52  INFO      Warning 2158, reqId -1: Sec-def data farm connection is OK:secdefil
+2026-03-27 10:27:52  INFO      Warning 2106, reqId -1: HMDS data farm connection is OK:ushmds
+2026-03-27 10:27:52  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfuture
+2026-03-27 10:27:52  INFO      Warning 2104, reqId -1: Market data farm connection is OK:cashfarm
+2026-03-27 10:27:52  INFO      Warning 2104, reqId -1: Market data farm connection is OK:uscrypto
+2026-03-27 10:27:52  INFO      Warning 2104, reqId -1: Market data farm connection is OK:usfarm.nj
+2026-03-27 10:27:53  ERROR     Error 322, reqId 20: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 10:27:53  ERROR     Error 322, reqId 21: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 10:27:53  ERROR     Error 1102, reqId -1: Connectivity between IBKR and Trader Workstation has been restored - data maintained. All data farms are connected: uscrypto; usfarm.nj; usfuture; cashfarm; usfarm; ushmds; secdefil.
+2026-03-27 10:27:53  ERROR     Error 322, reqId 22: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 10:30:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=572.8499756, marketValue=-4128529.77, averageCost=523.82566405, unrealizedPNL=-353318.21, realizedPNL=0.0, account='DU6954684')
+2026-03-27 10:32:53  ERROR     Error 322, reqId 23: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 10:33:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=572.26000975, marketValue=-4124277.89, averageCost=523.82566405, unrealizedPNL=-349066.33, realizedPNL=0.0, account='DU6954684')
+2026-03-27 10:36:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=572.0800171, marketValue=-4122980.68, averageCost=523.82566405, unrealizedPNL=-347769.12, realizedPNL=0.0, account='DU6954684')
+2026-03-27 10:37:53  ERROR     Error 322, reqId 24: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 10:39:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=571.60998535, marketValue=-4119593.16, averageCost=523.82566405, unrealizedPNL=-344381.6, realizedPNL=0.0, account='DU6954684')
+2026-03-27 10:42:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=571.76000975, marketValue=-4120674.39, averageCost=523.82566405, unrealizedPNL=-345462.83, realizedPNL=0.0, account='DU6954684')
+2026-03-27 10:42:53  ERROR     Error 322, reqId 25: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 10:45:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=571.51000975, marketValue=-4118872.64, averageCost=523.82566405, unrealizedPNL=-343661.08, realizedPNL=0.0, account='DU6954684')
+2026-03-27 10:47:53  ERROR     Error 322, reqId 26: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 10:48:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=571.3499756, marketValue=-4117719.27, averageCost=523.82566405, unrealizedPNL=-342507.71, realizedPNL=0.0, account='DU6954684')
+2026-03-27 10:51:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=571.2800293, marketValue=-4117215.17, averageCost=523.82566405, unrealizedPNL=-342003.61, realizedPNL=0.0, account='DU6954684')
+2026-03-27 10:52:53  ERROR     Error 322, reqId 27: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 10:54:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=571.19000245, marketValue=-4116566.35, averageCost=523.82566405, unrealizedPNL=-341354.79, realizedPNL=0.0, account='DU6954684')
+2026-03-27 10:57:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.5, marketValue=-4111593.5, averageCost=523.82566405, unrealizedPNL=-336381.94, realizedPNL=0.0, account='DU6954684')
+2026-03-27 10:57:53  ERROR     Error 322, reqId 28: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 11:00:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.26000975, marketValue=-4109863.89, averageCost=523.82566405, unrealizedPNL=-334652.33, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:02:53  ERROR     Error 322, reqId 29: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 11:03:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.34002685, marketValue=-4110440.57, averageCost=523.82566405, unrealizedPNL=-335229.01, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:06:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.1199951, marketValue=-4108854.8, averageCost=523.82566405, unrealizedPNL=-333643.24, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:07:53  ERROR     Error 322, reqId 30: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 11:09:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.28997805, marketValue=-4110079.87, averageCost=523.82566405, unrealizedPNL=-334868.31, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:12:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.02001955, marketValue=-4108134.28, averageCost=523.82566405, unrealizedPNL=-332922.72, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:12:53  ERROR     Error 322, reqId 31: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 11:15:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.52001955, marketValue=-4111737.78, averageCost=523.82566405, unrealizedPNL=-336526.22, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:17:53  ERROR     Error 322, reqId 32: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 11:18:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.51000975, marketValue=-4111665.64, averageCost=523.82566405, unrealizedPNL=-336454.08, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:21:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.72998045, marketValue=-4113250.97, averageCost=523.82566405, unrealizedPNL=-338039.41, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:22:53  ERROR     Error 322, reqId 33: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 11:24:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.5, marketValue=-4111593.5, averageCost=523.82566405, unrealizedPNL=-336381.94, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:27:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.7000122, marketValue=-4113034.99, averageCost=523.82566405, unrealizedPNL=-337823.43, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:27:53  ERROR     Error 322, reqId 34: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 11:30:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.73999025, marketValue=-4113323.11, averageCost=523.82566405, unrealizedPNL=-338111.55, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:32:53  ERROR     Error 322, reqId 35: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 11:33:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.6799927, marketValue=-4112890.71, averageCost=523.82566405, unrealizedPNL=-337679.15, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:36:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.64001465, marketValue=-4112602.59, averageCost=523.82566405, unrealizedPNL=-337391.02, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:37:53  ERROR     Error 322, reqId 36: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 11:39:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.6699829, marketValue=-4112818.57, averageCost=523.82566405, unrealizedPNL=-337607.01, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:42:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.6500244, marketValue=-4112674.73, averageCost=523.82566405, unrealizedPNL=-337463.17, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:42:53  ERROR     Error 322, reqId 37: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 11:45:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.80999755, marketValue=-4113827.65, averageCost=523.82566405, unrealizedPNL=-338616.09, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:47:53  ERROR     Error 322, reqId 38: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 11:48:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=571.35998535, marketValue=-4117791.41, averageCost=523.82566405, unrealizedPNL=-342579.85, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:51:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=571.1699829, marketValue=-4116422.07, averageCost=523.82566405, unrealizedPNL=-341210.51, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:52:53  ERROR     Error 322, reqId 39: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 11:54:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=571.3800049, marketValue=-4117935.7, averageCost=523.82566405, unrealizedPNL=-342724.13, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:57:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=571.1699829, marketValue=-4116422.07, averageCost=523.82566405, unrealizedPNL=-341210.51, realizedPNL=0.0, account='DU6954684')
+2026-03-27 11:57:53  ERROR     Error 322, reqId 40: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 12:00:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.97998045, marketValue=-4115052.72, averageCost=523.82566405, unrealizedPNL=-339841.16, realizedPNL=0.0, account='DU6954684')
+2026-03-27 12:02:53  ERROR     Error 322, reqId 41: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 12:03:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.6500244, marketValue=-4112674.73, averageCost=523.82566405, unrealizedPNL=-337463.17, realizedPNL=0.0, account='DU6954684')
+2026-03-27 12:06:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.05999755, marketValue=-4108422.4, averageCost=523.82566405, unrealizedPNL=-333210.84, realizedPNL=0.0, account='DU6954684')
+2026-03-27 12:07:54  ERROR     Error 322, reqId 42: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 12:09:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=569.9299927, marketValue=-4107485.46, averageCost=523.82566405, unrealizedPNL=-332273.9, realizedPNL=0.0, account='DU6954684')
+2026-03-27 12:12:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.22998045, marketValue=-4109647.47, averageCost=523.82566405, unrealizedPNL=-334435.91, realizedPNL=0.0, account='DU6954684')
+2026-03-27 12:12:54  ERROR     Error 322, reqId 43: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 12:15:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.27001955, marketValue=-4109936.03, averageCost=523.82566405, unrealizedPNL=-334724.47, realizedPNL=0.0, account='DU6954684')
+2026-03-27 12:17:54  ERROR     Error 322, reqId 44: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 12:18:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.7199707, marketValue=-4113178.83, averageCost=523.82566405, unrealizedPNL=-337967.27, realizedPNL=0.0, account='DU6954684')
+2026-03-27 12:21:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.28997805, marketValue=-4110079.87, averageCost=523.82566405, unrealizedPNL=-334868.31, realizedPNL=0.0, account='DU6954684')
+2026-03-27 12:22:54  ERROR     Error 322, reqId 45: Error processing request.-'bY' : cause - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-27 12:24:48  INFO      updatePortfolio: PortfolioItem(contract=Stock(conId=320227571, symbol='QQQ', right='0', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'), position=-7207.0, marketPrice=570.5800171, marketValue=-4112170.18, averageCost=523.82566405, unrealizedPNL=-336958.62, realizedPNL=0.0, account='DU6954684')

@@ -82,12 +82,12 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba
 <script>
   // Auth guard — show gate or content based on stored user
   (function() {
-    const ADMIN_EMAIL = 'thedirectmatt@gmail.com';
+    
     function checkAuth() {
       try {
         const stored = localStorage.getItem('optionriders-google-user-v1');
         const user = stored ? JSON.parse(stored) : null;
-        if (user && user.email === ADMIN_EMAIL) {
+        if (user) {
           document.getElementById('authGate').classList.remove('show');
           document.getElementById('pageContent').style.display = 'flex';
           return true;
