@@ -43,8 +43,8 @@
         <span class="nav-version" id="navVersion"></span>
       </a>
     </div>
-    <div class="header-center">
-      <nav id="adminBotNav" style="display:none;gap:4px;">
+    <div class="header-center" id="adminBotNavWrapper" style="display:none;">
+      <nav id="adminBotNav" style="display:flex;gap:4px;">
         <a href="crypto-bot.html" style="font-size:12px;color:rgba(0,224,255,.6);padding:5px 10px;border-radius:7px;border:1px solid rgba(0,224,255,.15);background:rgba(0,224,255,.05);font-family:'JetBrains Mono',monospace;transition:all .2s;" onmouseover="this.style.color='#00e0ff';this.style.background='rgba(0,224,255,.1)'" onmouseout="this.style.color='rgba(0,224,255,.6)';this.style.background='rgba(0,224,255,.05)'">⚡ Crypto Bot</a>
         <a href="options-bot.html" style="font-size:12px;color:rgba(167,139,250,.6);padding:5px 10px;border-radius:7px;border:1px solid rgba(124,58,237,.15);background:rgba(124,58,237,.05);font-family:'JetBrains Mono',monospace;transition:all .2s;" onmouseover="this.style.color='#a78bfa';this.style.background='rgba(124,58,237,.1)'" onmouseout="this.style.color='rgba(167,139,250,.6)';this.style.background='rgba(124,58,237,.05)'">📈 Options Bot</a>
       </nav>
@@ -452,17 +452,17 @@
   <script>
     // Show bot nav buttons only for the admin account
     const ADMIN_EMAIL = 'thedirectmatt@gmail.com';
-    const BOT_NAV = document.getElementById('adminBotNav');
+    const BOT_NAV_WRAPPER = document.getElementById('adminBotNavWrapper');
     function refreshBotNav() {
       try {
         const stored = localStorage.getItem('optionriders-google-user-v1');
         const user = stored ? JSON.parse(stored) : null;
         if (user && user.email === ADMIN_EMAIL) {
-          BOT_NAV.style.display = 'flex';
+          BOT_NAV_WRAPPER.style.display = 'flex';
         } else {
-          BOT_NAV.style.display = 'none';
+          BOT_NAV_WRAPPER.style.display = 'none';
         }
-      } catch(e) { BOT_NAV.style.display = 'none'; }
+      } catch(e) { BOT_NAV_WRAPPER.style.display = 'none'; }
     }
     refreshBotNav();
     // Re-check when auth state changes
