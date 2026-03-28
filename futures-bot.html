@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Crypto Bot — OptionRiders</title>
+<title>Futures Bot — OptionRiders</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -20,9 +20,9 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba
 .nav-links { display: flex; gap: 6px; align-items: center; }
 .nav-links a { font-size: 13px; color: rgba(255,255,255,.4); padding: 6px 12px; border-radius: 8px; transition: all .2s; }
 .nav-links a:hover { color: #fff; background: rgba(255,255,255,.06); }
-.nav-links a.active { color: #00e0ff; background: rgba(0,224,255,.08); }
-.nav-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-family: 'JetBrains Mono', monospace; background: rgba(0,224,255,.1); color: #00e0ff; padding: 3px 8px; border-radius: 20px; border: 1px solid rgba(0,224,255,.2); }
-.pulse { width: 6px; height: 6px; background: #00e0ff; border-radius: 50%; animation: pulse-dot 1.5s ease infinite; }
+.nav-links a.active { color: #a78bfa; background: rgba(167,139,250,.08); }
+.nav-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-family: 'JetBrains Mono', monospace; background: rgba(167,139,250,.1); color: #a78bfa; padding: 3px 8px; border-radius: 20px; border: 1px solid rgba(167,139,250,.2); }
+.pulse { width: 6px; height: 6px; background: #a78bfa; border-radius: 50%; animation: pulse-dot 1.5s ease infinite; }
 @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
 
 /* CONTENT */
@@ -38,8 +38,8 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba
 .auth-gate.show { display: flex; }
 .auth-gate h2 { font-size: 20px; font-weight: 700; color: #fff; }
 .auth-gate p { font-size: 14px; color: rgba(255,255,255,.4); }
-.auth-gate a { font-size: 14px; color: #00e0ff; padding: 10px 24px; border: 1px solid rgba(0,224,255,.3); border-radius: 8px; transition: background .2s; }
-.auth-gate a:hover { background: rgba(0,224,255,.08); }
+.auth-gate a { font-size: 14px; color: #a78bfa; padding: 10px 24px; border: 1px solid rgba(167,139,250,.3); border-radius: 8px; transition: background .2s; }
+.auth-gate a:hover { background: rgba(167,139,250,.08); }
 </style>
 </head>
 <body>
@@ -52,9 +52,9 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba
     </a>
     <div class="nav-links">
       <a href="index.html">Dashboard</a>
-      <a href="crypto-bot.html" class="active">Crypto Bot</a>
+      <a href="crypto-bot.html">Crypto Bot</a>
       <a href="options-bot.html">Options Bot</a>
-      <a href="futures-bot.html">Futures Bot</a>
+      <a href="futures-bot.html" class="active">Futures Bot</a>
       <div class="nav-badge"><div class="pulse"></div> LIVE</div>
     </div>
   </div>
@@ -63,7 +63,7 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba
 <div class="auth-gate" id="authGate">
   <h2>Access Restricted</h2>
   <p>Sign in with your authorised account to view the bot dashboard.</p>
-  <a href="index.html?return=crypto-bot.html">Sign in</a>
+  <a href="index.html?return=futures-bot.html">Sign in</a>
 </div>
 
 <div class="offline-banner" id="offlineBanner">
@@ -74,16 +74,14 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba
   <iframe
     class="bot-frame"
     id="botFrame"
-    src="https://themonster.tail7741c4.ts.net/crypto/"
-    title="Crypto Bot Dashboard"
+    src="https://themonster.tail7741c4.ts.net/futures/"
+    title="Futures Bot Dashboard"
     allow="fullscreen"
   ></iframe>
 </div>
 
 <script>
-  // Auth guard — show gate or content based on stored user
   (function() {
-    
     function checkAuth() {
       try {
         const stored = localStorage.getItem('optionriders-google-user-v1');
@@ -99,11 +97,9 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba
       return false;
     }
     checkAuth();
-    // Re-check every 500ms in case user signs in on another tab
     const interval = setInterval(() => { if (checkAuth()) clearInterval(interval); }, 500);
   })();
 
-  // Show offline banner if iframe fails to load
   const frame = document.getElementById('botFrame');
   const banner = document.getElementById('offlineBanner');
   const timeout = setTimeout(() => { banner.classList.add('show'); }, 8000);

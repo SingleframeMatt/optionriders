@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Option Riders — Futures Bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  /* ── FUTURES BOT PAGE ── */
+  body { overflow-y: auto !important; height: auto !important; }
+  .bot-page { padding: 24px 20px 60px; max-width: 1280px; margin: 0 auto; }
+
+  .bot-header-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+  }
+  .bot-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.25rem; font-weight: 700; color: var(--cyan);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .pair-badge {
+    font-size: .75rem; background: var(--cyan-dim); color: var(--cyan);
+    border: 1px solid var(--cyan); border-radius: 4px;
+    padding: 2px 8px; letter-spacing: .05em;
+  }
+  .strategy-badge {
+    font-size: .72rem; background: rgba(139,92,246,.15); color: #a78bfa;
+    border: 1px solid rgba(139,92,246,.4); border-radius: 4px;
+    padding: 2px 8px; letter-spacing: .05em; font-family: 'Inter', sans-serif;
+    font-weight: 600; text-transform: uppercase;
+  }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+
+  /* Status pill */
+  .bot-status-pill {
+    font-family: 'JetBrains Mono', monospace; font-size: .72rem; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase;
+    border-radius: 20px; padding: 5px 14px; border: 1px solid; transition: all .3s;
+  }
+  .bot-status-pill.stopped    { color: #888; border-color: #444; background: rgba(255,255,255,.04); }
+  .bot-status-pill.connecting { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+  .bot-status-pill.running    { color: var(--green); border-color: var(--green); background: var(--green-dim); animation: pulse-green 2s ease-in-out infinite; }
+  .bot-status-pill.halted     { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+  .bot-status-pill.error      { color: var(--red);   border-color: var(--red);   background: var(--red-dim); }
+
+  @keyframes pulse-green {
+    0%,100% { box-shadow: 0 0 0 0 var(--green-glow); }
+    50%      { box-shadow: 0 0 10px 3px var(--green-glow); }
+  }
+
+  .bot-control-btn {
+    font-family: 'Inter', sans-serif; font-size: .85rem; font-weight: 600;
+    border: none; border-radius: 8px; padding: 9px 22px; cursor: pointer;
+    transition: all .2s; letter-spacing: .02em;
+  }
+  .bot-control-btn.start { background: var(--green); color: #000; }
+  .bot-control-btn.start:hover { background: #00e07a; transform: translateY(-1px); }
+  .bot-control-btn.stop  { background: var(--red);   color: #fff; }
+  .bot-control-btn.stop:hover  { background: #e03030; transform: translateY(-1px); }
+  .bot-control-btn:disabled { opacity: .45; cursor: not-allowed; transform: none !important; }
+
+  /* Paper trading banner */
+  .paper-banner {
+    background: rgba(255,170,0,.08); border: 1px solid rgba(255,170,0,.3);
+    border-radius: 8px; padding: 8px 16px; font-size: .78rem;
+    color: var(--amber); margin-bottom: 16px; text-align: center; font-weight: 500;
+  }
+
+  /* Metric cards */
+  .bot-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px; margin-bottom: 16px;
+  }
+  .metric-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px;
+  }
+  .metric-label {
+    font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .1em; color: #555; margin-bottom: 6px;
+  }
+  .metric-value {
+    font-family: 'JetBrains Mono', monospace; font-size: 1.3rem;
+    font-weight: 700; color: #e0e0e0;
+  }
+  .metric-value.green  { color: var(--green); }
+  .metric-value.red    { color: var(--red); }
+  .metric-value.cyan   { color: var(--cyan); }
+  .metric-value.amber  { color: var(--amber); }
+  .metric-value.violet { color: #a78bfa; }
+
+  /* Instrument cards side by side */
+  .instruments-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;
+  }
+  @media (max-width: 700px) { .instruments-grid { grid-template-columns: 1fr; } }
+
+  .instrument-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px; transition: border-color .3s;
+  }
+  .instrument-card.has-signal-long  { border-color: rgba(0,200,120,.5); }
+  .instrument-card.has-signal-short { border-color: rgba(220,50,50,.5); }
+  .instrument-card.in-position      { border-color: var(--cyan); }
+
+  .instrument-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .instrument-symbol {
+    font-family: 'JetBrains Mono', monospace; font-size: 1rem;
+    font-weight: 700; color: #e0e0e0;
+  }
+  .instrument-full-name {
+    font-size: .7rem; color: #555; margin-top: 2px;
+  }
+
+  .signal-pill {
+    font-family: 'JetBrains Mono', monospace; font-size: .68rem; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase;
+    border-radius: 12px; padding: 3px 10px; border: 1px solid;
+  }
+  .signal-pill.long    { color: var(--green); border-color: var(--green); background: var(--green-dim); }
+  .signal-pill.short   { color: var(--red);   border-color: var(--red);   background: var(--red-dim); }
+  .signal-pill.neutral { color: #555;         border-color: #333;         background: transparent; }
+
+  .instrument-stats {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    margin-bottom: 14px;
+  }
+  .istat { }
+  .istat-label {
+    font-size: .63rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .08em; color: #555; margin-bottom: 3px;
+  }
+  .istat-value {
+    font-family: 'JetBrains Mono', monospace; font-size: .9rem; font-weight: 600;
+    color: #ccc;
+  }
+  .istat-value.cyan   { color: var(--cyan); }
+  .istat-value.amber  { color: var(--amber); }
+  .istat-value.amber2 { color: #fcd34d; }
+  .istat-value.green  { color: var(--green); }
+  .istat-value.red    { color: var(--red); }
+  .istat-value.violet { color: #a78bfa; }
+
+  /* EMA indicator bar */
+  .ema-bar {
+    display: flex; align-items: center; gap: 8px; margin-top: 6px;
+    font-size: .7rem; color: #555;
+  }
+  .ema-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .ema-dot.fast { background: var(--cyan); }
+  .ema-dot.slow { background: var(--amber); }
+  .ema-cross-label {
+    font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .06em; margin-left: 4px;
+  }
+  .ema-cross-label.bullish { color: var(--green); }
+  .ema-cross-label.bearish { color: var(--red); }
+
+  /* Open position inline */
+  .position-row {
+    background: rgba(0,212,255,.06); border: 1px solid rgba(0,212,255,.2);
+    border-radius: 8px; padding: 10px 12px; margin-top: 10px;
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  }
+  .pos-field-label {
+    font-size: .62rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .08em; color: #555; margin-bottom: 2px;
+  }
+  .pos-field-value {
+    font-family: 'JetBrains Mono', monospace; font-size: .82rem; font-weight: 600;
+  }
+  .pos-field-value.long   { color: var(--green); }
+  .pos-field-value.short  { color: var(--red); }
+  .pos-field-value.entry  { color: #ddd; }
+  .pos-field-value.sl     { color: var(--red); }
+  .pos-field-value.tp     { color: var(--green); }
+  .pos-field-value.pnl-pos { color: var(--green); }
+  .pos-field-value.pnl-neg { color: var(--red); }
+
+  /* Log card */
+  .log-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px; margin-top: 16px;
+  }
+  .log-title {
+    font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .1em; color: #555; margin-bottom: 12px;
+  }
+  .log-table { width: 100%; border-collapse: collapse; }
+  .log-table td {
+    padding: 5px 8px; font-size: .78rem; border-bottom: 1px solid var(--border-subtle);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .log-table td:first-child { color: #555; white-space: nowrap; width: 70px; }
+  .log-row.info    td:last-child { color: #888; }
+  .log-row.warning td:last-child { color: var(--amber); }
+  .log-row.signal  td:last-child { color: var(--amber); font-weight: 700; }
+  .log-row.trade   td:last-child { color: var(--green); font-weight: 700; }
+  .log-row.error   td:last-child { color: var(--red); }
+  .log-empty { color: #444; font-size: .85rem; text-align: center; padding: 18px 0; font-style: italic; }
+
+  .last-update {
+    font-size: .7rem; color: #444; text-align: right; margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .section-title {
+    font-size: .68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .1em; color: #555; margin-bottom: 10px;
+  }
+
+  .conn-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 6px; background: #444;
+  }
+  .conn-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+  .conn-dot.error     { background: var(--red); }
+</style>
+</head>
+<body>
+<!-- ── NAVIGATION (reuse site nav) ── -->
+<nav class="top-nav" id="topNav">
+  <div class="nav-inner">
+    <a class="nav-brand" href="/">
+      <span class="brand-icon">⬡</span>
+      <span class="brand-text">Option<span class="brand-accent">Riders</span></span>
+    </a>
+    <div class="nav-links">
+      <a class="nav-link" href="/">Home</a>
+      <a class="nav-link" href="/bot.html">Crypto Bot</a>
+      <a class="nav-link" href="/options_bot.html">Options Bot</a>
+      <a class="nav-link active" href="/futures_bot.html">Futures Bot</a>
+    </div>
+  </div>
+</nav>
+
+<div class="bot-page">
+
+  <!-- ── Header ── -->
+  <div class="bot-header-row">
+    <div class="bot-title">
+      Futures Bot
+      <span class="pair-badge">MES / MNQ</span>
+      <span class="strategy-badge">VWAP · EMA Scalp</span>
+    </div>
+    <div class="header-right">
+      <span class="bot-status-pill stopped" id="statusPill">STOPPED</span>
+      <button class="bot-control-btn start" id="controlBtn" onclick="toggleBot()">Start Bot</button>
+    </div>
+  </div>
+
+  <!-- Paper trading notice -->
+  <div class="paper-banner">
+    PAPER TRADING — IB Gateway port 4002 · Micro Futures (MES &amp; MNQ) · $100 daily loss limit
+  </div>
+
+  <!-- ── Top metrics ── -->
+  <div class="bot-metrics">
+    <div class="metric-card">
+      <div class="metric-label">Connection</div>
+      <div class="metric-value" id="metricConn">
+        <span class="conn-dot" id="connDot"></span><span id="connText">—</span>
+      </div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Daily P&L</div>
+      <div class="metric-value" id="metricPnl">$0.00</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Open Positions</div>
+      <div class="metric-value cyan" id="metricPos">0</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Session Trades</div>
+      <div class="metric-value" id="metricTrades">0</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">NY Session</div>
+      <div class="metric-value" id="metricSession">—</div>
+    </div>
+  </div>
+
+  <!-- ── Instruments ── -->
+  <div class="section-title">Instruments</div>
+  <div class="instruments-grid">
+    <!-- MES card -->
+    <div class="instrument-card" id="card-MES">
+      <div class="instrument-header">
+        <div>
+          <div class="instrument-symbol">MES</div>
+          <div class="instrument-full-name">Micro E-mini S&P 500</div>
+        </div>
+        <span class="signal-pill neutral" id="signal-MES">NEUTRAL</span>
+      </div>
+      <div class="instrument-stats">
+        <div class="istat">
+          <div class="istat-label">Price</div>
+          <div class="istat-value" id="price-MES">—</div>
+        </div>
+        <div class="istat">
+          <div class="istat-label">VWAP</div>
+          <div class="istat-value cyan" id="vwap-MES">—</div>
+        </div>
+        <div class="istat">
+          <div class="istat-label">ATR(14)</div>
+          <div class="istat-value violet" id="atr-MES">—</div>
+        </div>
+        <div class="istat">
+          <div class="istat-label">EMA 9</div>
+          <div class="istat-value amber" id="ema9-MES">—</div>
+        </div>
+        <div class="istat">
+          <div class="istat-label">EMA 21</div>
+          <div class="istat-value amber2" id="ema21-MES">—</div>
+        </div>
+        <div class="istat">
+          <div class="istat-label">Bars</div>
+          <div class="istat-value" id="bars-MES">—</div>
+        </div>
+      </div>
+      <div class="ema-bar">
+        <span class="ema-dot fast"></span><span>EMA9</span>
+        <span class="ema-dot slow"></span><span>EMA21</span>
+        <span class="ema-cross-label" id="emaCross-MES"></span>
+      </div>
+      <div id="position-MES"></div>
+    </div>
+
+    <!-- MNQ card -->
+    <div class="instrument-card" id="card-MNQ">
+      <div class="instrument-header">
+        <div>
+          <div class="instrument-symbol">MNQ</div>
+          <div class="instrument-full-name">Micro E-mini Nasdaq 100</div>
+        </div>
+        <span class="signal-pill neutral" id="signal-MNQ">NEUTRAL</span>
+      </div>
+      <div class="instrument-stats">
+        <div class="istat">
+          <div class="istat-label">Price</div>
+          <div class="istat-value" id="price-MNQ">—</div>
+        </div>
+        <div class="istat">
+          <div class="istat-label">VWAP</div>
+          <div class="istat-value cyan" id="vwap-MNQ">—</div>
+        </div>
+        <div class="istat">
+          <div class="istat-label">ATR(14)</div>
+          <div class="istat-value violet" id="atr-MNQ">—</div>
+        </div>
+        <div class="istat">
+          <div class="istat-label">EMA 9</div>
+          <div class="istat-value amber" id="ema9-MNQ">—</div>
+        </div>
+        <div class="istat">
+          <div class="istat-label">EMA 21</div>
+          <div class="istat-value amber2" id="ema21-MNQ">—</div>
+        </div>
+        <div class="istat">
+          <div class="istat-label">Bars</div>
+          <div class="istat-value" id="bars-MNQ">—</div>
+        </div>
+      </div>
+      <div class="ema-bar">
+        <span class="ema-dot fast"></span><span>EMA9</span>
+        <span class="ema-dot slow"></span><span>EMA21</span>
+        <span class="ema-cross-label" id="emaCross-MNQ"></span>
+      </div>
+      <div id="position-MNQ"></div>
+    </div>
+  </div>
+
+  <!-- Error banner -->
+  <div id="errorBanner" style="display:none;background:rgba(220,50,50,.1);border:1px solid rgba(220,50,50,.3);border-radius:8px;padding:10px 16px;font-size:.82rem;color:var(--red);margin-bottom:16px;"></div>
+
+  <!-- ── Log ── -->
+  <div class="log-card">
+    <div class="log-title">Bot Log</div>
+    <table class="log-table" id="logTable">
+      <tbody id="logBody">
+        <tr><td colspan="2" class="log-empty">Waiting for bot to start…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="last-update">Last update: <span id="lastUpdate">—</span></div>
+
+</div><!-- /.bot-page -->
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let _isRunning = false;
+let _pollInterval = null;
+
+// ── Poll /api/status every 3 seconds ─────────────────────────────────────────
+async function poll() {
+  try {
+    const r = await fetch('/api/status');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    update(d);
+  } catch (e) {
+    console.warn('poll error:', e);
+  }
+}
+
+function fmt(v, decimals = 2) {
+  if (v === null || v === undefined) return '—';
+  return Number(v).toFixed(decimals);
+}
+
+function fmtPnl(v) {
+  if (v === null || v === undefined) return '—';
+  const n = Number(v);
+  return (n >= 0 ? '+' : '') + '$' + Math.abs(n).toFixed(2);
+}
+
+function update(d) {
+  const status   = d.status   || 'stopped';
+  const conn     = d.connected || false;
+  const halted   = d.halted   || false;
+  const dailyPnl = d.daily_pnl || 0;
+  const positions = d.positions || {};
+  const instruments = d.instruments || {};
+  const logs     = d.logs || [];
+  const now      = new Date();
+  const nyTime   = now.toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: false });
+  const [h, m]   = nyTime.split(':').map(Number);
+  const inSession = (h === 9 && m >= 30) || (h > 9 && h < 16);
+
+  _isRunning = status === 'running' || status === 'connecting' || status === 'halted';
+
+  // Status pill
+  const pill = document.getElementById('statusPill');
+  pill.className = 'bot-status-pill ' + status;
+  pill.textContent = status.toUpperCase();
+
+  // Control button
+  const btn = document.getElementById('controlBtn');
+  if (status === 'stopped' || status === 'error') {
+    btn.className = 'bot-control-btn start';
+    btn.textContent = 'Start Bot';
+    btn.disabled = false;
+  } else {
+    btn.className = 'bot-control-btn stop';
+    btn.textContent = status === 'halted' ? 'Resume' : 'Stop Bot';
+    btn.disabled = false;
+  }
+
+  // Connection dot
+  const dot = document.getElementById('connDot');
+  const connTxt = document.getElementById('connText');
+  dot.className = 'conn-dot' + (conn ? ' connected' : (status === 'error' ? ' error' : ''));
+  connTxt.textContent = conn ? 'Connected' : (status === 'connecting' ? 'Connecting…' : 'Disconnected');
+
+  // Daily P&L
+  const pnlEl = document.getElementById('metricPnl');
+  pnlEl.textContent = fmtPnl(dailyPnl);
+  pnlEl.className = 'metric-value ' + (dailyPnl > 0 ? 'green' : dailyPnl < 0 ? 'red' : '');
+
+  // Other metrics
+  document.getElementById('metricPos').textContent    = Object.keys(positions).length;
+  document.getElementById('metricTrades').textContent = d.session_trades || 0;
+  const sessEl = document.getElementById('metricSession');
+  sessEl.textContent = inSession ? 'OPEN' : 'CLOSED';
+  sessEl.className   = 'metric-value ' + (inSession ? 'green' : '');
+
+  // Error banner
+  const errBanner = document.getElementById('errorBanner');
+  if (d.error) {
+    errBanner.style.display = 'block';
+    errBanner.textContent   = 'Error: ' + d.error;
+  } else {
+    errBanner.style.display = 'none';
+  }
+
+  // ── Instrument cards ───────────────────────────────────────────────────────
+  ['MES', 'MNQ'].forEach(sym => {
+    const ind = instruments[sym] || {};
+    const pos = positions[sym];
+    const signal = ind.signal || 'neutral';
+
+    // Signal pill
+    const sp = document.getElementById('signal-' + sym);
+    sp.className = 'signal-pill ' + signal;
+    sp.textContent = signal.toUpperCase();
+
+    // Card border
+    const card = document.getElementById('card-' + sym);
+    card.className = 'instrument-card' +
+      (pos ? ' in-position' :
+       signal === 'long'  ? ' has-signal-long' :
+       signal === 'short' ? ' has-signal-short' : '');
+
+    // Price with VWAP coloring
+    const priceEl = document.getElementById('price-' + sym);
+    if (ind.price !== null && ind.price !== undefined) {
+      priceEl.textContent = fmt(ind.price, 2);
+      const aboveVwap = ind.vwap !== null && ind.price > ind.vwap;
+      priceEl.className = 'istat-value ' + (aboveVwap ? 'green' : 'red');
+    } else {
+      priceEl.textContent = '—';
+      priceEl.className   = 'istat-value';
+    }
+
+    document.getElementById('vwap-MES'.replace('MES', sym)).textContent = fmt(ind.vwap, 2);
+    document.getElementById('atr-' + sym).textContent  = ind.atr ? fmt(ind.atr, 4) : '—';
+    document.getElementById('ema9-' + sym).textContent  = fmt(ind.ema9, 2);
+    document.getElementById('ema21-' + sym).textContent = fmt(ind.ema21, 2);
+    document.getElementById('bars-' + sym).textContent  = ind.bars_loaded || '—';
+
+    // EMA cross label
+    const crossEl = document.getElementById('emaCross-' + sym);
+    if (ind.ema9 !== null && ind.ema21 !== null && ind.ema9 !== undefined && ind.ema21 !== undefined) {
+      if (ind.ema9 > ind.ema21) {
+        crossEl.textContent = '▲ EMA9 > EMA21';
+        crossEl.className   = 'ema-cross-label bullish';
+      } else if (ind.ema9 < ind.ema21) {
+        crossEl.textContent = '▼ EMA9 < EMA21';
+        crossEl.className   = 'ema-cross-label bearish';
+      } else {
+        crossEl.textContent = '';
+        crossEl.className   = 'ema-cross-label';
+      }
+    } else {
+      crossEl.textContent = '';
+    }
+
+    // Position row
+    const posDiv = document.getElementById('position-' + sym);
+    if (pos) {
+      const upnl = pos.unrealized_pnl || 0;
+      posDiv.innerHTML = `
+        <div class="position-row">
+          <div>
+            <div class="pos-field-label">Side</div>
+            <div class="pos-field-value ${pos.side}">${pos.side.toUpperCase()}</div>
+          </div>
+          <div>
+            <div class="pos-field-label">Entry</div>
+            <div class="pos-field-value entry">${fmt(pos.entry)}</div>
+          </div>
+          <div>
+            <div class="pos-field-label">SL / TP</div>
+            <div class="pos-field-value sl">${pos.sl ? fmt(pos.sl) : '—'}</div>
+          </div>
+          <div>
+            <div class="pos-field-label">Unreal. P&L</div>
+            <div class="pos-field-value ${upnl >= 0 ? 'pnl-pos' : 'pnl-neg'}">${fmtPnl(upnl)}</div>
+          </div>
+        </div>`;
+    } else {
+      posDiv.innerHTML = '';
+    }
+  });
+
+  // ── Log table ──────────────────────────────────────────────────────────────
+  const tbody = document.getElementById('logBody');
+  if (!logs || logs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="2" class="log-empty">No log entries yet.</td></tr>';
+  } else {
+    tbody.innerHTML = logs.slice(0, 50).map(entry => {
+      const lvl = entry.level || 'info';
+      const cls = lvl === 'warning' ? 'warning' :
+                  lvl === 'error'   ? 'error'   :
+                  (entry.msg || '').match(/signal|ENTRY|crossov/i) ? 'signal' :
+                  (entry.msg || '').match(/fill|LONG|SHORT|close/i) ? 'trade' : 'info';
+      return `<tr class="log-row ${cls}">
+        <td>${entry.time || ''}</td>
+        <td>${escHtml(entry.msg || '')}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  document.getElementById('lastUpdate').textContent = d.last_update || new Date().toLocaleTimeString();
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Start / Stop ──────────────────────────────────────────────────────────────
+async function toggleBot() {
+  const btn = document.getElementById('controlBtn');
+  btn.disabled = true;
+
+  const statusPill = document.getElementById('statusPill');
+  const isStopped = statusPill.classList.contains('stopped') ||
+                    statusPill.classList.contains('error');
+
+  const endpoint = isStopped ? '/api/start' : '/api/stop';
+  try {
+    const r = await fetch(endpoint, { method: 'POST' });
+    const d = await r.json();
+    console.log(endpoint, d);
+  } catch(e) {
+    console.error(e);
+  }
+
+  setTimeout(poll, 800);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+poll();
+setInterval(poll, 3000);
+</script>
+</body>
+</html>

@@ -47,8 +47,17 @@ class CryptoHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
-        if path == "/api/bot-status":
-            self._json(self._status())
+        if path in ("/api/bot-status", "/api/bots"):
+            state = self._status()
+            # bot.html expects a list of bot objects under /api/bots
+            if path == "/api/bots":
+                symbol = os.environ.get("BOT_SYMBOL", "BTCUSDT")
+                self._json([{"symbol": symbol, **state}])
+            else:
+                self._json(state)
+        elif path.startswith("/api/bot-strategy"):
+            # Return current strategy info
+            self._json({"strategy": os.environ.get("BOT_STRATEGY", "combo_scalp")})
         elif path == "/api/bot-control":
             self._json({"error": "use POST"}, 405)
         elif path in ("/", ""):
@@ -62,7 +71,7 @@ class CryptoHandler(SimpleHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length)) if length else {}
 
-        if path == "/api/bot-control":
+        if path in ("/api/bot-control", "/api/bots"):
             action = body.get("action", "")
             if _bot is None:
                 self._json({"error": "bot not available"}, 503)
@@ -83,7 +92,7 @@ class CryptoHandler(SimpleHTTPRequestHandler):
         if _bot is None:
             return {"status": "unavailable", "error": "bot_core not loaded"}
         try:
-            return _bot.get_status()
+            return _bot.get_state()
         except Exception as e:
             return {"status": "error", "error": str(e)}
 

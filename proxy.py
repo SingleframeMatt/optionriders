@@ -17,6 +17,7 @@ import urllib.error
 
 CRYPTO_PORT = 8125
 OPTIONS_PORT = 8126
+FUTURES_PORT = 8128
 PROXY_PORT = 8127
 
 INDEX_HTML = """<!DOCTYPE html>
@@ -58,6 +59,11 @@ INDEX_HTML = """<!DOCTYPE html>
       <div class="card-icon">OPT</div>
       <div class="card-title">Options Bot</div>
       <div class="card-desc">SPY/QQQ options via IBKR paper</div>
+    </a>
+    <a class="card" href="/futures/">
+      <div class="card-icon">ES</div>
+      <div class="card-title">Futures Bot</div>
+      <div class="card-desc">MES/MNQ futures via IBKR paper</div>
     </a>
   </div>
 </div>
@@ -132,6 +138,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
             self._proxy(OPTIONS_PORT, sub if sub else "/", "/options/")
+        elif path.startswith("/futures"):
+            sub = path[len("/futures"):]
+            if not sub:
+                self.send_response(301)
+                self.send_header("Location", "/futures/")
+                self.end_headers()
+                return
+            self._proxy(FUTURES_PORT, sub if sub else "/", "/futures/")
         else:
             self.send_response(404)
             self.end_headers()
