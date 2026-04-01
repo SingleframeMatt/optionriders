@@ -88,11 +88,14 @@ const ECONOMIC_CALENDAR = {
     "https://r.jina.ai/http://nfs.faireconomy.media/ff_calendar_thisweek.json",
     "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
   ],
+  allEvents: [],
   events: [],
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   lastUpdated: "",
   error: "",
-  country: "USD"
+  country: "USD",
+  impactFilter: "High",
+  currencyFilter: "USD"
 };
 
 const OPTIONS_FLOW = {
@@ -974,14 +977,17 @@ function renderCalendar() {
   const events = ECONOMIC_CALENDAR.events;
 
   if (meta) {
+    const impactLabel = ECONOMIC_CALENDAR.impactFilter === 'Medium' ? 'High + Medium' : 'High only';
+    const currencyLabel = ECONOMIC_CALENDAR.currencyFilter === 'ALL' ? 'All currencies' : ECONOMIC_CALENDAR.currencyFilter;
+    const filterLabel = `${currencyLabel} · ${impactLabel}`;
     if (ECONOMIC_CALENDAR.error) {
-      meta.textContent = `USD red folder only · ${ECONOMIC_CALENDAR.error}`;
+      meta.textContent = `${filterLabel} · ${ECONOMIC_CALENDAR.error}`;
     } else if (events.length > 0) {
       const weekLabel = getCalendarWeekLabel(events);
       const updatedLabel = ECONOMIC_CALENDAR.lastUpdated ? ` · Updated ${ECONOMIC_CALENDAR.lastUpdated}` : '';
-      meta.textContent = `USD red folder only · ${weekLabel} · Times shown in ${ECONOMIC_CALENDAR.timezone}${updatedLabel}`;
+      meta.textContent = `${filterLabel} · ${weekLabel} · Times shown in ${ECONOMIC_CALENDAR.timezone}${updatedLabel}`;
     } else {
-      meta.textContent = `USD red folder only · Loading weekly events...`;
+      meta.textContent = `${filterLabel} · Loading weekly events...`;
     }
   }
 
@@ -1073,9 +1079,10 @@ function extractCalendarPayload(rawText) {
 }
 
 function formatEconomicEvent(rawEvent) {
-  if (!rawEvent || rawEvent.impact !== 'High' || rawEvent.country !== ECONOMIC_CALENDAR.country || !rawEvent.date) {
-    return null;
-  }
+  if (!rawEvent || !rawEvent.date) return null;
+  const allowedImpacts = ECONOMIC_CALENDAR.impactFilter === 'Medium' ? ['High', 'Medium'] : ['High'];
+  if (!allowedImpacts.includes(rawEvent.impact)) return null;
+  if (ECONOMIC_CALENDAR.currencyFilter !== 'ALL' && rawEvent.country !== ECONOMIC_CALENDAR.currencyFilter) return null;
 
   const eventDate = new Date(rawEvent.date);
   if (Number.isNaN(eventDate.getTime())) return null;
@@ -1117,6 +1124,32 @@ function formatEconomicEvent(rawEvent) {
   };
 }
 
+function initCalendarFilters() {
+  const impactEl = document.getElementById('calendarImpactFilter');
+  const currencyEl = document.getElementById('calendarCurrencyFilter');
+  if (impactEl) {
+    impactEl.addEventListener('change', () => {
+      ECONOMIC_CALENDAR.impactFilter = impactEl.value;
+      applyCalendarFilters();
+      renderCalendar();
+    });
+  }
+  if (currencyEl) {
+    currencyEl.addEventListener('change', () => {
+      ECONOMIC_CALENDAR.currencyFilter = currencyEl.value;
+      applyCalendarFilters();
+      renderCalendar();
+    });
+  }
+}
+
+function applyCalendarFilters() {
+  ECONOMIC_CALENDAR.events = ECONOMIC_CALENDAR.allEvents
+    .map(formatEconomicEvent)
+    .filter(Boolean)
+    .sort((a, b) => a.date - b.date);
+}
+
 async function fetchEconomicCalendar() {
   const fetchOptions = {
     headers: {
@@ -1140,16 +1173,14 @@ async function fetchEconomicCalendar() {
       const responseText = await response.text();
       const jsonPayload = extractCalendarPayload(responseText);
       const parsed = JSON.parse(jsonPayload);
-      const events = parsed
-        .map(formatEconomicEvent)
-        .filter(Boolean)
-        .sort((a, b) => a.date - b.date);
 
-      if (events.length === 0) {
-        throw new Error('No high-impact events were returned.');
+      ECONOMIC_CALENDAR.allEvents = parsed;
+      applyCalendarFilters();
+
+      if (ECONOMIC_CALENDAR.events.length === 0) {
+        throw new Error('No matching events were returned for the current filter.');
       }
 
-      ECONOMIC_CALENDAR.events = events;
       ECONOMIC_CALENDAR.error = '';
       ECONOMIC_CALENDAR.lastUpdated = new Intl.DateTimeFormat('en-US', {
         timeZone: ECONOMIC_CALENDAR.timezone,
@@ -2656,6 +2687,7 @@ async function init() {
   initAddTickerModal();
   initTickerDetailModal();
   initTickerHoverPopup();
+  initCalendarFilters();
   fetchAppVersion();
   await Promise.allSettled([
     fetchEconomicCalendar(),

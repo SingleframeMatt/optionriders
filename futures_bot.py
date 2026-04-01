@@ -260,6 +260,9 @@ def run():
     """Bot entry point — runs in a background daemon thread."""
     global _state
 
+    import asyncio
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
     try:
         from ib_insync import IB, Future, MarketOrder, StopOrder, LimitOrder, util
     except ImportError:

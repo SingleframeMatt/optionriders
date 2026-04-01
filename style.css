@@ -1477,6 +1477,22 @@ body {
   letter-spacing: 0.3px;
 }
 
+.calendar-filter-select {
+  background: var(--bg-card, #1a1a2e);
+  color: var(--text-secondary, #a0a0b0);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  padding: 2px 6px;
+  cursor: pointer;
+  outline: none;
+}
+
+.calendar-filter-select:hover {
+  border-color: rgba(255,255,255,0.22);
+}
+
 .calendar-source-link {
   color: var(--cyan);
   text-decoration: none;
