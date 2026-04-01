@@ -131,6 +131,54 @@
           <div class="tracked-ticker-list" id="customTickerGrid"></div>
         </section>
 
+        <!-- Economic Calendar -->
+        <section class="section is-expanded" id="calendarSection" data-collapsible>
+          <button class="section-toggle" type="button" aria-expanded="true" aria-controls="calendarBodyWrap">
+            <span class="section-title">Economic Calendar</span>
+            <span class="section-toggle-icon" aria-hidden="true"></span>
+          </button>
+          <div class="section-body" id="calendarBodyWrap">
+            <div class="section-header-row calendar-header-row">
+              <div class="section-title-spacer"></div>
+              <div class="calendar-toolbar">
+                <span class="calendar-toolbar-note" id="calendarMeta">USD red folder only · Loading weekly events...</span>
+                <select class="calendar-filter-select" id="calendarImpactFilter" title="Impact filter">
+                  <option value="High">High only</option>
+                  <option value="Medium">High + Medium</option>
+                </select>
+                <select class="calendar-filter-select" id="calendarCurrencyFilter" title="Currency filter">
+                  <option value="USD">USD</option>
+                  <option value="ALL">All currencies</option>
+                </select>
+                <a
+                  class="calendar-source-link"
+                  href="https://www.forexfactory.com/calendar"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Forex Factory ↗
+                </a>
+              </div>
+            </div>
+              <div class="table-wrapper">
+                <table class="data-table calendar-table" id="calendarTable">
+                  <thead>
+                    <tr>
+                      <th>Day</th>
+                      <th>Time</th>
+                      <th>CCY</th>
+                      <th>Event</th>
+                      <th>Forecast</th>
+                      <th>Prior</th>
+                      <th>Actual</th>
+                    </tr>
+                  </thead>
+                  <tbody id="calendarBody"></tbody>
+                </table>
+              </div>
+            </div>
+        </section>
+
         <!-- Market Overview Banner -->
         <section class="section catalyst-section is-expanded" id="catalysts" data-collapsible>
           <button class="section-toggle" type="button" aria-expanded="true" aria-controls="catalystsBody">
@@ -271,54 +319,6 @@
               </div>
             </div>
           </div>
-        </section>
-
-        <!-- Economic Calendar -->
-        <section class="section is-expanded" id="calendarSection" data-collapsible>
-          <button class="section-toggle" type="button" aria-expanded="true" aria-controls="calendarBodyWrap">
-            <span class="section-title">Economic Calendar</span>
-            <span class="section-toggle-icon" aria-hidden="true"></span>
-          </button>
-          <div class="section-body" id="calendarBodyWrap">
-            <div class="section-header-row calendar-header-row">
-              <div class="section-title-spacer"></div>
-              <div class="calendar-toolbar">
-                <span class="calendar-toolbar-note" id="calendarMeta">USD red folder only · Loading weekly events...</span>
-                <select class="calendar-filter-select" id="calendarImpactFilter" title="Impact filter">
-                  <option value="High">High only</option>
-                  <option value="Medium">High + Medium</option>
-                </select>
-                <select class="calendar-filter-select" id="calendarCurrencyFilter" title="Currency filter">
-                  <option value="USD">USD</option>
-                  <option value="ALL">All currencies</option>
-                </select>
-                <a
-                  class="calendar-source-link"
-                  href="https://www.forexfactory.com/calendar"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Forex Factory ↗
-                </a>
-              </div>
-            </div>
-              <div class="table-wrapper">
-                <table class="data-table calendar-table" id="calendarTable">
-                  <thead>
-                    <tr>
-                      <th>Day</th>
-                      <th>Time</th>
-                      <th>CCY</th>
-                      <th>Event</th>
-                      <th>Forecast</th>
-                      <th>Prior</th>
-                      <th>Actual</th>
-                    </tr>
-                  </thead>
-                  <tbody id="calendarBody"></tbody>
-                </table>
-              </div>
-            </div>
         </section>
 
         <!-- Index Cards -->
