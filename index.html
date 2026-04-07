@@ -121,11 +121,33 @@
       </div>
       <div class="dashboard-gated-content" id="dashboardGatedContent">
         <!-- Bot shortcuts — only visible when dashboard is unlocked -->
-<div style="display:flex;gap:12px;padding:16px 0 8px;flex-wrap:wrap;">
+        <div style="display:flex;gap:12px;padding:16px 0 8px;flex-wrap:wrap;">
   <a href="crypto-bot.html" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;background:rgba(0,224,255,.12);border:1px solid rgba(0,224,255,.25);color:#22d3ee;font-size:13px;font-weight:600;text-decoration:none;">⚡ Crypto Bot</a>
   <a href="options-bot.html" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;background:rgba(129,140,248,.12);border:1px solid rgba(129,140,248,.25);color:#818cf8;font-size:13px;font-weight:600;text-decoration:none;">📈 Options Bot</a>
   <a href="futures-bot.html" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.25);color:#a78bfa;font-size:13px;font-weight:600;text-decoration:none;">📊 Futures Bot</a>
 </div>
+
+        <section class="section market-radar-section is-expanded" id="marketRadarSection">
+          <div class="market-radar-shell">
+            <div class="market-radar-copy">
+              <span class="market-radar-kicker">First Look</span>
+              <h2 class="market-radar-headline">See where the market energy is concentrating before you scroll.</h2>
+              <p class="market-radar-description">
+                Option Riders Market Radar surfaces the names pulling the most attention across our watchlist and cross-source scan.
+                Bigger bubbles mean higher conviction, stronger catalysts, and more signal pressure. Click any bubble to drill into the ticker.
+              </p>
+              <div class="market-radar-legend">
+                <span class="market-radar-legend-item"><span class="market-radar-legend-dot long"></span> Long setup bias</span>
+                <span class="market-radar-legend-item"><span class="market-radar-legend-dot short"></span> Short setup bias</span>
+                <span class="market-radar-legend-item"><span class="market-radar-legend-dot neutral"></span> Cross-source momentum</span>
+              </div>
+              <div class="market-radar-stats" id="marketRadarStats"></div>
+            </div>
+            <div class="market-radar-stage">
+              <div class="market-radar-grid" id="marketRadarGrid"></div>
+            </div>
+          </div>
+        </section>
 
         <section class="section tracked-tickers-section is-expanded" id="trackedTickersSection">
           <div class="tracked-ticker-list" id="customTickerGrid"></div>

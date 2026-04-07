@@ -4,6 +4,7 @@
     { "source": "/api/alpha-vantage", "destination": "/api/alpha-vantage.py" },
     { "source": "/api/options-flow", "destination": "/api/options-flow.py" },
     { "source": "/api/market-data", "destination": "/api/market-data.py" },
+    { "source": "/api/top-watch", "destination": "/api/top-watch.py" },
     { "source": "/api/public-config", "destination": "/api/public-config.py" },
     { "source": "/crypto-bot", "destination": "/crypto-bot.html" },
     { "source": "/options-bot", "destination": "/options-bot.html" },
