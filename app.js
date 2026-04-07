@@ -900,6 +900,242 @@ function renderCatalysts() {
   ).join('');
 }
 
+const MARKET_RADAR_LAYOUT = [
+  { x: 50, y: 50, size: 1.22 },
+  { x: 28, y: 28, size: 0.94 },
+  { x: 71, y: 29, size: 0.96 },
+  { x: 26, y: 67, size: 0.9 },
+  { x: 73, y: 68, size: 0.9 },
+  { x: 49, y: 18, size: 0.8 },
+  { x: 16, y: 49, size: 0.76 },
+  { x: 84, y: 50, size: 0.76 },
+  { x: 42, y: 82, size: 0.72 },
+  { x: 59, y: 84, size: 0.72 },
+  { x: 13, y: 20, size: 0.68 },
+  { x: 87, y: 19, size: 0.68 },
+];
+const MIN_MARKET_RADAR_BUBBLES = 8;
+const MARKET_RADAR_EDITORIAL_FALLBACKS = [
+  {
+    ticker: 'AMD',
+    direction: 'LONG',
+    bias: 'Bullish',
+    catalyst: 'AI sympathy and semi momentum',
+    expectedMovePct: 1.9,
+  },
+  {
+    ticker: 'TSLA',
+    direction: 'LONG',
+    bias: 'High Beta',
+    catalyst: 'High-beta headline magnet with outsized intraday ranges',
+    expectedMovePct: 2.1,
+  },
+];
+
+function parseExpectedMovePercent(item = {}) {
+  if (typeof item.expectedMovePct === 'number') return item.expectedMovePct;
+  const expectedMove = String(item.expectedMove || '');
+  const pctMatch = expectedMove.match(/\(([-+]?\d+(?:\.\d+)?)%\)/);
+  if (pctMatch) return Number(pctMatch[1]);
+  if (typeof item.atrPct === 'number') return item.atrPct;
+  return 0;
+}
+
+function getRadarTone(item) {
+  const direction = String(item.direction || '').toUpperCase();
+  const bias = String(item.bias || '').toLowerCase();
+  if (direction === 'LONG' || (bias.includes('bullish') && !bias.includes('bearish'))) return 'long';
+  if (direction === 'SHORT' || (bias.includes('bearish') && !bias.includes('bullish'))) return 'short';
+  return 'neutral';
+}
+
+function buildMarketRadarItems() {
+  const merged = new Map();
+  const watchlistItems = Array.isArray(DASHBOARD_DATA.watchlist) ? DASHBOARD_DATA.watchlist : [];
+  const topWatchItems = Array.isArray(TOP_WATCH.topWatch) ? TOP_WATCH.topWatch : [];
+  const rankedTickers = Array.isArray(DASHBOARD_DATA.tickers) ? DASHBOARD_DATA.tickers : [];
+
+  watchlistItems.forEach((item, index) => {
+    const details = getTickerDetails(item.ticker) || {};
+    const expectedMovePct = parseExpectedMovePercent(details);
+    merged.set(item.ticker, {
+      ticker: item.ticker,
+      rank: item.rank || index + 1,
+      direction: item.direction || '',
+      catalyst: item.catalyst || '',
+      signalScore: typeof item.signalScore === 'number' ? item.signalScore : details.signalScore,
+      relStrength: typeof item.relStrength === 'number' ? item.relStrength : details.relStrength,
+      price: typeof details.price === 'number' ? details.price : null,
+      changePct: typeof details.change === 'number' ? details.change : null,
+      expectedMove: details.expectedMove || '',
+      expectedMovePct,
+      sourceCount: 1,
+      score:
+        expectedMovePct * 18
+        +
+        Math.max(0, 48 - index * 4)
+        + Math.max(0, Math.abs(Number(item.signalScore) || 0) * 0.38)
+        + (item.direction === 'LONG' || item.direction === 'SHORT' ? 10 : 0)
+        + Math.max(0, Math.abs(Number(item.relStrength) || 0) * 2.5),
+    });
+  });
+
+  topWatchItems.forEach((item, index) => {
+    const existing = merged.get(item.ticker) || {};
+    const details = getTickerDetails(item.ticker) || {};
+    const scoreBase = Math.max(0, 16 - index);
+    const expectedMovePct = parseExpectedMovePercent(details);
+    merged.set(item.ticker, {
+      ticker: item.ticker,
+      rank: existing.rank || index + 1,
+      direction: existing.direction || '',
+      catalyst: existing.catalyst || `Seen on ${item.sourceCount || 0} sources`,
+      signalScore: typeof existing.signalScore === 'number' ? existing.signalScore : details.signalScore,
+      relStrength: typeof existing.relStrength === 'number' ? existing.relStrength : details.relStrength,
+      price: typeof item.price === 'number' ? item.price : details.price ?? null,
+      changePct: typeof item.changePct === 'number' ? item.changePct : details.change ?? null,
+      expectedMove: details.expectedMove || existing.expectedMove || '',
+      expectedMovePct,
+      sourceCount: Math.max(existing.sourceCount || 0, item.sourceCount || 0),
+      score:
+        (existing.score || 0)
+        + expectedMovePct * 16
+        + scoreBase
+        + (item.sourceCount || 0) * 11
+        + Math.max(0, Math.abs(Number(existing.signalScore ?? details.signalScore) || 0) * 0.2),
+      bias: details.bias || existing.bias || '',
+    });
+  });
+
+  rankedTickers
+    .slice()
+    .sort((a, b) => parseExpectedMovePercent(b) - parseExpectedMovePercent(a))
+    .forEach((item, index) => {
+      if (merged.has(item.ticker)) return;
+      const expectedMovePct = parseExpectedMovePercent(item);
+      merged.set(item.ticker, {
+        ticker: item.ticker,
+        rank: item.rank || index + 1,
+        direction: '',
+        catalyst: item.strategy || item.bias || 'Expected move leader',
+        signalScore: item.signalScore,
+        relStrength: item.relStrength,
+        price: typeof item.price === 'number' ? item.price : null,
+        changePct: typeof item.change === 'number' ? item.change : (typeof item.friChange === 'number' ? item.friChange : null),
+        expectedMove: item.expectedMove || '',
+        expectedMovePct,
+        sourceCount: 1,
+        bias: item.bias || '',
+        score:
+          expectedMovePct * 24
+          + Math.max(0, 26 - index * 2.5)
+          + Math.max(0, Math.abs(Number(item.signalScore) || 0) * 0.28)
+          + Math.max(0, Math.abs(Number(item.relStrength) || 0) * 2.5),
+      });
+    });
+
+  MARKET_RADAR_EDITORIAL_FALLBACKS.forEach((item, index) => {
+    if (merged.has(item.ticker)) return;
+    const expectedMovePct = parseExpectedMovePercent(item);
+    merged.set(item.ticker, {
+      ticker: item.ticker,
+      rank: item.rank || index + 1,
+      direction: item.direction || '',
+      catalyst: item.catalyst || 'Editorial watch',
+      signalScore: item.signalScore,
+      relStrength: item.relStrength,
+      price: typeof item.price === 'number' ? item.price : null,
+      changePct: typeof item.changePct === 'number' ? item.changePct : null,
+      expectedMove: item.expectedMove || '',
+      expectedMovePct,
+      sourceCount: 1,
+      bias: item.bias || '',
+      score:
+        expectedMovePct * 22
+        + Math.max(0, 18 - index * 2),
+    });
+  });
+
+  return Array.from(merged.values())
+    .map((item) => ({
+      ...item,
+      tone: getRadarTone(item),
+    }))
+    .sort((a, b) => (b.score || 0) - (a.score || 0))
+    .slice(0, Math.max(MIN_MARKET_RADAR_BUBBLES, Math.min(MARKET_RADAR_LAYOUT.length, merged.size)));
+}
+
+function renderMarketRadarStats(items) {
+  const stats = document.getElementById('marketRadarStats');
+  if (!stats) return;
+  if (!items.length) {
+    stats.innerHTML = '';
+    return;
+  }
+
+  const lead = items[0];
+  const longCount = items.filter((item) => item.tone === 'long').length;
+  const shortCount = items.filter((item) => item.tone === 'short').length;
+  const strongest = items.reduce((best, item) => (Math.abs(item.signalScore || 0) > Math.abs(best.signalScore || 0) ? item : best), items[0]);
+  const moveLeader = items.reduce((best, item) => ((item.expectedMovePct || 0) > (best.expectedMovePct || 0) ? item : best), items[0]);
+  const focusLabel = lead.catalyst || 'Cross-source momentum';
+  const biasLabel = longCount === shortCount ? 'Balanced board' : longCount > shortCount ? `${longCount} long setups leading` : `${shortCount} short setups leading`;
+  const conviction = moveLeader.expectedMovePct ? `${moveLeader.ticker} ${moveLeader.expectedMovePct.toFixed(1)}% move` : (strongest.signalScore != null ? `${strongest.ticker} ${strongest.signalScore > 0 ? '+' : ''}${strongest.signalScore}` : `${lead.ticker} in focus`);
+
+  stats.innerHTML = `
+    <div class="market-radar-stat">
+      <div class="market-radar-stat-label">Lead Setup</div>
+      <div class="market-radar-stat-value">${escapeHtml(lead.ticker)} · ${escapeHtml(focusLabel)}</div>
+    </div>
+    <div class="market-radar-stat">
+      <div class="market-radar-stat-label">Board Bias</div>
+      <div class="market-radar-stat-value">${escapeHtml(biasLabel)}</div>
+    </div>
+    <div class="market-radar-stat">
+      <div class="market-radar-stat-label">Highest Conviction</div>
+      <div class="market-radar-stat-value">${escapeHtml(conviction)}</div>
+    </div>
+  `;
+}
+
+function renderMarketRadar() {
+  const grid = document.getElementById('marketRadarGrid');
+  if (!grid) return;
+
+  const items = buildMarketRadarItems();
+  renderMarketRadarStats(items);
+
+  if (!items.length) {
+    grid.innerHTML = '<div class="market-radar-empty">Market Radar will populate as watchlist and scanner data come online.</div>';
+    return;
+  }
+
+  grid.innerHTML = items.map((item, index) => {
+    const slot = MARKET_RADAR_LAYOUT[index] || MARKET_RADAR_LAYOUT[MARKET_RADAR_LAYOUT.length - 1];
+    const base = Math.max(84, Math.min(178, 84 + (item.score || 0) * 0.9));
+    const size = Math.round(base * slot.size);
+    const changeText = item.expectedMovePct ? `${item.expectedMovePct.toFixed(1)}% exp move` : (item.changePct != null ? `${item.changePct > 0 ? '+' : ''}${item.changePct.toFixed(1)}%` : `${item.sourceCount || 1} src`);
+    const biasText = item.direction || (item.sourceCount > 1 ? `${item.sourceCount} sources` : 'Watch');
+    const featuredClass = index === 0 ? ' is-featured' : '';
+    const bubbleTitle = `${item.ticker}${item.catalyst ? ` — ${item.catalyst}` : ''}`;
+
+    return `
+      <button
+        class="market-radar-bubble${featuredClass}"
+        type="button"
+        data-tone="${escapeHtml(item.tone)}"
+        style="left:${slot.x}%;top:${slot.y}%;width:${size}px;height:${size}px;"
+        title="${escapeHtml(bubbleTitle)}"
+        onclick="openTickerDetailModal('${escapeHtml(item.ticker)}')"
+      >
+        <span class="market-radar-symbol">${escapeHtml(item.ticker)}</span>
+        <span class="market-radar-bias">${escapeHtml(biasText)}</span>
+        <span class="market-radar-meta">${escapeHtml(changeText)}</span>
+      </button>
+    `;
+  }).join('');
+}
+
 function getAlertItems() {
   const alerts = [];
   const tradeAlerts = ALERT_STATE.items.slice(0, 2).map((item) => ({
@@ -1651,6 +1887,7 @@ async function fetchOptionsFlow(forceFresh = false) {
 
   renderOptionsFlow();
   renderWatchlist();
+  renderMarketRadar();
   evaluateTradeAlerts();
 }
 
@@ -1687,6 +1924,7 @@ async function fetchTopWatch(forceFresh = false) {
   }
 
   renderTopWatch();
+  renderMarketRadar();
 }
 
 function getTickerDetails(ticker) {
@@ -2353,6 +2591,7 @@ async function fetchMarketData(forceFresh = false) {
     renderIndexCards();
     renderTickerCards();
     renderWatchlist();
+    renderMarketRadar();
     renderCustomTickers();
     evaluateTradeAlerts();
 
@@ -2575,6 +2814,7 @@ function mergeOptionsFlowIntoScores() {
   if (changed) {
     renderTickerCards();
     renderWatchlist();
+    renderMarketRadar();
   }
 }
 
@@ -2644,6 +2884,7 @@ async function init() {
   renderAlertBar();
   renderCatalysts();
   renderCalendar();
+  renderMarketRadar();
   renderIndexCards();
   renderTickerCards();
   renderTopWatch();

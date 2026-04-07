@@ -14,8 +14,24 @@
       "dest": "/api/market-data.py"
     },
     {
+      "src": "/api/top-watch",
+      "dest": "/api/top-watch.py"
+    },
+    {
       "src": "/api/public-config",
       "dest": "/api/public-config.py"
+    },
+    {
+      "src": "/crypto-bot",
+      "dest": "/crypto-bot.html"
+    },
+    {
+      "src": "/options-bot",
+      "dest": "/options-bot.html"
+    },
+    {
+      "src": "/futures-bot",
+      "dest": "/futures-bot.html"
     },
     {
       "src": "/$",
