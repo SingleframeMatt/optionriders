@@ -126,6 +126,8 @@ const TOP_TRADE_TODAY = {
   generatedAt: "",
   choppyDayWarning: false,
   loading: true,
+  loadingProgress: 0,
+  loadingTimer: null,
   error: "",
 };
 
@@ -1539,9 +1541,12 @@ function renderTopTradeToday() {
   if (TOP_TRADE_TODAY.loading) {
     meta.textContent = 'Ranking today\'s best options setups...';
     summary.innerHTML = '';
+    const loadingProgress = Math.max(0, Math.min(100, TOP_TRADE_TODAY.loadingProgress || 0));
     grid.innerHTML = `
       <div class="top-trade-loading" role="status" aria-live="polite">
-        <span class="top-trade-loading-horse" aria-hidden="true"></span>
+        <div class="top-trade-loading-rail" aria-hidden="true" style="--top-trade-progress:${loadingProgress}%;">
+          <span class="top-trade-loading-fill"></span>
+        </div>
         <div class="top-trade-loading-copy">
           <span class="top-trade-loading-title">Running daily setup engine...</span>
           <span class="top-trade-loading-subtitle">Scanning market structure, options flow, and momentum leaders.</span>
@@ -1579,9 +1584,10 @@ function renderTopTradeToday() {
     : 'No major scheduled macro risk in the feed';
 
   summary.innerHTML = `
-    <div class="top-trade-summary-card">
+    <div class="top-trade-summary-card top-trade-summary-card-best">
       <span class="top-trade-summary-label">Best Overall</span>
       <div class="top-trade-summary-value">${escapeHtml(TOP_TRADE_TODAY.bestOverallPick || 'No trade')}</div>
+      <span class="top-trade-summary-star" aria-hidden="true">★</span>
     </div>
     <div class="top-trade-summary-card">
       <span class="top-trade-summary-label">Session Type</span>
@@ -1675,6 +1681,41 @@ function renderTopTradeToday() {
       </article>
     `;
   }).join('');
+}
+
+function startTopTradeLoadingProgress() {
+  if (TOP_TRADE_TODAY.loadingTimer) {
+    clearInterval(TOP_TRADE_TODAY.loadingTimer);
+  }
+
+  TOP_TRADE_TODAY.loadingProgress = 0;
+  TOP_TRADE_TODAY.loadingTimer = window.setInterval(() => {
+    if (!TOP_TRADE_TODAY.loading) {
+      clearInterval(TOP_TRADE_TODAY.loadingTimer);
+      TOP_TRADE_TODAY.loadingTimer = null;
+      return;
+    }
+
+    const current = TOP_TRADE_TODAY.loadingProgress || 0;
+    let next = current;
+    if (current < 22) next += 3.4;
+    else if (current < 46) next += 2.4;
+    else if (current < 68) next += 1.6;
+    else if (current < 84) next += 0.9;
+    else if (current < 94) next += 0.45;
+    else if (current < 97) next += 0.18;
+
+    TOP_TRADE_TODAY.loadingProgress = Math.min(97, next);
+    renderTopTradeToday();
+  }, 220);
+}
+
+function stopTopTradeLoadingProgress() {
+  if (TOP_TRADE_TODAY.loadingTimer) {
+    clearInterval(TOP_TRADE_TODAY.loadingTimer);
+    TOP_TRADE_TODAY.loadingTimer = null;
+  }
+  TOP_TRADE_TODAY.loadingProgress = 100;
 }
 
 function getAlertItems() {
@@ -2483,6 +2524,7 @@ async function fetchTopWatch(forceFresh = false) {
 
 async function fetchTopTradeToday(forceFresh = false) {
   TOP_TRADE_TODAY.loading = true;
+  startTopTradeLoadingProgress();
   renderTopTradeToday();
 
   try {
@@ -2502,6 +2544,7 @@ async function fetchTopTradeToday(forceFresh = false) {
     TOP_TRADE_TODAY.generatedAt = payload.generatedAt || '';
     TOP_TRADE_TODAY.choppyDayWarning = Boolean(payload.choppyDayWarning);
     TOP_TRADE_TODAY.loading = false;
+    stopTopTradeLoadingProgress();
     TOP_TRADE_TODAY.error = '';
   } catch (error) {
     TOP_TRADE_TODAY.picks = [];
@@ -2515,6 +2558,7 @@ async function fetchTopTradeToday(forceFresh = false) {
     TOP_TRADE_TODAY.generatedAt = '';
     TOP_TRADE_TODAY.choppyDayWarning = false;
     TOP_TRADE_TODAY.loading = false;
+    stopTopTradeLoadingProgress();
     TOP_TRADE_TODAY.error = 'Run the dashboard server to enable Top Trade Today.';
   }
 
