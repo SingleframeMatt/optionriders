@@ -918,6 +918,16 @@ const MARKET_RADAR_LAYOUT = [
   { x: 87, y: 19, size: 0.68 },
 ];
 const MIN_MARKET_RADAR_BUBBLES = 8;
+const MARKET_RADAR_CURATED_PRIORITY = [
+  { ticker: 'SMCI', direction: 'SHORT', catalyst: 'Bearish momentum + technical breakdown' },
+  { ticker: 'AMD', direction: 'LONG', catalyst: 'AI sympathy and semi momentum' },
+  { ticker: 'MU', direction: 'SHORT', catalyst: 'Largest expected move on the board' },
+  { ticker: 'TSLA', direction: 'SHORT', catalyst: 'High-beta tape leader with outsized intraday range' },
+  { ticker: 'NVDA', direction: 'LONG', catalyst: 'Semiconductor leader and key AI read-through' },
+  { ticker: 'AVGO', direction: 'SHORT', catalyst: 'Heavy semi participation with elevated expected move' },
+  { ticker: 'PLTR', direction: 'SHORT', catalyst: 'Momentum name with active options interest' },
+  { ticker: 'AMZN', direction: 'LONG', catalyst: 'Mega-cap leadership and cross-source traction' },
+];
 const MARKET_RADAR_EDITORIAL_FALLBACKS = [
   {
     ticker: 'AMD',
@@ -952,13 +962,53 @@ function getRadarTone(item) {
   return 'neutral';
 }
 
+function getMarketRadarLookup() {
+  const lookup = new Map();
+  const register = (item, extra = {}) => {
+    if (!item?.ticker) return;
+    const existing = lookup.get(item.ticker) || {};
+    lookup.set(item.ticker, { ...existing, ...item, ...extra });
+  };
+
+  (DASHBOARD_DATA.tickers || []).forEach((item) => register(item, {
+    changePct: typeof item.change === 'number' ? item.change : (typeof item.friChange === 'number' ? item.friChange : null),
+  }));
+  (DASHBOARD_DATA.watchlist || []).forEach((item) => register(item));
+  (TOP_WATCH.topWatch || []).forEach((item) => register(item));
+
+  return lookup;
+}
+
 function buildMarketRadarItems() {
   const merged = new Map();
   const watchlistItems = Array.isArray(DASHBOARD_DATA.watchlist) ? DASHBOARD_DATA.watchlist : [];
   const topWatchItems = Array.isArray(TOP_WATCH.topWatch) ? TOP_WATCH.topWatch : [];
   const rankedTickers = Array.isArray(DASHBOARD_DATA.tickers) ? DASHBOARD_DATA.tickers : [];
+  const lookup = getMarketRadarLookup();
+
+  MARKET_RADAR_CURATED_PRIORITY.forEach((priority, index) => {
+    const item = lookup.get(priority.ticker);
+    if (!item) return;
+    const expectedMovePct = parseExpectedMovePercent(item);
+    merged.set(priority.ticker, {
+      ...item,
+      ticker: priority.ticker,
+      direction: priority.direction || item.direction || '',
+      catalyst: priority.catalyst || item.catalyst || item.strategy || item.bias || 'Curated watch',
+      expectedMove: item.expectedMove || '',
+      expectedMovePct,
+      sourceCount: Math.max(item.sourceCount || 0, 1),
+      score:
+        400
+        - index * 18
+        + expectedMovePct * 28
+        + Math.max(0, Math.abs(Number(item.signalScore) || 0) * 0.25)
+        + Math.max(0, Math.abs(Number(item.relStrength) || 0) * 2),
+    });
+  });
 
   watchlistItems.forEach((item, index) => {
+    if (merged.has(item.ticker)) return;
     const details = getTickerDetails(item.ticker) || {};
     const expectedMovePct = parseExpectedMovePercent(details);
     merged.set(item.ticker, {
@@ -974,8 +1024,7 @@ function buildMarketRadarItems() {
       expectedMovePct,
       sourceCount: 1,
       score:
-        expectedMovePct * 18
-        +
+        expectedMovePct * 18 +
         Math.max(0, 48 - index * 4)
         + Math.max(0, Math.abs(Number(item.signalScore) || 0) * 0.38)
         + (item.direction === 'LONG' || item.direction === 'SHORT' ? 10 : 0)
@@ -984,6 +1033,7 @@ function buildMarketRadarItems() {
   });
 
   topWatchItems.forEach((item, index) => {
+    if (merged.has(item.ticker)) return;
     const existing = merged.get(item.ticker) || {};
     const details = getTickerDetails(item.ticker) || {};
     const scoreBase = Math.max(0, 16 - index);
