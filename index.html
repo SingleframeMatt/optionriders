@@ -24,7 +24,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<!-- Supabase JS (provides Auth with Google OAuth + session management) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <!-- Ticker Tape -->
@@ -77,21 +78,43 @@
     <div class="dashboard-gate-wrap is-locked" id="dashboardGateWrap">
       <div class="auth-gate-overlay" id="authGateOverlay">
         <div class="auth-gate-stack">
-          <div class="auth-gate-card">
+
+          <!--
+            State 1 — SIGNED OUT: shown when no Supabase session exists.
+            Hidden by JS once user is authenticated.
+          -->
+          <div class="auth-gate-card" id="authGateSignIn">
             <span class="auth-gate-kicker">Members Access</span>
             <h2 class="auth-gate-title">Sign in to use the dashboard</h2>
-            <p class="auth-gate-copy">Sign in with email and password or continue with Google to unlock the live watchlist, alerts, options flow, and ticker tools. The TradingView purchase buttons stay available without signing in.</p>
+            <p class="auth-gate-copy">Continue with Google to unlock the live watchlist, alerts, options flow, and ticker tools.</p>
             <div class="auth-gate-actions">
-              <form class="auth-gate-form" id="authGateForm">
-                <input class="auth-gate-input" id="authGateEmail" type="email" placeholder="Email address" autocomplete="email">
-                <input class="auth-gate-input" id="authGatePassword" type="password" placeholder="Password" autocomplete="current-password">
-                <button class="auth-gate-submit" id="authGateSubmit" type="submit">Sign In / Create Account</button>
-              </form>
-              <div class="auth-gate-divider"><span>or continue with Google</span></div>
-              <div class="google-signin-mount" id="googleSignInMountGate"></div>
-              <span class="auth-gate-note" id="authGateNote">Free account. No credit card required.</span>
+              <button class="auth-gate-submit" id="authGateGoogleBtn" type="button" onclick="signInWithGoogle()">
+                Continue with Google
+              </button>
+              <span class="auth-gate-note" id="authGateNote">Signing in creates a free account.</span>
             </div>
           </div>
+
+          <!--
+            State 2 — SIGNED IN, NO ACTIVE SUBSCRIPTION: shown when user is
+            authenticated but has no active/trialing dashboard subscription.
+            Hidden by JS until that state is confirmed.
+          -->
+          <div class="auth-gate-card" id="authGateSubscribe" style="display:none">
+            <span class="auth-gate-kicker">Dashboard Access</span>
+            <h2 class="auth-gate-title">Start your free trial</h2>
+            <p class="auth-gate-copy" id="authGateSubscribeCopy">Try the full dashboard free for 7 days. No charge until your trial ends — cancel any time.</p>
+            <div class="auth-gate-actions">
+              <button class="auth-gate-submit" id="authGateTrialBtn" type="button" onclick="startDashboardCheckout()">
+                Start Free Trial
+              </button>
+              <button class="auth-action-btn" id="authGateManageBillingBtn" type="button" onclick="openBillingPortal()" style="display:none;margin-top:8px;">
+                Manage Billing
+              </button>
+              <span class="auth-gate-note" id="authGateSubscribeNote"></span>
+            </div>
+          </div>
+
           <section class="section product-offer-section compact-offer is-expanded" id="productOfferSection">
             <div class="product-offer-card">
               <div class="product-offer-copy">
@@ -120,13 +143,21 @@
         </div>
       </div>
       <div class="dashboard-gated-content" id="dashboardGatedContent">
-        <!-- Bot shortcuts — only visible when dashboard is unlocked -->
-        <div style="display:flex;gap:12px;padding:16px 0 8px;flex-wrap:wrap;">
-  <a href="crypto-bot.html" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;background:rgba(0,224,255,.12);border:1px solid rgba(0,224,255,.25);color:#22d3ee;font-size:13px;font-weight:600;text-decoration:none;">⚡ Crypto Bot</a>
-  <a href="options-bot.html" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;background:rgba(129,140,248,.12);border:1px solid rgba(129,140,248,.25);color:#818cf8;font-size:13px;font-weight:600;text-decoration:none;">📈 Options Bot</a>
-  <a href="futures-bot.html" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.25);color:#a78bfa;font-size:13px;font-weight:600;text-decoration:none;">📊 Futures Bot</a>
-</div>
-
+        <section class="section top-trade-section is-expanded" id="topTradeTodaySection">
+          <div class="section-header-row top-trade-header-row">
+            <button class="section-toggle" type="button" aria-expanded="true" aria-controls="topTradeTodayBodyWrap">
+              <span class="section-title">Top Trade Today</span>
+              <span class="section-toggle-icon" aria-hidden="true"></span>
+            </button>
+            <span class="top-trade-meta" id="topTradeMeta">Ranking today's best options setups...</span>
+          </div>
+          <div class="section-body" id="topTradeTodayBodyWrap">
+            <div class="top-trade-summary" id="topTradeSummary"></div>
+            <div class="top-trade-grid" id="topTradeGrid">
+              <div class="top-trade-loading">Running daily setup engine...</div>
+            </div>
+          </div>
+        </section>
         <section class="section market-radar-section is-expanded" id="marketRadarSection">
           <div class="market-radar-shell">
             <div class="market-radar-copy">
@@ -153,26 +184,26 @@
         </section>
 
         <!-- Market Overview Banner -->
-        <section class="section catalyst-section is-expanded" id="catalysts" data-collapsible>
-          <button class="section-toggle" type="button" aria-expanded="true" aria-controls="catalystsBody">
+        <section class="section catalyst-section is-collapsed" id="catalysts" data-collapsible>
+          <button class="section-toggle" type="button" aria-expanded="false" aria-controls="catalystsBody">
             <span class="section-title">Market Overview</span>
             <span class="section-toggle-icon" aria-hidden="true"></span>
           </button>
-          <div class="section-body" id="catalystsBody">
+          <div class="section-body" id="catalystsBody" hidden>
             <div class="catalyst-strip" id="catalystStrip"></div>
           </div>
         </section>
 
         <!-- TOP Watch — Cross-Source Momentum -->
-        <section class="section is-expanded" id="topWatchSection" data-collapsible>
+        <section class="section is-collapsed" id="topWatchSection" data-collapsible>
           <div class="section-header-row">
-            <button class="section-toggle" type="button" aria-expanded="true" aria-controls="topWatchBodyWrap">
+            <button class="section-toggle" type="button" aria-expanded="false" aria-controls="topWatchBodyWrap">
               <span class="section-title">TOP Watch <span class="top-watch-badge">Cross-Source</span></span>
               <span class="section-toggle-icon" aria-hidden="true"></span>
             </button>
             <span class="top-watch-meta" id="topWatchMeta">Scanning StockTwits · MarketWatch · Barchart · Finviz&hellip;</span>
           </div>
-          <div class="section-body" id="topWatchBodyWrap">
+          <div class="section-body" id="topWatchBodyWrap" hidden>
             <div class="top-watch-source-bar" id="topWatchSourceBar"></div>
             <div class="table-wrapper">
               <table class="data-table top-watch-table" id="topWatchTable">
@@ -197,9 +228,9 @@
         </section>
 
         <!-- Quick Watchlist -->
-        <section class="section is-expanded" id="watchlistSection" data-collapsible>
+        <section class="section is-collapsed" id="watchlistSection" data-collapsible>
           <div class="section-header-row watchlist-header-row">
-            <button class="section-toggle watchlist-section-toggle" type="button" aria-expanded="true" aria-controls="watchlistBodyWrap">
+            <button class="section-toggle watchlist-section-toggle" type="button" aria-expanded="false" aria-controls="watchlistBodyWrap">
               <span class="section-title">Quick Watchlist</span>
               <span class="section-toggle-icon" aria-hidden="true"></span>
             </button>
@@ -208,7 +239,7 @@
               Add Ticker
             </button>
           </div>
-          <div class="section-body" id="watchlistBodyWrap">
+          <div class="section-body" id="watchlistBodyWrap" hidden>
             <div class="table-wrapper">
               <table class="data-table watchlist-table" id="watchlistTable">
                 <thead>
@@ -295,12 +326,12 @@
         </section>
 
         <!-- Economic Calendar -->
-        <section class="section is-expanded" id="calendarSection" data-collapsible>
-          <button class="section-toggle" type="button" aria-expanded="true" aria-controls="calendarBodyWrap">
+        <section class="section is-collapsed" id="calendarSection" data-collapsible>
+          <button class="section-toggle" type="button" aria-expanded="false" aria-controls="calendarBodyWrap">
             <span class="section-title">Economic Calendar</span>
             <span class="section-toggle-icon" aria-hidden="true"></span>
           </button>
-          <div class="section-body" id="calendarBodyWrap">
+          <div class="section-body" id="calendarBodyWrap" hidden>
             <div class="section-header-row calendar-header-row">
               <div class="section-title-spacer"></div>
               <div class="calendar-toolbar">
@@ -335,26 +366,33 @@
         </section>
 
         <!-- Index Cards -->
-        <section class="section is-expanded" id="indexSection" data-collapsible>
-          <button class="section-toggle" type="button" aria-expanded="true" aria-controls="indexBodyWrap">
+        <section class="section is-collapsed" id="indexSection" data-collapsible>
+          <button class="section-toggle" type="button" aria-expanded="false" aria-controls="indexBodyWrap">
             <span class="section-title">Index Overview</span>
             <span class="section-toggle-icon" aria-hidden="true"></span>
           </button>
-          <div class="section-body" id="indexBodyWrap">
+          <div class="section-body" id="indexBodyWrap" hidden>
             <div class="index-grid" id="indexGrid"></div>
           </div>
         </section>
 
         <!-- Top Intraday Tickers -->
-        <section class="section is-expanded" id="tickerSection" data-collapsible>
-          <button class="section-toggle" type="button" aria-expanded="true" aria-controls="tickerBodyWrap">
+        <section class="section is-collapsed" id="tickerSection" data-collapsible>
+          <button class="section-toggle" type="button" aria-expanded="false" aria-controls="tickerBodyWrap">
             <span class="section-title">Best Intraday Tickers — Ranked</span>
             <span class="section-toggle-icon" aria-hidden="true"></span>
           </button>
-          <div class="section-body" id="tickerBodyWrap">
+          <div class="section-body" id="tickerBodyWrap" hidden>
             <div class="ticker-grid" id="tickerGrid"></div>
           </div>
         </section>
+
+        <!-- Bot shortcuts — only visible when dashboard is unlocked -->
+        <div style="display:flex;gap:12px;padding:16px 0 8px;flex-wrap:wrap;">
+  <a href="crypto-bot.html" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;background:rgba(0,224,255,.12);border:1px solid rgba(0,224,255,.25);color:#22d3ee;font-size:13px;font-weight:600;text-decoration:none;">⚡ Crypto Bot</a>
+  <a href="options-bot.html" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;background:rgba(129,140,248,.12);border:1px solid rgba(129,140,248,.25);color:#818cf8;font-size:13px;font-weight:600;text-decoration:none;">📈 Options Bot</a>
+  <a href="futures-bot.html" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:10px;background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.25);color:#a78bfa;font-size:13px;font-weight:600;text-decoration:none;">📊 Futures Bot</a>
+</div>
       </div>
     </div>
 
@@ -420,23 +458,23 @@
     </div>
 
     <!-- Key Themes -->
-    <section class="section is-expanded" id="themesSection" data-collapsible>
-      <button class="section-toggle" type="button" aria-expanded="true" aria-controls="themesBodyWrap">
+    <section class="section is-collapsed" id="themesSection" data-collapsible>
+      <button class="section-toggle" type="button" aria-expanded="false" aria-controls="themesBodyWrap">
         <span class="section-title">Key Themes</span>
         <span class="section-toggle-icon" aria-hidden="true"></span>
       </button>
-      <div class="section-body" id="themesBodyWrap">
+      <div class="section-body" id="themesBodyWrap" hidden>
         <ol class="themes-list" id="themesList"></ol>
       </div>
     </section>
 
     <!-- Signal Accuracy Backtest -->
-    <section class="section is-expanded" id="backtestSection" data-collapsible>
-      <button class="section-toggle" type="button" aria-expanded="true" aria-controls="backtestBodyWrap">
+    <section class="section is-collapsed" id="backtestSection" data-collapsible>
+      <button class="section-toggle" type="button" aria-expanded="false" aria-controls="backtestBodyWrap">
         <span class="section-title">Signal Accuracy — Backtest</span>
         <span class="section-toggle-icon" aria-hidden="true"></span>
       </button>
-      <div class="section-body" id="backtestBodyWrap">
+      <div class="section-body" id="backtestBodyWrap" hidden>
         <div class="section-header-row">
           <span class="calendar-toolbar-note" id="backtestMeta">Live data required — run server.py to load.</span>
         </div>

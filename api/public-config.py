@@ -6,6 +6,10 @@ from http.server import BaseHTTPRequestHandler
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         body = json.dumps({
+            # --- Supabase (safe to expose — anon key only) ---
+            "supabaseUrl": os.environ.get("SUPABASE_URL", ""),
+            "supabaseAnonKey": os.environ.get("SUPABASE_ANON_KEY", ""),
+            # --- Legacy Google client ID (kept for fallback display) ---
             "googleClientId": os.environ.get("GOOGLE_CLIENT_ID", ""),
             "stripePaymentLink": os.environ.get("STRIPE_PAYMENT_LINK", ""),
             "tradingViewProductName": os.environ.get("TRADINGVIEW_PRODUCT_NAME", "Option Riders TradingView Script"),

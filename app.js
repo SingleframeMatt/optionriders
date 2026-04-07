@@ -114,13 +114,39 @@ const TOP_WATCH = {
   error: "",
 };
 
+const TOP_TRADE_TODAY = {
+  picks: [],
+  bestOverallPick: "",
+  namesToAvoid: [],
+  macroRisks: [],
+  summary: "",
+  sessionType: "",
+  sessionLabel: "",
+  marketDate: "",
+  generatedAt: "",
+  choppyDayWarning: false,
+  loading: true,
+  error: "",
+};
+
 const AUTH_STATE = {
   configLoaded: false,
-  user: null,
-  googleClientId: "",
+  user: null,           // Supabase User object { id, email, ... }
+  googleClientId: "",   // kept for legacy display only
   error: "",
   buttonRendered: false,
+  // Subscription state — populated after sign-in via /api/subscription-status
+  subscription: {
+    checked: false,
+    hasAccess: false,
+    status: "none",     // mirrors Stripe status: trialing|active|past_due|canceled|none
+    trialEndsAt: null,
+    currentPeriodEndsAt: null,
+  },
 };
+
+// Supabase JS client — initialised in initAuth() once public config is fetched.
+let _supabase = null;
 
 const APP_CONFIG = {
   tradingViewProductName: "Option Riders TradingView Script",
@@ -200,6 +226,28 @@ function renderSignalBadge(score) {
   const cls   = getSignalClass(score);
   const sign  = score > 0 ? '+' : '';
   return `<span class="signal-badge ${cls}" title="Composite signal: RSI + SMA + momentum + MACD + volume + rel-strength + ADX + Bollinger + 52W position">${sign}${score} ${label}</span>`;
+}
+
+function renderLoadingInline(title, subtitle = '') {
+  return `
+    <span class="section-loading-inline" role="status" aria-live="polite">
+      <span class="section-loading-spinner" aria-hidden="true"></span>
+      <span class="section-loading-copy">
+        <span class="section-loading-title">${escapeHtml(title)}</span>
+        ${subtitle ? `<span class="section-loading-subtitle">${escapeHtml(subtitle)}</span>` : ''}
+      </span>
+    </span>
+  `;
+}
+
+function renderLoadingRow(colspan, title, subtitle = '') {
+  return `
+    <tr class="section-loading-row">
+      <td colspan="${colspan}">
+        ${renderLoadingInline(title, subtitle)}
+      </td>
+    </tr>
+  `;
 }
 
 function getVixClass(price) {
@@ -318,7 +366,9 @@ function normalizeTickerList(list) {
 }
 
 function getTickerStorageKey(user = AUTH_STATE.user) {
-  return user?.sub ? `${USER_TICKERS_STORAGE_PREFIX}:${user.sub}` : GUEST_TICKERS_STORAGE_KEY;
+  // Supabase users have `id` (UUID); legacy Google users had `sub`.
+  const uid = user?.id || user?.sub;
+  return uid ? `${USER_TICKERS_STORAGE_PREFIX}:${uid}` : GUEST_TICKERS_STORAGE_KEY;
 }
 
 function loadSavedTickers(user = AUTH_STATE.user) {
@@ -363,7 +413,8 @@ function saveStoredGoogleUser(user) {
 }
 
 function syncTickersForCurrentUser() {
-  if (!AUTH_STATE.user?.sub) {
+  const uid = AUTH_STATE.user?.id || AUTH_STATE.user?.sub;
+  if (!uid) {
     customTickersList = loadSavedTickers(null);
     return;
   }
@@ -546,7 +597,10 @@ async function enableBrowserAlerts() {
 
 function getDisplayName(user) {
   if (!user) return '';
-  return user.name
+  // Supabase user: name lives in user_metadata (set by Google OAuth provider)
+  return user.user_metadata?.full_name
+    || user.user_metadata?.name
+    || user.name
     || user.email
     || 'Account';
 }
@@ -650,143 +704,361 @@ function getTradingViewUrl(ticker) {
   return `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(sym)}`;
 }
 
-// Draw a candlestick chart with support/resistance levels
-function drawCandlestickChart(canvas, ohlcvData, levels) {
-  if (!canvas || !ohlcvData || ohlcvData.length < 2) return;
-  
+function normalizeChartBars(rawData) {
+  if (!rawData) return [];
+  if (rawData && Array.isArray(rawData.bars)) return normalizeChartBars(rawData.bars);
+  if (!Array.isArray(rawData)) return [];
+
+  return rawData
+    .map((bar, index) => {
+      if (Array.isArray(bar) && bar.length >= 4) {
+        return { t: null, o: Number(bar[0]), h: Number(bar[1]), l: Number(bar[2]), c: Number(bar[3]), i: index };
+      }
+      if (bar && typeof bar === 'object') {
+        return {
+          t: bar.t || bar.time || null,
+          o: Number(bar.o ?? bar.open),
+          h: Number(bar.h ?? bar.high),
+          l: Number(bar.l ?? bar.low),
+          c: Number(bar.c ?? bar.close),
+          v: Number(bar.v ?? bar.volume),
+          i: index,
+        };
+      }
+      return null;
+    })
+    .filter((bar) => bar && [bar.o, bar.h, bar.l, bar.c].every((value) => Number.isFinite(value)));
+}
+
+function formatChartXAxisLabel(date, previousDate = null) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const changedDay = !previousDate || date.toDateString() !== previousDate.toDateString();
+  return changedDay
+    ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : date.toLocaleTimeString('en-US', { hour: 'numeric' }).toUpperCase();
+}
+
+function formatChartChangePercent(changeValue) {
+  if (!Number.isFinite(changeValue)) return '';
+  const sign = changeValue >= 0 ? '+' : '';
+  return `${sign}${changeValue.toFixed(2)}%`;
+}
+
+function getChartPresentationMeta(rawChartData) {
+  const bars = normalizeChartBars(rawChartData);
+  const timeframe = rawChartData && typeof rawChartData === 'object' && !Array.isArray(rawChartData)
+    ? String(rawChartData.timeframe || '').toUpperCase()
+    : '';
+  const datedBars = bars
+    .map((bar) => (bar.t ? new Date(bar.t) : null))
+    .filter((date) => date instanceof Date && !Number.isNaN(date.getTime()));
+
+  const lastDate = datedBars.length ? datedBars[datedBars.length - 1] : null;
+  const sessionLabel = lastDate
+    ? lastDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : 'Live';
+
+  return {
+    timeframe: timeframe || '1H',
+    sessionLabel,
+  };
+}
+
+// Draw a candlestick chart with support/resistance levels, price labels, time/day labels, and modal header styling
+function drawCandlestickChart(canvas, rawChartData, levels, options = {}) {
+  const bars = normalizeChartBars(rawChartData);
+  if (!canvas || bars.length < 2) return;
+  const chartMeta = getChartPresentationMeta(rawChartData);
+
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width * dpr;
   canvas.height = rect.height * dpr;
   ctx.scale(dpr, dpr);
-  
+
   const w = rect.width;
   const h = rect.height;
-  const pad = { top: 6, right: 44, bottom: 6, left: 4 };
-  
-  const chartW = w - pad.left - pad.right;
-  const chartH = h - pad.top - pad.bottom;
-  
-  // Find price range across all candles
-  let candlePrices = [];
-  ohlcvData.forEach(c => { candlePrices.push(c[1], c[2]); }); // highs & lows
+  const showRichHeader = Boolean(options.showRichHeader);
+  const pad = showRichHeader
+    ? { top: 34, right: 64, bottom: 22, left: 18 }
+    : { top: 20, right: 66, bottom: 24, left: 14 };
+  const chartW = Math.max(10, w - pad.left - pad.right);
+  const volumeRegionH = showRichHeader ? Math.max(16, h * 0.11) : 0;
+  const chartH = Math.max(10, h - pad.top - pad.bottom - volumeRegionH);
+  const volumeTop = pad.top + chartH;
+
+  const candlePrices = bars.flatMap((bar) => [bar.h, bar.l]);
   const candleMin = Math.min(...candlePrices);
   const candleMax = Math.max(...candlePrices);
   const candleRange = candleMax - candleMin || 1;
-  
-  // Filter levels to only those within reasonable range of candle data
-  // (handles ES/NQ where levels are in futures pts but chart data is ETF proxy)
+
   let filteredLevels = null;
   if (levels) {
     const margin = candleRange * 0.5;
-    const validSupport = (levels.support || []).filter(s => s >= candleMin - margin && s <= candleMax + margin);
-    const validResistance = (levels.resistance || []).filter(r => r >= candleMin - margin && r <= candleMax + margin);
-    if (validSupport.length > 0 || validResistance.length > 0) {
+    const validSupport = (levels.support || []).filter((s) => s >= candleMin - margin && s <= candleMax + margin);
+    const validResistance = (levels.resistance || []).filter((r) => r >= candleMin - margin && r <= candleMax + margin);
+    if (validSupport.length || validResistance.length) {
       filteredLevels = { support: validSupport, resistance: validResistance };
     }
   }
-  
-  // Include valid levels in price range calculation
-  let allPrices = [...candlePrices];
+
+  const latestClose = bars[bars.length - 1].c;
+  const allPrices = [...candlePrices, latestClose];
   if (filteredLevels) {
-    filteredLevels.support.forEach(s => allPrices.push(s));
-    filteredLevels.resistance.forEach(r => allPrices.push(r));
+    filteredLevels.support.forEach((s) => allPrices.push(s));
+    filteredLevels.resistance.forEach((r) => allPrices.push(r));
   }
   const dataMin = Math.min(...allPrices);
   const dataMax = Math.max(...allPrices);
-  const priceRange = dataMax - dataMin || 1;
-  // Add 5% padding
-  const pMin = dataMin - priceRange * 0.05;
-  const pMax = dataMax + priceRange * 0.05;
+  const paddedRange = (dataMax - dataMin) || 1;
+  const pMin = dataMin - paddedRange * 0.08;
+  const pMax = dataMax + paddedRange * 0.08;
   const pRange = pMax - pMin;
-  
+
   function priceToY(price) {
     return pad.top + chartH - ((price - pMin) / pRange) * chartH;
   }
-  
-  const n = ohlcvData.length;
-  const slotW = chartW / n;
-  const candleW = Math.max(2, slotW * 0.55);
-  const wickW = Math.max(1, dpr > 1 ? 1.5 : 1);
-  
-  // --- Draw support/resistance level lines FIRST (behind candles) ---
-  if (filteredLevels) {
+
+  const slotW = chartW / bars.length;
+  const candleW = Math.max(3, slotW * 0.58);
+
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.save();
+  const bgGradient = ctx.createLinearGradient(0, 0, 0, h);
+  bgGradient.addColorStop(0, 'rgba(41, 46, 58, 0.98)');
+  bgGradient.addColorStop(1, 'rgba(35, 40, 52, 0.98)');
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+
+  if (showRichHeader) {
+    const lastBar = bars[bars.length - 1];
+    const prevClose = bars[bars.length - 2]?.c ?? lastBar.o;
+    const absMove = lastBar.c - prevClose;
+    const pctMove = prevClose ? (absMove / prevClose) * 100 : 0;
+    const changeColor = absMove >= 0 ? '#22d36e' : '#ff6666';
+    const lastDate = lastBar.t ? new Date(lastBar.t) : null;
+    const headerDate = lastDate instanceof Date && !Number.isNaN(lastDate.getTime())
+      ? lastDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : '';
+
     ctx.save();
-    ctx.setLineDash([4, 3]);
-    ctx.lineWidth = 1;
-    ctx.font = `${Math.max(9, Math.min(10, h * 0.08))}px JetBrains Mono, monospace`;
     ctx.textBaseline = 'middle';
-    
-    // Support levels (green)
-    (filteredLevels.support || []).forEach(s => {
-      const y = priceToY(s);
-      if (y >= pad.top && y <= h - pad.bottom) {
-        ctx.strokeStyle = 'rgba(0, 255, 136, 0.35)';
-        ctx.beginPath();
-        ctx.moveTo(pad.left, y);
-        ctx.lineTo(pad.left + chartW, y);
-        ctx.stroke();
-        // Label
-        ctx.fillStyle = 'rgba(0, 255, 136, 0.7)';
-        ctx.textAlign = 'left';
-        ctx.fillText(s.toLocaleString(), pad.left + chartW + 3, y);
-      }
-    });
-    
-    // Resistance levels (red)
-    (filteredLevels.resistance || []).forEach(r => {
-      const y = priceToY(r);
-      if (y >= pad.top && y <= h - pad.bottom) {
-        ctx.strokeStyle = 'rgba(255, 68, 68, 0.35)';
-        ctx.beginPath();
-        ctx.moveTo(pad.left, y);
-        ctx.lineTo(pad.left + chartW, y);
-        ctx.stroke();
-        // Label
-        ctx.fillStyle = 'rgba(255, 68, 68, 0.7)';
-        ctx.textAlign = 'left';
-        ctx.fillText(r.toLocaleString(), pad.left + chartW + 3, y);
-      }
-    });
-    
+    ctx.fillStyle = 'rgba(206, 214, 236, 0.94)';
+    ctx.font = '700 11px Space Grotesk, system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(options.symbol || '', 14, 16);
+    ctx.fillStyle = 'rgba(176, 184, 207, 0.86)';
+    ctx.font = '600 5px Space Grotesk, system-ui, sans-serif';
+    ctx.fillText(headerDate, 50, 16);
+    ctx.fillStyle = changeColor;
+    ctx.font = '700 6px Space Grotesk, system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${formatPrice(absMove)} (${formatChartChangePercent(pctMove)})`, w - 72, 16);
+    ctx.fillStyle = 'rgba(115, 206, 255, 0.88)';
+    ctx.font = '600 5px Space Grotesk, system-ui, sans-serif';
+    ctx.fillText('finviz.com', w - 10, 16);
     ctx.restore();
   }
-  
-  // --- Draw candlesticks ---
-  ohlcvData.forEach((candle, i) => {
-    const [open, high, low, close] = candle;
-    const x = pad.left + slotW * i + slotW / 2;
-    const bullish = close >= open;
-    
-    const bodyColor = bullish ? '#00ff88' : '#ff4444';
-    const wickColor = bullish ? 'rgba(0, 255, 136, 0.6)' : 'rgba(255, 68, 68, 0.6)';
-    
-    const yHigh = priceToY(high);
-    const yLow = priceToY(low);
-    const yOpen = priceToY(open);
-    const yClose = priceToY(close);
-    
-    // Draw wick (high-low line)
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i += 1) {
+    const y = pad.top + (chartH / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(pad.left + chartW, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  const datedBars = bars
+    .map((bar, index) => ({ ...bar, idx: index, date: bar.t ? new Date(bar.t) : null }))
+    .filter((bar) => bar.date instanceof Date && !Number.isNaN(bar.date.getTime()));
+
+  if (datedBars.length) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.09)';
+    ctx.setLineDash([4, 6]);
+    let previousDayKey = '';
+    datedBars.forEach((bar) => {
+      const dayKey = bar.date.toDateString();
+      if (dayKey === previousDayKey) return;
+      previousDayKey = dayKey;
+      const x = pad.left + slotW * bar.idx + slotW / 2;
+      ctx.beginPath();
+      ctx.moveTo(x, pad.top);
+      ctx.lineTo(x, pad.top + chartH);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  if (showRichHeader) {
+    ctx.save();
+    ctx.translate(12, pad.top + chartH * 0.42);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillStyle = 'rgba(181, 188, 209, 0.84)';
+    ctx.font = '700 6px Space Grotesk, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(chartMeta.timeframe, 0, 0);
+    ctx.restore();
+  }
+
+  if (filteredLevels) {
+    ctx.save();
+    ctx.setLineDash([7, 5]);
+    ctx.lineWidth = 1;
+    ctx.font = showRichHeader ? '5px JetBrains Mono, monospace' : '9px JetBrains Mono, monospace';
+    ctx.textBaseline = 'middle';
+
+    (filteredLevels.support || []).forEach((level) => {
+      const y = priceToY(level);
+      ctx.strokeStyle = 'rgba(0,255,136,0.30)';
+      ctx.beginPath();
+      ctx.moveTo(pad.left, y);
+      ctx.lineTo(pad.left + chartW, y);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(0,255,136,0.52)';
+      ctx.textAlign = 'right';
+      ctx.fillText(formatPrice(level), pad.left + chartW - 8, y);
+    });
+
+    (filteredLevels.resistance || []).forEach((level) => {
+      const y = priceToY(level);
+      ctx.strokeStyle = 'rgba(255,82,82,0.30)';
+      ctx.beginPath();
+      ctx.moveTo(pad.left, y);
+      ctx.lineTo(pad.left + chartW, y);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,82,82,0.52)';
+      ctx.textAlign = 'right';
+      ctx.fillText(formatPrice(level), pad.left + chartW - 8, y);
+    });
+    ctx.restore();
+  }
+
+  const latestY = priceToY(latestClose);
+  ctx.save();
+  ctx.setLineDash([3, 4]);
+  ctx.strokeStyle = bars[bars.length - 1].c >= bars[bars.length - 1].o ? 'rgba(0,255,136,0.32)' : 'rgba(255,82,82,0.32)';
+  ctx.beginPath();
+  ctx.moveTo(pad.left, latestY);
+  ctx.lineTo(pad.left + chartW, latestY);
+  ctx.stroke();
+  ctx.restore();
+
+  bars.forEach((bar, index) => {
+    const x = pad.left + slotW * index + slotW / 2;
+    const bullish = bar.c >= bar.o;
+    const bodyColor = bullish ? '#00ff88' : '#ff5252';
+    const wickColor = bullish ? 'rgba(0,255,136,0.66)' : 'rgba(255,82,82,0.66)';
+    const yHigh = priceToY(bar.h);
+    const yLow = priceToY(bar.l);
+    const yOpen = priceToY(bar.o);
+    const yClose = priceToY(bar.c);
+
     ctx.strokeStyle = wickColor;
-    ctx.lineWidth = wickW;
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(x, yHigh);
     ctx.lineTo(x, yLow);
     ctx.stroke();
-    
-    // Draw body
+
     const bodyTop = Math.min(yOpen, yClose);
-    const bodyHeight = Math.max(Math.abs(yOpen - yClose), 1);
-    
+    const bodyHeight = Math.max(Math.abs(yOpen - yClose), 1.5);
     ctx.fillStyle = bodyColor;
-    if (bullish) {
-      ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyHeight);
-    } else {
-      // Bearish: filled body
-      ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyHeight);
-    }
+    ctx.fillRect(x - candleW / 2, bodyTop, candleW, bodyHeight);
   });
+
+  const volumeValues = bars.map((bar) => Number.isFinite(bar.v) ? bar.v : 0);
+  const maxVolume = Math.max(...volumeValues, 0);
+  if (showRichHeader && maxVolume > 0) {
+    bars.forEach((bar, index) => {
+      if (!Number.isFinite(bar.v) || bar.v <= 0) return;
+      const x = pad.left + slotW * index + slotW / 2;
+      const barH = Math.max(1, (bar.v / maxVolume) * (volumeRegionH - 2));
+      const bullish = bar.c >= bar.o;
+      ctx.fillStyle = bullish ? 'rgba(34, 211, 110, 0.35)' : 'rgba(255, 102, 102, 0.35)';
+      ctx.fillRect(x - Math.max(1.5, candleW / 2), volumeTop + volumeRegionH - barH, Math.max(3, candleW), barH);
+    });
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(181, 188, 209, 0.72)';
+    ctx.font = '7px Space Grotesk, system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const maxVolumeM = maxVolume / 1000000;
+    const halfVolumeM = maxVolumeM / 2;
+    ctx.fillText(`${Math.round(maxVolumeM)}M`, 2, volumeTop + 6);
+    ctx.fillText(`${Math.round(halfVolumeM)}M`, 2, volumeTop + volumeRegionH * 0.5);
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.font = showRichHeader ? '5px Space Grotesk, system-ui, sans-serif' : '9px JetBrains Mono, monospace';
+  ctx.fillStyle = showRichHeader ? 'rgba(184, 192, 214, 0.86)' : 'rgba(255,255,255,0.38)';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 4; i += 1) {
+    const price = pMax - (pRange / 4) * i;
+    const y = pad.top + (chartH / 4) * i;
+    ctx.fillText(formatPrice(price), w - 10, y);
+  }
+  ctx.restore();
+
+  if (datedBars.length) {
+    const desiredTicks = Math.min(showRichHeader ? 4 : 4, datedBars.length);
+    const step = Math.max(1, Math.floor(datedBars.length / desiredTicks));
+    ctx.save();
+    ctx.font = showRichHeader ? '5px Space Grotesk, system-ui, sans-serif' : '7px JetBrains Mono, monospace';
+    ctx.fillStyle = showRichHeader ? 'rgba(184, 192, 214, 0.78)' : 'rgba(255,255,255,0.34)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    let previousDate = null;
+
+    for (let i = 0; i < datedBars.length; i += step) {
+      const bar = datedBars[i];
+      const x = pad.left + slotW * bar.idx + slotW / 2;
+      ctx.fillText(formatChartXAxisLabel(bar.date, previousDate), x, h - pad.bottom + 4);
+      previousDate = bar.date;
+    }
+
+    const lastBar = datedBars[datedBars.length - 1];
+    const lastX = pad.left + slotW * lastBar.idx + slotW / 2;
+    ctx.fillText(formatChartXAxisLabel(lastBar.date, previousDate), lastX, h - pad.bottom + 4);
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.beginPath();
+  ctx.moveTo(pad.left, pad.top);
+  ctx.lineTo(pad.left, pad.top + chartH);
+  ctx.lineTo(pad.left + chartW, pad.top + chartH);
+  ctx.stroke();
+  ctx.restore();
+
+  const markerText = formatPrice(latestClose);
+  ctx.save();
+  ctx.font = showRichHeader ? '700 6px Space Grotesk, system-ui, sans-serif' : 'bold 11px JetBrains Mono, monospace';
+  const tagPaddingX = 8;
+  const tagHeight = showRichHeader ? 14 : 22;
+  const textWidth = ctx.measureText(markerText).width;
+  const tagWidth = textWidth + tagPaddingX * 2;
+  const tagX = w - tagWidth - 6;
+  const tagY = Math.max(pad.top + 2, Math.min(latestY - tagHeight / 2, pad.top + chartH - tagHeight - 2));
+  ctx.fillStyle = 'rgba(255, 196, 61, 0.96)';
+  ctx.fillRect(tagX, tagY, tagWidth, tagHeight);
+  ctx.fillStyle = '#111318';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(markerText, tagX + tagPaddingX, tagY + tagHeight / 2);
+  ctx.restore();
 }
 
 // Get levels for a ticker from DASHBOARD_DATA
@@ -862,19 +1134,18 @@ function renderAuthControls() {
     return;
   }
 
-  if (!AUTH_STATE.googleClientId) {
-    controls.innerHTML = `<span class="auth-status-pill warning">Add GOOGLE_CLIENT_ID</span>`;
+  if (!AUTH_STATE.user) {
+    controls.innerHTML = `<span class="auth-status-pill warning">Sign in required</span>`;
     renderAuthGate();
     return;
   }
 
-  if (!AUTH_STATE.user) {
-    controls.innerHTML = `
-      <span class="auth-status-pill warning">Sign in required</span>
-    `;
-    renderAuthGate();
-    return;
-  }
+  const sub = AUTH_STATE.subscription;
+  const subLabel = sub.checked
+    ? (sub.hasAccess
+        ? (sub.status === 'trialing' ? ' · Trial' : ' · Active')
+        : ' · No access')
+    : ' · Checking…';
 
   const now = new Date();
   const dateLabel = now.toLocaleDateString('en-US', {
@@ -885,7 +1156,7 @@ function renderAuthControls() {
   });
   controls.innerHTML = `
     <span class="auth-status-pill signed-in">
-      <span class="signed-in-name">${escapeHtml(getDisplayName(AUTH_STATE.user))}</span>
+      <span class="signed-in-name">${escapeHtml(getDisplayName(AUTH_STATE.user))}${escapeHtml(subLabel)}</span>
       <span class="signed-in-ts">${escapeHtml(dateLabel)} · ${escapeHtml(timeLabel)}</span>
     </span>
     <button class="auth-action-btn" type="button" onclick="signOut()">Sign out</button>
@@ -1148,6 +1419,47 @@ function renderMarketRadarStats(items) {
   `;
 }
 
+function getMarketRadarBubbleSizes(items, grid) {
+  if (!items.length) return [];
+
+  const gridWidth = Math.max(grid?.clientWidth || 0, 320);
+  const gridHeight = Math.max(grid?.clientHeight || 0, 320);
+  const edgeGap = 4;
+  const bubbleGap = 0;
+
+  const proposedSizes = items.map((item, index) => {
+    const slot = MARKET_RADAR_LAYOUT[index] || MARKET_RADAR_LAYOUT[MARKET_RADAR_LAYOUT.length - 1];
+    const base = Math.max(84, Math.min(178, 84 + (item.score || 0) * 0.9));
+    return Math.round(base * slot.size);
+  });
+
+  let scale = 1;
+
+  for (let index = 0; index < proposedSizes.length; index += 1) {
+    const slot = MARKET_RADAR_LAYOUT[index] || MARKET_RADAR_LAYOUT[MARKET_RADAR_LAYOUT.length - 1];
+    const centerX = (slot.x / 100) * gridWidth;
+    const centerY = (slot.y / 100) * gridHeight;
+    const maxRadiusForEdge = Math.max(
+      36,
+      Math.min(centerX - edgeGap, gridWidth - centerX - edgeGap, centerY - edgeGap, gridHeight - centerY - edgeGap)
+    );
+    scale = Math.min(scale, (maxRadiusForEdge * 2) / proposedSizes[index]);
+
+    for (let compareIndex = index + 1; compareIndex < proposedSizes.length; compareIndex += 1) {
+      const compareSlot = MARKET_RADAR_LAYOUT[compareIndex] || MARKET_RADAR_LAYOUT[MARKET_RADAR_LAYOUT.length - 1];
+      const dx = ((slot.x - compareSlot.x) / 100) * gridWidth;
+      const dy = ((slot.y - compareSlot.y) / 100) * gridHeight;
+      const centerDistance = Math.hypot(dx, dy);
+      const allowed = (centerDistance - bubbleGap) / ((proposedSizes[index] + proposedSizes[compareIndex]) / 2);
+      scale = Math.min(scale, allowed);
+    }
+  }
+
+  const clampedScale = Math.max(0.55, Math.min(scale, 1));
+
+  return proposedSizes.map((size) => Math.max(72, Math.round(size * clampedScale)));
+}
+
 function renderMarketRadar() {
   const grid = document.getElementById('marketRadarGrid');
   if (!grid) return;
@@ -1160,10 +1472,11 @@ function renderMarketRadar() {
     return;
   }
 
+  const bubbleSizes = getMarketRadarBubbleSizes(items, grid);
+
   grid.innerHTML = items.map((item, index) => {
     const slot = MARKET_RADAR_LAYOUT[index] || MARKET_RADAR_LAYOUT[MARKET_RADAR_LAYOUT.length - 1];
-    const base = Math.max(84, Math.min(178, 84 + (item.score || 0) * 0.9));
-    const size = Math.round(base * slot.size);
+    const size = bubbleSizes[index] || 96;
     const changeText = item.expectedMovePct ? `${item.expectedMovePct.toFixed(1)}% exp move` : (item.changePct != null ? `${item.changePct > 0 ? '+' : ''}${item.changePct.toFixed(1)}%` : `${item.sourceCount || 1} src`);
     const biasText = item.direction || (item.sourceCount > 1 ? `${item.sourceCount} sources` : 'Watch');
     const featuredClass = index === 0 ? ' is-featured' : '';
@@ -1186,6 +1499,184 @@ function renderMarketRadar() {
   }).join('');
 }
 
+function getTopTradeHighlightStyle(pick = {}) {
+  const score = Number(pick.score || 0);
+  const confidence = Number(pick.confidence || 0);
+  const normalized = Math.max(0, Math.min(1, ((score / 100) * 0.7) + ((confidence / 10) * 0.3)));
+  const useGoldPalette = confidence >= 9;
+
+  const borderAlpha = (0.12 + normalized * 0.42).toFixed(3);
+  const glowAlpha = (0.06 + normalized * 0.28).toFixed(3);
+  const washAlpha = (0.03 + normalized * 0.16).toFixed(3);
+  const textMix = (58 + normalized * 30).toFixed(1);
+  const accentMix = (42 + normalized * 48).toFixed(1);
+  const labelAlpha = (0.26 + normalized * 0.34).toFixed(3);
+
+  const borderColor = useGoldPalette ? '245, 158, 11' : '148, 163, 184';
+  const glowColor = useGoldPalette ? '251, 191, 36' : '203, 213, 225';
+  const washColor = useGoldPalette ? '255, 226, 138' : '226, 232, 240';
+  const textColor = useGoldPalette ? '#fff4d6' : '#eef2f7';
+  const accentBase = useGoldPalette ? '#fbbf24' : '#cbd5e1';
+  const accentMixTarget = useGoldPalette ? '#22d3ee' : '#94a3b8';
+  const labelColor = useGoldPalette ? '255, 216, 122' : '203, 213, 225';
+
+  return [
+    `--top-trade-border: rgba(${borderColor}, ${borderAlpha})`,
+    `--top-trade-glow: rgba(${glowColor}, ${glowAlpha})`,
+    `--top-trade-wash: rgba(${washColor}, ${washAlpha})`,
+    `--top-trade-text: color-mix(in srgb, ${textColor} ${textMix}%, white)`,
+    `--top-trade-accent: color-mix(in srgb, ${accentBase} ${accentMix}%, ${accentMixTarget})`,
+    `--top-trade-label: rgba(${labelColor}, ${labelAlpha})`,
+  ].join(';');
+}
+
+function renderTopTradeToday() {
+  const summary = document.getElementById('topTradeSummary');
+  const grid = document.getElementById('topTradeGrid');
+  const meta = document.getElementById('topTradeMeta');
+  if (!summary || !grid || !meta) return;
+
+  if (TOP_TRADE_TODAY.loading) {
+    meta.textContent = 'Ranking today\'s best options setups...';
+    summary.innerHTML = '';
+    grid.innerHTML = `
+      <div class="top-trade-loading" role="status" aria-live="polite">
+        <span class="top-trade-loading-horse" aria-hidden="true"></span>
+        <div class="top-trade-loading-copy">
+          <span class="top-trade-loading-title">Running daily setup engine...</span>
+          <span class="top-trade-loading-subtitle">Scanning market structure, options flow, and momentum leaders.</span>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if (TOP_TRADE_TODAY.error) {
+    meta.textContent = 'Top trade engine unavailable';
+    summary.innerHTML = '';
+    grid.innerHTML = `<div class="top-trade-empty">${escapeHtml(TOP_TRADE_TODAY.error)}</div>`;
+    return;
+  }
+
+  const generatedLabel = TOP_TRADE_TODAY.generatedAt
+    ? new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      }).format(new Date(TOP_TRADE_TODAY.generatedAt * 1000))
+    : '';
+
+  meta.textContent = TOP_TRADE_TODAY.marketDate
+    ? `${TOP_TRADE_TODAY.marketDate} · ${TOP_TRADE_TODAY.sessionLabel || 'U.S. session'} · Updated ${generatedLabel || 'just now'}`
+    : 'Daily setup engine';
+
+  const avoidText = TOP_TRADE_TODAY.namesToAvoid?.length
+    ? TOP_TRADE_TODAY.namesToAvoid.join(', ')
+    : 'None with clear liquidity issues yet';
+  const macroText = TOP_TRADE_TODAY.macroRisks?.length
+    ? TOP_TRADE_TODAY.macroRisks.slice(0, 2).join(' · ')
+    : 'No major scheduled macro risk in the feed';
+
+  summary.innerHTML = `
+    <div class="top-trade-summary-card">
+      <span class="top-trade-summary-label">Best Overall</span>
+      <div class="top-trade-summary-value">${escapeHtml(TOP_TRADE_TODAY.bestOverallPick || 'No trade')}</div>
+    </div>
+    <div class="top-trade-summary-card">
+      <span class="top-trade-summary-label">Session Type</span>
+      <div class="top-trade-summary-value">${escapeHtml(TOP_TRADE_TODAY.sessionType || 'Waiting on live data')}</div>
+    </div>
+    <div class="top-trade-summary-card">
+      <span class="top-trade-summary-label">Choppy Day Warning</span>
+      <div class="top-trade-summary-value ${TOP_TRADE_TODAY.choppyDayWarning ? 'warning' : ''}">${TOP_TRADE_TODAY.choppyDayWarning ? 'Yes' : 'No'}</div>
+    </div>
+    <div class="top-trade-summary-card top-trade-summary-card-danger">
+      <span class="top-trade-summary-label">Names To Avoid</span>
+      <div class="top-trade-summary-value">${escapeHtml(avoidText)}</div>
+    </div>
+    <div class="top-trade-summary-card" style="grid-column: 1 / -1;">
+      <span class="top-trade-summary-label">Today\'s Key Macro Risks</span>
+      <div class="top-trade-summary-value">${escapeHtml(macroText)}</div>
+    </div>
+  `;
+
+  if (!TOP_TRADE_TODAY.picks?.length) {
+    grid.innerHTML = `<div class="top-trade-empty">${escapeHtml(TOP_TRADE_TODAY.summary || 'No clean setups right now. Do not force trades.')}</div>`;
+    return;
+  }
+
+  grid.innerHTML = TOP_TRADE_TODAY.picks.slice(0, 4).map((pick, index) => {
+    const keyLevels = [
+      pick.keyLevels?.support?.length ? `S: ${pick.keyLevels.support.join(' / ')}` : '',
+      pick.keyLevels?.resistance?.length ? `R: ${pick.keyLevels.resistance.join(' / ')}` : '',
+      pick.keyLevels?.trigger != null ? `Trigger: ${pick.keyLevels.trigger}` : '',
+    ].filter(Boolean).join('<br>');
+    const targets = Array.isArray(pick.profitTargets) && pick.profitTargets.length
+      ? pick.profitTargets.join(' / ')
+      : 'Trail once paid';
+    const directionClass = String(pick.direction || '').toLowerCase();
+    const highlightStyle = getTopTradeHighlightStyle(pick);
+    const bottomLine = pick.bottomLine || pick.summary || pick.why || '—';
+
+    return `
+      <article class="top-trade-card top-trade-card-highlight" style="${highlightStyle}" tabindex="0">
+        <div class="top-trade-rank-row">
+          <span class="top-trade-rank-badge ${index === 0 ? 'is-top' : ''}">${index === 0 ? 'Top Pick #1' : `Top Pick #${index + 1}`}</span>
+        </div>
+        <div class="top-trade-card-header">
+          <div class="top-trade-card-left">
+            <span class="top-trade-ticker">${escapeHtml(pick.ticker)}</span>
+            <span class="top-trade-direction ${escapeHtml(directionClass)}">${escapeHtml(pick.direction)}</span>
+            <span class="top-trade-setup">${escapeHtml(pick.setupType || 'Setup')}</span>
+          </div>
+          <div class="top-trade-confidence">
+            <span class="top-trade-confidence-score">${escapeHtml(String(pick.confidence || '—'))}/10</span>
+            <span class="top-trade-confidence-label">Confidence</span>
+          </div>
+        </div>
+        <div class="top-trade-body">
+          <p class="top-trade-copy">${escapeHtml(pick.why || '')}</p>
+          <div class="top-trade-level-grid">
+            <div class="top-trade-level">
+              <span class="top-trade-level-label">Key Levels</span>
+              <div class="top-trade-level-value">${keyLevels || 'Waiting on clean levels'}</div>
+            </div>
+            <div class="top-trade-level">
+              <span class="top-trade-level-label">Trigger / Invalidation</span>
+              <div class="top-trade-level-value">${escapeHtml(pick.triggerToEnter || 'Wait') }<br>${escapeHtml(pick.stopInvalidation || '')}</div>
+            </div>
+          </div>
+          <div class="top-trade-contract-grid">
+            <div class="top-trade-contract">
+              <span class="top-trade-contract-label">Targets</span>
+              <div class="top-trade-contract-value">${escapeHtml(targets)}</div>
+            </div>
+            <div class="top-trade-contract">
+              <span class="top-trade-contract-label">Best Contract</span>
+              <div class="top-trade-contract-value">${escapeHtml(pick.bestContractIdea?.strike || '—')}<br>${escapeHtml(pick.bestContractIdea?.expiry || '—')}</div>
+            </div>
+            <div class="top-trade-contract">
+              <span class="top-trade-contract-label">Delta / Risk</span>
+              <div class="top-trade-contract-value">${escapeHtml(pick.bestContractIdea?.deltaPreference || '—')}<br>${escapeHtml(pick.riskLevel || '—')}</div>
+            </div>
+          </div>
+          <div class="top-trade-footer-grid">
+            <div class="top-trade-footer">
+              <span class="top-trade-footer-label">What Could Ruin It</span>
+              <div class="top-trade-footer-value">${escapeHtml(pick.ruinRisk || '—')}</div>
+            </div>
+            <div class="top-trade-footer" style="grid-column: span 2;">
+              <span class="top-trade-footer-label">Bottom Line</span>
+              <div class="top-trade-footer-value">${escapeHtml(bottomLine)}</div>
+            </div>
+          </div>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
 function getAlertItems() {
   const alerts = [];
   const tradeAlerts = ALERT_STATE.items.slice(0, 2).map((item) => ({
@@ -1202,38 +1693,51 @@ function getAlertItems() {
     month: '2-digit',
     day: '2-digit'
   }).format(new Date());
+  const tomorrowDate = new Date();
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrowKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ECONOMIC_CALENDAR.timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(tomorrowDate);
 
   const todaysEvents = ECONOMIC_CALENDAR.events
     .filter((event) => event.dayKey === todayKey)
-    .slice(0, 2)
     .map((event) => ({
       type: 'today',
       text: `Today ${event.timeLabel}: ${event.title}`
     }));
 
-  const upcomingEvent = ECONOMIC_CALENDAR.events
-    .find((event) => event.dayKey !== todayKey);
+  const tomorrowEvents = ECONOMIC_CALENDAR.events
+    .filter((event) => event.dayKey === tomorrowKey)
+    .map((event) => ({
+      type: 'week',
+      text: `Tomorrow ${event.timeLabel}: ${event.title}`
+    }));
 
   if (todaysEvents.length) {
     alerts.push(...todaysEvents);
-  } else if (upcomingEvent) {
-    alerts.push({
-      type: 'today',
-      text: `Next red-folder event ${upcomingEvent.dayLabelShort} ${upcomingEvent.timeLabel}: ${upcomingEvent.title}`
-    });
   }
 
-  DASHBOARD_DATA.catalysts.slice(0, 2).forEach((item, index) => {
-    alerts.push({
-      type: index === 0 ? 'macro' : 'week',
-      text: item
-    });
-  });
+  if (tomorrowEvents.length) {
+    alerts.push(...tomorrowEvents);
+  }
+
+  if (!todaysEvents.length && !tomorrowEvents.length) {
+    const nextEvent = ECONOMIC_CALENDAR.events[0];
+    if (nextEvent) {
+      alerts.push({
+        type: 'today',
+        text: `Next red-folder event ${nextEvent.dayLabelShort} ${nextEvent.timeLabel}: ${nextEvent.title}`
+      });
+    }
+  }
 
   if (!alerts.length) {
     alerts.push({
       type: 'week',
-      text: 'Monitor Fed headlines, opening drive volatility, and watchlist liquidity before entries.'
+      text: 'Waiting for live U.S. red-folder events for today and tomorrow.'
     });
   }
 
@@ -1267,7 +1771,7 @@ function renderCalendar() {
       const updatedLabel = ECONOMIC_CALENDAR.lastUpdated ? ` · Updated ${ECONOMIC_CALENDAR.lastUpdated}` : '';
       meta.textContent = `USD red folder only · ${weekLabel} · Times shown in ${ECONOMIC_CALENDAR.timezone}${updatedLabel}`;
     } else {
-      meta.textContent = `USD red folder only · Loading weekly events...`;
+      meta.innerHTML = renderLoadingInline('Loading weekly events...', 'Building this week\'s red-folder calendar');
     }
   }
 
@@ -1275,7 +1779,7 @@ function renderCalendar() {
     tbody.innerHTML = `
       <tr class="${ECONOMIC_CALENDAR.error ? 'calendar-empty-row' : 'calendar-loading-row'}">
         <td colspan="7" class="${ECONOMIC_CALENDAR.error ? 'calendar-error' : ''}">
-          ${escapeHtml(ECONOMIC_CALENDAR.error || "Loading this week's red-folder events...")}
+          ${ECONOMIC_CALENDAR.error ? escapeHtml(ECONOMIC_CALENDAR.error) : renderLoadingInline("Loading this week's red-folder events...", 'Pulling the live macro feed')}
         </td>
       </tr>
     `;
@@ -1624,8 +2128,8 @@ function renderTopWatch() {
   }
 
   if (TOP_WATCH.loading) {
-    tbody.innerHTML = '<tr class="top-watch-loading-row"><td colspan="8">Scanning StockTwits · MarketWatch · Barchart · Finnviz&hellip;</td></tr>';
-    if (meta) meta.textContent = 'Scanning…';
+    tbody.innerHTML = renderLoadingRow(8, 'Scanning StockTwits, MarketWatch, Barchart, and Finviz...', 'Looking for cross-source agreement');
+    if (meta) meta.innerHTML = renderLoadingInline('Scanning sources...', 'Waiting for cross-source matches');
     return;
   }
 
@@ -1855,13 +2359,13 @@ function renderOptionsFlow() {
   const ratio = document.getElementById('optionsFlowRatio');
 
   if (OPTIONS_FLOW.loading) {
-    unusualBody.innerHTML = `<tr class="options-flow-loading"><td colspan="5">Loading Barchart options activity...</td></tr>`;
-    mostActiveBody.innerHTML = `<tr class="options-flow-loading"><td colspan="5">Loading Barchart options activity...</td></tr>`;
-    atmSpreadBody.innerHTML = `<tr class="options-flow-loading"><td colspan="6">Loading Barchart ATM spreads...</td></tr>`;
-    meta.textContent = 'Loading Barchart options activity...';
+    unusualBody.innerHTML = renderLoadingRow(5, 'Loading Barchart options activity...', 'Checking unusual and most-active contracts');
+    mostActiveBody.innerHTML = renderLoadingRow(5, 'Loading Barchart options activity...', 'Checking unusual and most-active contracts');
+    atmSpreadBody.innerHTML = renderLoadingRow(6, 'Loading Barchart ATM spreads...', 'Checking tradable contracts and spread quality');
+    meta.innerHTML = renderLoadingInline('Loading Barchart options activity...', 'Syncing flow, liquidity, and ratio data');
     if (ratio) {
       ratio.className = 'options-flow-ratio';
-      ratio.textContent = 'Loading put/call ratio...';
+      ratio.innerHTML = renderLoadingInline('Loading put/call ratio...');
     }
     return;
   }
@@ -1977,6 +2481,46 @@ async function fetchTopWatch(forceFresh = false) {
   renderMarketRadar();
 }
 
+async function fetchTopTradeToday(forceFresh = false) {
+  TOP_TRADE_TODAY.loading = true;
+  renderTopTradeToday();
+
+  try {
+    const sep = forceFresh ? `?fresh=1&t=${Date.now()}` : '';
+    const response = await fetch(`/api/top-trade-today${sep}`, { cache: 'no-store' });
+    if (!response.ok) throw new Error('Daily setup engine unavailable.');
+
+    const payload = await response.json();
+    TOP_TRADE_TODAY.picks = payload.picks || [];
+    TOP_TRADE_TODAY.bestOverallPick = payload.bestOverallPick || '';
+    TOP_TRADE_TODAY.namesToAvoid = payload.namesToAvoid || [];
+    TOP_TRADE_TODAY.macroRisks = payload.macroRisks || [];
+    TOP_TRADE_TODAY.summary = payload.summary || '';
+    TOP_TRADE_TODAY.sessionType = payload.sessionType || '';
+    TOP_TRADE_TODAY.sessionLabel = payload.sessionLabel || '';
+    TOP_TRADE_TODAY.marketDate = payload.marketDate || '';
+    TOP_TRADE_TODAY.generatedAt = payload.generatedAt || '';
+    TOP_TRADE_TODAY.choppyDayWarning = Boolean(payload.choppyDayWarning);
+    TOP_TRADE_TODAY.loading = false;
+    TOP_TRADE_TODAY.error = '';
+  } catch (error) {
+    TOP_TRADE_TODAY.picks = [];
+    TOP_TRADE_TODAY.bestOverallPick = '';
+    TOP_TRADE_TODAY.namesToAvoid = [];
+    TOP_TRADE_TODAY.macroRisks = [];
+    TOP_TRADE_TODAY.summary = '';
+    TOP_TRADE_TODAY.sessionType = '';
+    TOP_TRADE_TODAY.sessionLabel = '';
+    TOP_TRADE_TODAY.marketDate = '';
+    TOP_TRADE_TODAY.generatedAt = '';
+    TOP_TRADE_TODAY.choppyDayWarning = false;
+    TOP_TRADE_TODAY.loading = false;
+    TOP_TRADE_TODAY.error = 'Run the dashboard server to enable Top Trade Today.';
+  }
+
+  renderTopTradeToday();
+}
+
 function getTickerDetails(ticker) {
   return DASHBOARD_DATA.tickers.find((item) => item.ticker === ticker)
     || DASHBOARD_DATA.indexes.find((item) => item.ticker === ticker)
@@ -2012,7 +2556,9 @@ function renderTickerDetailBody(tickerData) {
 
     <div class="ticker-detail-grid">
       <div class="ticker-detail-panel">
-        <div class="ticker-detail-panel-title">Price Structure</div>
+        <div class="ticker-detail-chart-head">
+          <div class="ticker-detail-panel-title">Price Structure</div>
+        </div>
         <div class="chart-container ticker-detail-chart">
           <canvas class="ticker-detail-canvas" data-ticker="${tickerData.ticker}"></canvas>
         </div>
@@ -2118,7 +2664,12 @@ async function openTickerDetailModal(ticker) {
     const canvas = body.querySelector('.ticker-detail-canvas');
     const data   = CHART_DATA[tickerData.ticker];
     const levels = getLevelsForTicker(tickerData.ticker);
-    if (canvas && data) drawCandlestickChart(canvas, data, levels);
+    if (canvas && data) {
+      drawCandlestickChart(canvas, data, levels, {
+        showRichHeader: true,
+        symbol: tickerData.ticker,
+      });
+    }
   });
 }
 
@@ -2163,112 +2714,183 @@ function initCollapsibleSections() {
 
 let customTickersList = [];
 
+// ============================================
+// Supabase Auth + Subscription helpers
+// ============================================
+
 async function fetchPublicAuthConfig() {
   const response = await fetch('/api/public-config', { cache: 'no-store' });
-  if (!response.ok) {
-    throw new Error('Auth config unavailable');
-  }
+  if (!response.ok) throw new Error('Auth config unavailable');
   return response.json();
 }
 
-function renderGoogleButton() {
-  const mounts = [
-    document.getElementById('googleSignInMountGate'),
-  ].filter(Boolean);
-  if (!mounts.length || !AUTH_STATE.googleClientId || !window.google?.accounts?.id || AUTH_STATE.user) return;
-
-  window.google.accounts.id.initialize({
-    client_id: AUTH_STATE.googleClientId,
-    callback: handleGoogleCredentialResponse,
-    auto_select: false,
-    cancel_on_tap_outside: true,
-    context: 'signup',
-    ux_mode: 'popup',
-  });
-  mounts.forEach((mount) => {
-    mount.innerHTML = '';
-    window.google.accounts.id.renderButton(mount, {
-      theme: 'outline',
-      size: 'large',
-      shape: 'pill',
-      text: 'continue_with',
-      width: 250,
-    });
-  });
-  window.google.accounts.id.prompt();
-  AUTH_STATE.buttonRendered = true;
+/** Initialise the Supabase JS client once we have URL + anon key. */
+function initSupabaseClient(url, anonKey) {
+  if (_supabase || !url || !anonKey) return;
+  _supabase = window.supabase.createClient(url, anonKey);
 }
 
+/** Trigger Supabase Google OAuth (redirects → comes back with session hash). */
+async function signInWithGoogle() {
+  if (!_supabase) return;
+  const note = document.getElementById('authGateNote');
+  if (note) note.textContent = 'Redirecting to Google…';
+  await _supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin + '/' },
+  });
+}
+
+/** Sign out of Supabase and reset all local state. */
+async function signOut() {
+  saveTickerList(AUTH_STATE.user, customTickersList);
+  if (_supabase) await _supabase.auth.signOut();
+  AUTH_STATE.user = null;
+  AUTH_STATE.subscription = { checked: false, hasAccess: false, status: 'none', trialEndsAt: null, currentPeriodEndsAt: null };
+  saveStoredGoogleUser(null);
+  customTickersList = loadSavedTickers(null);
+  renderAuthControls();
+  renderCustomTickers();
+  await Promise.allSettled([fetchOptionsFlow(), fetchMarketData()]);
+}
+
+/**
+ * Ask the backend whether the current user has an active dashboard subscription.
+ * Requires a live Supabase session (access_token used as Bearer).
+ */
+async function checkSubscriptionStatus() {
+  if (!_supabase) return;
+  try {
+    const { data: { session } } = await _supabase.auth.getSession();
+    if (!session) return;
+
+    const resp = await fetch('/api/subscription-status', {
+      headers: { 'Authorization': `Bearer ${session.access_token}` },
+      cache: 'no-store',
+    });
+    if (!resp.ok) return;
+
+    const data = await resp.json();
+    AUTH_STATE.subscription = {
+      checked: true,
+      hasAccess: data.hasAccess === true,
+      status: data.status || 'none',
+      trialEndsAt: data.trialEndsAt || null,
+      currentPeriodEndsAt: data.currentPeriodEndsAt || null,
+    };
+  } catch (_) {
+    AUTH_STATE.subscription.checked = true;
+  }
+  renderAuthControls();
+}
+
+/** POST to /api/stripe-checkout and redirect to the Stripe Checkout page. */
+async function startDashboardCheckout() {
+  if (!_supabase) return;
+  const btn = document.getElementById('authGateTrialBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+
+  try {
+    const { data: { session } } = await _supabase.auth.getSession();
+    if (!session) throw new Error('No session');
+
+    const resp = await fetch('/api/stripe-checkout', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${session.access_token}` },
+    });
+    const data = await resp.json();
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      throw new Error(data.error || 'Checkout failed');
+    }
+  } catch (err) {
+    const note = document.getElementById('authGateSubscribeNote');
+    if (note) note.textContent = 'Could not start checkout. Please try again.';
+    if (btn) { btn.disabled = false; btn.textContent = 'Start Free Trial'; }
+  }
+}
+
+/** POST to /api/stripe-portal and redirect to the Stripe Billing Portal. */
+async function openBillingPortal() {
+  if (!_supabase) return;
+  try {
+    const { data: { session } } = await _supabase.auth.getSession();
+    if (!session) throw new Error('No session');
+
+    const resp = await fetch('/api/stripe-portal', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${session.access_token}` },
+    });
+    const data = await resp.json();
+    if (data.url) window.location.href = data.url;
+  } catch (_) {
+    /* silent — portal is a convenience, not a blocker */
+  }
+}
+
+/**
+ * Render the dashboard gate overlay.
+ * Three states:
+ *   1. No user       → show sign-in card
+ *   2. User, no sub  → show subscribe/trial card
+ *   3. User, active  → hide overlay, unlock dashboard
+ */
 function renderAuthGate() {
   const wrap = document.getElementById('dashboardGateWrap');
-  const note = document.getElementById('authGateNote');
   const addTickerBtns = [
     document.getElementById('addTickerBtn'),
     document.getElementById('addTickerBtnInline'),
   ].filter(Boolean);
-  const submitBtn = document.getElementById('authGateSubmit');
-  if (!wrap || !note || !addTickerBtns.length) return;
+  if (!wrap) return;
 
-  const locked = !AUTH_STATE.user;
-  wrap.classList.toggle('is-locked', locked);
-  addTickerBtns.forEach((button) => {
-    button.disabled = locked;
-    button.setAttribute('aria-disabled', locked ? 'true' : 'false');
-    button.title = locked ? 'Sign in to add custom tickers' : 'Add a custom ticker';
+  const signInCard = document.getElementById('authGateSignIn');
+  const subscribeCard = document.getElementById('authGateSubscribe');
+  const subscribeNote = document.getElementById('authGateSubscribeNote');
+  const manageBillingBtn = document.getElementById('authGateManageBillingBtn');
+
+  const hasUser = !!AUTH_STATE.user;
+  const sub = AUTH_STATE.subscription;
+  // Unlock when we have confirmed active/trialing access
+  const unlocked = hasUser && sub.checked && sub.hasAccess;
+
+  // Lock/unlock the gated content
+  wrap.classList.toggle('is-locked', !unlocked);
+  addTickerBtns.forEach((btn) => {
+    btn.disabled = !unlocked;
+    btn.setAttribute('aria-disabled', unlocked ? 'false' : 'true');
+    btn.title = unlocked ? 'Add a custom ticker' : 'Sign in and subscribe to add tickers';
   });
 
-  if (!AUTH_STATE.googleClientId) {
-    note.textContent = 'Google sign-in is not configured yet. Email/password UI is shown in-window, but it still needs a real auth backend before it can work.';
-  } else if (AUTH_STATE.user) {
-    note.textContent = `Signed in as ${getDisplayName(AUTH_STATE.user)}.`;
-  } else {
-    note.textContent = 'Use the Google button below for one-click sign-in. Email/password needs backend setup before it can be enabled.';
-  }
+  if (!hasUser) {
+    // State 1: signed out
+    if (signInCard) signInCard.style.display = '';
+    if (subscribeCard) subscribeCard.style.display = 'none';
 
-  if (submitBtn) {
-    submitBtn.disabled = false;
-  }
+  } else if (!unlocked) {
+    // State 2: signed in but no valid subscription
+    if (signInCard) signInCard.style.display = 'none';
+    if (subscribeCard) subscribeCard.style.display = '';
 
-  if (locked && AUTH_STATE.googleClientId) {
-    renderGoogleButton();
-  }
-}
-
-function initAuthGateForm() {
-  const form = document.getElementById('authGateForm');
-  const note = document.getElementById('authGateNote');
-  if (!form || !note) return;
-
-  form.addEventListener('submit', (event) => {
-    event.preventDefault();
-    note.textContent = 'Email/password sign-in is not wired to a backend yet. Google sign-in below is the live auth path right now.';
-  });
-}
-
-function handleGoogleCredentialResponse(response) {
-  try {
-    const previousUser = AUTH_STATE.user;
-    if (previousUser?.sub) {
-      saveTickerList(previousUser, customTickersList);
-    } else {
-      saveTickerList(null, customTickersList);
+    if (subscribeNote && sub.checked) {
+      // Show context-appropriate note
+      const s = sub.status;
+      if (s === 'past_due' || s === 'unpaid') {
+        subscribeNote.textContent = 'Your subscription has a payment issue. Update your payment method below.';
+        if (manageBillingBtn) manageBillingBtn.style.display = '';
+      } else if (s === 'canceled') {
+        subscribeNote.textContent = 'Your subscription was canceled. Start a new trial below.';
+      } else if (s === 'incomplete' || s === 'incomplete_expired') {
+        subscribeNote.textContent = 'Your last checkout was incomplete. Start a new trial below.';
+      } else {
+        subscribeNote.textContent = '';
+      }
     }
 
-    const payload = decodeJwtPayload(response.credential);
-    AUTH_STATE.user = {
-      name: payload.name || '',
-      email: payload.email || '',
-      picture: payload.picture || '',
-      sub: payload.sub || '',
-    };
-    saveStoredGoogleUser(AUTH_STATE.user);
-    syncTickersForCurrentUser();
-    renderAuthControls();
-    renderCustomTickers();
-    Promise.allSettled([fetchOptionsFlow(), fetchMarketData()]);
-  } catch (error) {
-    AUTH_STATE.error = 'Google sign-in failed';
-    renderAuthControls();
+  } else {
+    // State 3: unlocked — hide the entire overlay
+    if (signInCard) signInCard.style.display = 'none';
+    if (subscribeCard) subscribeCard.style.display = 'none';
   }
 }
 
@@ -2288,15 +2910,13 @@ async function initAuth(forceRefresh = false) {
 
   AUTH_STATE.error = '';
   AUTH_STATE.configLoaded = false;
-  AUTH_STATE.googleClientId = "";
-  AUTH_STATE.user = loadStoredGoogleUser();
-  syncTickersForCurrentUser();
   renderAuthControls();
 
   try {
+    // 1. Fetch public config (includes Supabase URL + anon key)
     const config = await fetchPublicAuthConfig();
     AUTH_STATE.configLoaded = true;
-    AUTH_STATE.googleClientId = config.googleClientId || "";
+    AUTH_STATE.googleClientId = config.googleClientId || "";  // legacy display
     APP_CONFIG.tradingViewProductName = config.tradingViewProductName || APP_CONFIG.tradingViewProductName;
     APP_CONFIG.tradingViewProductDescription = config.tradingViewProductDescription || APP_CONFIG.tradingViewProductDescription;
     APP_CONFIG.monthlyPlan = {
@@ -2314,29 +2934,67 @@ async function initAuth(forceRefresh = false) {
       description: config.tradingViewLifetimeDescription || APP_CONFIG.lifetimePlan.description,
     };
     renderProductOffer();
+
+    // 2. Boot Supabase client
+    initSupabaseClient(config.supabaseUrl, config.supabaseAnonKey);
+
+    if (!_supabase) {
+      // Supabase not configured yet — show gate without crashing
+      renderAuthControls();
+      return;
+    }
+
+    // 3. Listen for auth state changes (handles OAuth redirects + session refresh)
+    _supabase.auth.onAuthStateChange(async (event, session) => {
+      const previousUser = AUTH_STATE.user;
+      if (previousUser) saveTickerList(previousUser, customTickersList);
+
+      AUTH_STATE.user = session?.user ?? null;
+      // Reset subscription state on every auth change; re-check if signed in
+      AUTH_STATE.subscription = { checked: false, hasAccess: false, status: 'none', trialEndsAt: null, currentPeriodEndsAt: null };
+
+      if (AUTH_STATE.user) {
+        syncTickersForCurrentUser();
+        renderAuthControls();
+        renderCustomTickers();
+        // Check subscription in the background; gate stays locked until confirmed
+        checkSubscriptionStatus().then(() => {
+          if (AUTH_STATE.subscription.hasAccess) {
+            Promise.allSettled([fetchOptionsFlow(), fetchMarketData(), fetchTopTradeToday(true)]);
+          }
+        });
+      } else {
+        customTickersList = loadSavedTickers(null);
+        renderAuthControls();
+        renderCustomTickers();
+      }
+    });
+
+    // 4. Check for an existing session on page load
+    const { data: { session } } = await _supabase.auth.getSession();
+    if (session?.user) {
+      AUTH_STATE.user = session.user;
+      syncTickersForCurrentUser();
+      await checkSubscriptionStatus();
+    }
+
     renderAuthControls();
+
+    // 5. Show checkout=success banner if returning from Stripe
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('checkout') === 'success') {
+      // Remove query param without reloading
+      window.history.replaceState({}, '', window.location.pathname);
+      // Re-poll subscription status (webhook may still be in-flight)
+      setTimeout(() => checkSubscriptionStatus(), 2000);
+    }
+
   } catch (error) {
     AUTH_STATE.configLoaded = true;
     AUTH_STATE.error = 'Auth unavailable';
     renderProductOffer();
     renderAuthControls();
   }
-}
-
-async function signOut() {
-  if (AUTH_STATE.user?.sub) {
-    saveTickerList(AUTH_STATE.user, customTickersList);
-  }
-
-  AUTH_STATE.user = null;
-  saveStoredGoogleUser(null);
-  customTickersList = loadSavedTickers(null);
-  if (window.google?.accounts?.id) {
-    window.google.accounts.id.disableAutoSelect();
-  }
-  renderAuthControls();
-  renderCustomTickers();
-  await Promise.allSettled([fetchOptionsFlow(), fetchMarketData()]);
 }
 
 function addCustomTicker(symbol) {
@@ -2692,35 +3350,42 @@ function renderTickerTape(tickers, indexes, vix) {
   if (!track) return;
 
   const items = [];
+  const formatTapePrice = (value, ticker) => {
+    if (!Number.isFinite(value)) return '';
+    if (ticker === 'ES' || ticker === 'NQ') return String(Math.round(value));
+    if (ticker === 'VIX') return value.toFixed(2);
+    return value >= 100 ? value.toFixed(2) : value.toFixed(2);
+  };
 
   // Indexes first (SPY, QQQ, ES, NQ)
   (indexes || []).forEach(idx => {
     const pct = idx.friChange ?? idx.change;
     if (pct == null) return;
-    items.push({ t: idx.ticker, pct });
+    items.push({ t: idx.ticker, pct, price: idx.price });
   });
 
   // Main tickers
   (tickers || []).forEach(t => {
     const pct = t.friChange ?? t.change;
     if (pct == null) return;
-    items.push({ t: t.ticker, pct });
+    items.push({ t: t.ticker, pct, price: t.price });
   });
 
   // VIX
   if (vix && vix.changePct != null) {
-    items.push({ t: 'VIX', pct: vix.changePct });
+    items.push({ t: 'VIX', pct: vix.changePct, price: vix.price });
   }
 
   if (!items.length) return;
 
   // Duplicate for seamless loop
   const all = [...items, ...items];
-  track.innerHTML = all.map(({ t, pct }) => {
+  track.innerHTML = all.map(({ t, pct, price }) => {
     const pos = pct >= 0;
     const sign = pos ? '+' : '';
     const color = pos ? '#34d399' : '#f87171';
-    return `<span style="margin:0 28px;font-size:12px;font-weight:500;white-space:nowrap;color:${color};font-family:'JetBrains Mono',monospace;">${t}&nbsp;&nbsp;${sign}${pct.toFixed(2)}%</span>`;
+    const priceText = formatTapePrice(price, t);
+    return `<span style="margin:0 28px;font-size:12px;font-weight:500;white-space:nowrap;color:${color};font-family:'JetBrains Mono',monospace;">${t}${priceText ? ` ${priceText}` : ''}&nbsp;&nbsp;${sign}${pct.toFixed(2)}%</span>`;
   }).join('');
 }
 
@@ -2894,7 +3559,7 @@ async function _autoRefresh() {
   const badge = document.getElementById('refreshCountdown');
   if (badge) badge.textContent = 'Refreshing…';
 
-  await Promise.allSettled([fetchOptionsFlow(true), fetchMarketData(true)]);
+  await Promise.allSettled([fetchOptionsFlow(true), fetchMarketData(true), fetchTopWatch(true), fetchTopTradeToday(true)]);
   mergeOptionsFlowIntoScores();
   requestAnimationFrame(() => initAllCharts());
 }
@@ -2927,7 +3592,6 @@ function initAutoRefresh() {
 async function init() {
   await initAuth();
   initAlertCenter();
-  initAuthGateForm();
   renderProductOffer();
   renderHeader();
   renderAuthControls();
@@ -2935,6 +3599,7 @@ async function init() {
   renderCatalysts();
   renderCalendar();
   renderMarketRadar();
+  renderTopTradeToday();
   renderIndexCards();
   renderTickerCards();
   renderTopWatch();
@@ -2953,6 +3618,7 @@ async function init() {
     fetchOptionsFlow(),
     fetchMarketData(),
     fetchTopWatch(),
+    fetchTopTradeToday(true),
   ]);
   // Merge options flow sentiment into signal scores now that both fetches are done
   mergeOptionsFlowIntoScores();

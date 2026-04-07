@@ -43,6 +43,7 @@ _load_dotenv()
 
 from barchart_proxy import fetch_options_activity
 from market_data import fetch_market_data
+from top_trade_today import fetch_top_trade_today
 from top_watch import fetch_top_watch
 
 
@@ -119,6 +120,15 @@ def top_watch():
     try:
         force_refresh = request.args.get("fresh", "0").lower() in {"1", "true", "yes"}
         return jsonify(fetch_top_watch(force_refresh=force_refresh))
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 502
+
+
+@app.route("/api/top-trade-today")
+def top_trade_today():
+    try:
+        force_refresh = request.args.get("fresh", "0").lower() in {"1", "true", "yes"}
+        return jsonify(fetch_top_trade_today(force_refresh=force_refresh))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
 

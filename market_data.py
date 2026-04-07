@@ -10,6 +10,7 @@ to avoid hammering Yahoo on every page load.
 
 import threading
 import time
+from datetime import datetime
 
 CACHE_TTL_SECONDS = 300  # refresh every 5 minutes
 
@@ -690,6 +691,70 @@ def _normalize_extra_tickers(extra_tickers=None):
     return normalized
 
 
+def _build_intraday_chart_map(raw, symbols):
+    chart_map = {}
+
+    for symbol in symbols:
+        try:
+            if hasattr(raw.columns, "levels"):
+                open_s = raw["Open"][symbol].dropna()
+                high_s = raw["High"][symbol].dropna()
+                low_s = raw["Low"][symbol].dropna()
+                close_s = raw["Close"][symbol].dropna()
+                volume_s = raw["Volume"][symbol].dropna() if "Volume" in raw else None
+            else:
+                open_s = raw["Open"].dropna()
+                high_s = raw["High"].dropna()
+                low_s = raw["Low"].dropna()
+                close_s = raw["Close"].dropna()
+                volume_s = raw["Volume"].dropna() if "Volume" in raw else None
+        except Exception:
+            continue
+
+        common_index = open_s.index.intersection(high_s.index).intersection(low_s.index).intersection(close_s.index)
+        if volume_s is not None:
+            common_index = common_index.intersection(volume_s.index)
+        if len(common_index) < 2:
+            continue
+
+        hourly_bars = []
+        for ts in common_index:
+            try:
+                hourly_bars.append({
+                    "t": ts.isoformat() if hasattr(ts, "isoformat") else str(ts),
+                    "o": round(float(open_s.loc[ts]), 2),
+                    "h": round(float(high_s.loc[ts]), 2),
+                    "l": round(float(low_s.loc[ts]), 2),
+                    "c": round(float(close_s.loc[ts]), 2),
+                    "v": int(float(volume_s.loc[ts])) if volume_s is not None else None,
+                })
+            except Exception:
+                continue
+
+        bars = []
+        for i in range(0, len(hourly_bars), 4):
+            chunk = hourly_bars[i:i + 4]
+            if len(chunk) < 2:
+                continue
+            bars.append({
+                "t": chunk[-1]["t"],
+                "o": chunk[0]["o"],
+                "h": round(max(bar["h"] for bar in chunk), 2),
+                "l": round(min(bar["l"] for bar in chunk), 2),
+                "c": chunk[-1]["c"],
+                "v": sum((bar["v"] or 0) for bar in chunk) or None,
+            })
+
+        bars = bars[-40:]
+        if len(bars) >= 2:
+            chart_map[symbol] = {
+                "timeframe": "4h",
+                "bars": bars,
+            }
+
+    return chart_map
+
+
 def fetch_market_data(extra_tickers=None, force_refresh=False):
     """
     Return live market data with computed indicators.
@@ -722,6 +787,20 @@ def fetch_market_data(extra_tickers=None, force_refresh=False):
         progress=False,
         auto_adjust=True,
     )
+
+    intraday_chart_data = {}
+    try:
+        intraday_raw = yf.download(
+            all_yf_symbols,
+            period="10d",
+            interval="60m",
+            progress=False,
+            auto_adjust=True,
+            prepost=False,
+        )
+        intraday_chart_data = _build_intraday_chart_map(intraday_raw, all_yf_symbols)
+    except Exception as exc:
+        print(f"[market_data] 1h chart fetch error: {exc}")
 
     def series(field, symbol):
         try:
@@ -881,11 +960,13 @@ def fetch_market_data(extra_tickers=None, force_refresh=False):
         e for e in index_entries if e["ticker"] not in ("SPY", "QQQ")
     ]
     for entry in all_entries:
-        chart_data[entry["ticker"]] = entry.pop("_ohlcv", [])
+        fallback_bars = entry.pop("_ohlcv", [])
+        chart_data[entry["ticker"]] = intraday_chart_data.get(entry["ticker"], fallback_bars)
     # SPY/QQQ ohlcv was already popped above via the same object reference
     for e in index_entries:
         if "_ohlcv" in e:
-            chart_data[e["ticker"]] = e.pop("_ohlcv")
+            fallback_bars = e.pop("_ohlcv")
+            chart_data[e["ticker"]] = intraday_chart_data.get(e["ticker"], fallback_bars)
 
     payload = {
         "tickers":          ticker_entries,

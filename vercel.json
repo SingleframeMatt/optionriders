@@ -18,8 +18,28 @@
       "dest": "/api/top-watch.py"
     },
     {
+      "src": "/api/top-trade-today",
+      "dest": "/api/top-trade-today.py"
+    },
+    {
       "src": "/api/public-config",
       "dest": "/api/public-config.py"
+    },
+    {
+      "src": "/api/subscription-status",
+      "dest": "/api/subscription-status.py"
+    },
+    {
+      "src": "/api/stripe-checkout",
+      "dest": "/api/stripe-checkout.py"
+    },
+    {
+      "src": "/api/stripe-webhook",
+      "dest": "/api/stripe-webhook.py"
+    },
+    {
+      "src": "/api/stripe-portal",
+      "dest": "/api/stripe-portal.py"
     },
     {
       "src": "/crypto-bot",

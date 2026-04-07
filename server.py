@@ -6,11 +6,27 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import importlib.util
+
 from alpha_vantage import fetch_alpha_vantage_data
 from barchart_proxy import CACHE_TTL_SECONDS, fetch_options_activity
 from market_data import fetch_market_data
+from top_trade_today import fetch_top_trade_today
 from top_watch import fetch_top_watch
 from bot_core import bot as _bot
+
+
+def _load_api_handler(name: str):
+    """
+    Load a Vercel-style handler class from api/<name>.py.
+    Filenames may contain dashes, which are not valid Python identifiers,
+    so we use importlib rather than a regular import.
+    """
+    path = Path(__file__).parent / "api" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.handler
 
 
 def load_dotenv(dotenv_path=".env"):
@@ -37,7 +53,7 @@ def load_dotenv(dotenv_path=".env"):
 class DashboardHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path in {"/", "/?"}:
-            self.path = "/landing.html"
+            self.path = "/index.html"
             return super().do_GET()
         if self.path.startswith("/api/options-flow"):
             self.handle_options_flow()
@@ -51,20 +67,66 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/top-watch"):
             self.handle_top_watch()
             return
+        if self.path.startswith("/api/top-trade-today"):
+            self.handle_top_trade_today()
+            return
         if self.path.startswith("/api/alpha-vantage"):
             self.handle_alpha_vantage()
             return
         if self.path.startswith("/api/bot-status"):
             self.handle_bot_status()
             return
+        # Subscription / billing endpoints
+        if self.path.startswith("/api/subscription-status"):
+            self._delegate("subscription-status", "do_GET")
+            return
         super().do_GET()
+
+    def do_OPTIONS(self):
+        # CORS pre-flight for subscription/billing endpoints
+        if any(self.path.startswith(p) for p in (
+            "/api/subscription-status",
+            "/api/stripe-checkout",
+            "/api/stripe-portal",
+        )):
+            self._delegate(self.path.split("/api/")[1].split("?")[0], "do_OPTIONS")
+            return
+        self.send_response(204)
+        self.end_headers()
 
     def do_POST(self):
         if self.path.startswith("/api/bot-control"):
             self.handle_bot_control()
             return
+        # Subscription / billing endpoints
+        if self.path.startswith("/api/stripe-checkout"):
+            self._delegate("stripe-checkout", "do_POST")
+            return
+        if self.path.startswith("/api/stripe-webhook"):
+            self._delegate("stripe-webhook", "do_POST")
+            return
+        if self.path.startswith("/api/stripe-portal"):
+            self._delegate("stripe-portal", "do_POST")
+            return
         self.send_response(404)
         self.end_headers()
+
+    def _delegate(self, api_name: str, method: str):
+        """
+        Instantiate a Vercel-style api/<api_name>.py handler and call
+        its do_GET / do_POST / do_OPTIONS method using this connection.
+        """
+        cls = _load_api_handler(api_name)
+        h = cls.__new__(cls)
+        h.request = self.request
+        h.client_address = self.client_address
+        h.server = self.server
+        h.rfile = self.rfile
+        h.wfile = self.wfile
+        h.headers = self.headers
+        h.command = self.command
+        h.path = self.path
+        getattr(h, method)()
 
     def handle_bot_status(self):
         body = json.dumps(_bot.get_state()).encode("utf-8")
@@ -149,6 +211,26 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             params = parse_qs(urlparse(self.path).query)
             force_refresh = params.get("fresh", ["0"])[0].lower() in {"1", "true", "yes"}
             payload = fetch_top_watch(force_refresh=force_refresh)
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", f"public, max-age={CACHE_TTL_SECONDS}")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:
+            body = json.dumps({"error": str(exc)}).encode("utf-8")
+            self.send_response(502)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    def handle_top_trade_today(self):
+        try:
+            params = parse_qs(urlparse(self.path).query)
+            force_refresh = params.get("fresh", ["0"])[0].lower() in {"1", "true", "yes"}
+            payload = fetch_top_trade_today(force_refresh=force_refresh)
             body = json.dumps(payload).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")

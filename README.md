@@ -83,3 +83,93 @@ Intended production domain:
 ```text
 https://www.optionriders.com
 ```
+
+---
+
+## Dashboard Subscription Setup (Supabase + Stripe)
+
+The dashboard is gated behind a real backend subscription check. Access is granted when the Supabase `dashboard_subscriptions` table shows `status = trialing` or `active` for the signed-in user.
+
+### Required environment variables
+
+**Supabase (add to `.env` and Vercel project settings):**
+
+```text
+SUPABASE_URL=               # e.g. https://abcxyz.supabase.co
+SUPABASE_ANON_KEY=          # safe to expose in frontend — anon key only
+SUPABASE_SERVICE_ROLE_KEY=  # server-side only — never expose in the browser
+```
+
+**Stripe (add to `.env` and Vercel project settings):**
+
+```text
+STRIPE_SECRET_KEY=              # sk_live_... (use sk_test_... for local dev)
+STRIPE_WEBHOOK_SECRET=          # whsec_... from Stripe Dashboard → Webhooks
+STRIPE_DASHBOARD_PRICE_ID=      # price_... recurring price for dashboard sub
+DASHBOARD_TRIAL_DAYS=7          # free trial length in days (default: 7)
+APP_URL=https://www.optionriders.com   # base URL for Stripe redirect_url
+```
+
+### Supabase setup
+
+1. Create a new Supabase project at https://supabase.com.
+2. In the Supabase **SQL Editor**, run the migration file:
+   ```
+   supabase/migrations/20240001_dashboard_subscriptions.sql
+   ```
+3. In **Authentication → Providers → Google**, enable Google OAuth and paste
+   your Google OAuth Client ID + Secret (same credentials used before).
+4. Under **Authentication → URL Configuration**, add the following to
+   **Redirect URLs**:
+   - `http://127.0.0.1:8125/`
+   - `https://www.optionriders.com/`
+5. Copy `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`
+   from **Project Settings → API** into your `.env` and Vercel environment.
+
+### Stripe dashboard setup
+
+1. In Stripe, create a **Product** called "Option Riders Dashboard".
+2. Add a **recurring price** (e.g. $19/month) and copy the `price_...` ID
+   into `STRIPE_DASHBOARD_PRICE_ID`.
+3. Go to **Developers → Webhooks** and add an endpoint:
+   - URL: `https://www.optionriders.com/api/stripe-webhook`
+   - Events to send:
+     - `checkout.session.completed`
+     - `customer.subscription.created`
+     - `customer.subscription.updated`
+     - `customer.subscription.deleted`
+4. Copy the **Signing secret** (`whsec_...`) into `STRIPE_WEBHOOK_SECRET`.
+5. Enable the **Billing Portal** at **Settings → Billing → Customer portal**
+   (required for `openBillingPortal()` to work).
+
+### Testing locally
+
+1. Install dependencies:
+   ```bash
+   pip install stripe requests
+   ```
+2. Copy `.env` with real test values (`sk_test_...`, test Supabase project).
+3. Start the server:
+   ```bash
+   python3 server.py
+   ```
+4. Forward Stripe webhooks to your local server using the Stripe CLI:
+   ```bash
+   stripe listen --forward-to http://127.0.0.1:8125/api/stripe-webhook
+   ```
+   The CLI prints a `whsec_...` secret — set that as `STRIPE_WEBHOOK_SECRET`
+   in `.env` for local testing.
+5. Open http://127.0.0.1:8125, sign in with Google, and click
+   **Start Free Trial** to test the full checkout flow.
+
+### Access control logic
+
+| User state | Dashboard | Gate shown |
+|---|---|---|
+| Not signed in | Locked | Sign-in card |
+| Signed in, `status = none / canceled / past_due` | Locked | Subscribe / trial CTA |
+| Signed in, `status = trialing` | Unlocked | Nothing (hidden) |
+| Signed in, `status = active` | Unlocked | Nothing (hidden) |
+
+Access is always verified server-side via `/api/subscription-status` — the
+frontend cannot self-grant access by manipulating local state.
