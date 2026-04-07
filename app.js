@@ -1269,8 +1269,8 @@ function buildMarketRadarItems() {
       expectedMovePct,
       sourceCount: Math.max(item.sourceCount || 0, 1),
       score:
-        400
-        - index * 18
+        54
+        - index * 6
         + expectedMovePct * 28
         + Math.max(0, Math.abs(Number(item.signalScore) || 0) * 0.25)
         + Math.max(0, Math.abs(Number(item.relStrength) || 0) * 2),
@@ -1382,6 +1382,7 @@ function buildMarketRadarItems() {
   return Array.from(merged.values())
     .map((item) => ({
       ...item,
+      radarScore: Math.round(Number(item.score) || 0),
       tone: getRadarTone(item),
     }))
     .sort((a, b) => (b.score || 0) - (a.score || 0))
@@ -1421,6 +1422,22 @@ function renderMarketRadarStats(items) {
   `;
 }
 
+function getMarketRadarSizeWeights(items) {
+  if (!items.length) return [];
+
+  const scoreValues = items.map((item) => Math.max(0, Number(item.score) || 0));
+  const moveValues = items.map((item) => Math.max(0, Number(item.expectedMovePct) || 0));
+  const maxScore = Math.max(...scoreValues, 1);
+  const maxMove = Math.max(...moveValues, 1);
+
+  return items.map((item) => {
+    const normalizedScore = Math.max(0, Number(item.score) || 0) / maxScore;
+    const normalizedMove = Math.max(0, Number(item.expectedMovePct) || 0) / maxMove;
+    const combined = (normalizedScore * 0.58) + (normalizedMove * 0.42);
+    return Math.max(0.18, Math.min(1, combined));
+  });
+}
+
 function getMarketRadarBubbleSizes(items, grid) {
   if (!items.length) return [];
 
@@ -1428,10 +1445,12 @@ function getMarketRadarBubbleSizes(items, grid) {
   const gridHeight = Math.max(grid?.clientHeight || 0, 320);
   const edgeGap = 4;
   const bubbleGap = 0;
+  const sizeWeights = getMarketRadarSizeWeights(items);
 
   const proposedSizes = items.map((item, index) => {
     const slot = MARKET_RADAR_LAYOUT[index] || MARKET_RADAR_LAYOUT[MARKET_RADAR_LAYOUT.length - 1];
-    const base = Math.max(84, Math.min(178, 84 + (item.score || 0) * 0.9));
+    const weight = sizeWeights[index] || 0.18;
+    const base = 78 + (weight * 108);
     return Math.round(base * slot.size);
   });
 
@@ -1479,10 +1498,14 @@ function renderMarketRadar() {
   grid.innerHTML = items.map((item, index) => {
     const slot = MARKET_RADAR_LAYOUT[index] || MARKET_RADAR_LAYOUT[MARKET_RADAR_LAYOUT.length - 1];
     const size = bubbleSizes[index] || 96;
-    const changeText = item.expectedMovePct ? `${item.expectedMovePct.toFixed(1)}% exp move` : (item.changePct != null ? `${item.changePct > 0 ? '+' : ''}${item.changePct.toFixed(1)}%` : `${item.sourceCount || 1} src`);
+    const changeText = item.expectedMovePct
+      ? `${item.expectedMovePct.toFixed(1)}% exp move`
+      : (item.radarScore
+          ? `score ${item.radarScore}`
+          : (item.changePct != null ? `${item.changePct > 0 ? '+' : ''}${item.changePct.toFixed(1)}%` : `${item.sourceCount || 1} src`));
     const biasText = item.direction || (item.sourceCount > 1 ? `${item.sourceCount} sources` : 'Watch');
     const featuredClass = index === 0 ? ' is-featured' : '';
-    const bubbleTitle = `${item.ticker}${item.catalyst ? ` — ${item.catalyst}` : ''}`;
+    const bubbleTitle = `${item.ticker}${item.catalyst ? ` — ${item.catalyst}` : ''}${item.expectedMovePct ? ` · ${item.expectedMovePct.toFixed(1)}% exp move` : ''}${item.radarScore ? ` · score ${item.radarScore}` : ''}`;
 
     return `
       <button
