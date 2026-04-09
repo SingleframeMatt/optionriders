@@ -2576,7 +2576,6 @@ async function fetchOptionsFlow(forceFresh = false) {
 
     const payload = await response.json();
     applyOptionsFlowPayload(payload);
-    saveCacheValue(CACHE_KEYS.optionsFlow, payload);
   } catch (error) {
     OPTIONS_FLOW.unusual = [];
     OPTIONS_FLOW.mostActive = [];
@@ -2602,38 +2601,6 @@ async function fetchAppVersion() {
     const el = document.getElementById('navVersion');
     if (el && version) el.textContent = `v${version}`;
   } catch (_) {}
-}
-
-const DASHBOARD_CACHE_PREFIX = 'optionriders:dashboard:v1';
-const CACHE_KEYS = {
-  marketData: `${DASHBOARD_CACHE_PREFIX}:marketData`,
-  optionsFlow: `${DASHBOARD_CACHE_PREFIX}:optionsFlow`,
-  topWatch: `${DASHBOARD_CACHE_PREFIX}:topWatch`,
-  topTrade: `${DASHBOARD_CACHE_PREFIX}:topTrade`,
-  meta: `${DASHBOARD_CACHE_PREFIX}:meta`,
-};
-
-function loadCacheValue(key) {
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-function saveCacheValue(key, value) {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch (_) {}
-}
-
-function getDashboardCacheMeta() {
-  return loadCacheValue(CACHE_KEYS.meta) || { initialLoadKey: '', marketOpenRefreshKey: '' };
-}
-
-function saveDashboardCacheMeta(meta) {
-  saveCacheValue(CACHE_KEYS.meta, meta);
 }
 
 function getNewYorkTimeParts(date = new Date()) {
@@ -2674,24 +2641,6 @@ function isAfterUsMarketOpen(date = new Date()) {
   const ny = getNewYorkTimeParts(date);
   const minutes = ny.hour * 60 + ny.minute;
   return minutes >= (9 * 60 + 30);
-}
-
-function getDashboardRefreshPlan(date = new Date()) {
-  const meta = getDashboardCacheMeta();
-  const dayKey = getMarketDayKey(date);
-  const afterOpen = isAfterUsMarketOpen(date);
-  const hasInitialForDay = meta.initialLoadKey === dayKey;
-  const hasMarketOpenRefreshForDay = meta.marketOpenRefreshKey === dayKey;
-
-  const needsInitialLoad = !hasInitialForDay;
-  const needsMarketOpenRefresh = !needsInitialLoad && afterOpen && !hasMarketOpenRefreshForDay;
-
-  return {
-    dayKey,
-    afterOpen,
-    needsInitialLoad,
-    needsMarketOpenRefresh,
-  };
 }
 
 function applyMarketDataPayload(payload) {
@@ -2803,23 +2752,11 @@ function applyTopTradePayload(payload) {
   renderTopTradeToday();
 }
 
-function hydrateDashboardFromCache() {
-  const marketData = loadCacheValue(CACHE_KEYS.marketData);
-  const optionsFlow = loadCacheValue(CACHE_KEYS.optionsFlow);
-  const topWatch = loadCacheValue(CACHE_KEYS.topWatch);
-  const topTrade = loadCacheValue(CACHE_KEYS.topTrade);
-
-  if (marketData) applyMarketDataPayload(marketData);
-  if (optionsFlow) applyOptionsFlowPayload(optionsFlow);
-  if (topWatch) applyTopWatchPayload(topWatch);
-  if (topTrade) applyTopTradePayload(topTrade);
-}
-
 let _marketOpenMonitor = null;
+let _marketOpenRefreshDoneForDay = false;
 
 async function maybeRunMarketOpenRefresh() {
-  const plan = getDashboardRefreshPlan();
-  if (!plan.needsMarketOpenRefresh) return false;
+  if (_marketOpenRefreshDoneForDay || !isAfterUsMarketOpen()) return false;
 
   await Promise.allSettled([
     fetchOptionsFlow(true),
@@ -2828,10 +2765,7 @@ async function maybeRunMarketOpenRefresh() {
     fetchTopTradeToday(true),
   ]);
   mergeOptionsFlowIntoScores();
-
-  const meta = getDashboardCacheMeta();
-  meta.marketOpenRefreshKey = plan.dayKey;
-  saveDashboardCacheMeta(meta);
+  _marketOpenRefreshDoneForDay = true;
   return true;
 }
 
@@ -2853,7 +2787,6 @@ async function fetchTopWatch(forceFresh = false) {
 
     const payload = await response.json();
     applyTopWatchPayload(payload);
-    saveCacheValue(CACHE_KEYS.topWatch, payload);
   } catch (error) {
     TOP_WATCH.topWatch     = [];
     TOP_WATCH.sourceStatus = {};
@@ -2877,7 +2810,6 @@ async function fetchTopTradeToday(forceFresh = false) {
 
     const payload = await response.json();
     applyTopTradePayload(payload);
-    saveCacheValue(CACHE_KEYS.topTrade, payload);
   } catch (error) {
     TOP_TRADE_TODAY.picks = [];
     TOP_TRADE_TODAY.bestOverallPick = '';
@@ -3641,7 +3573,6 @@ async function fetchMarketData(forceFresh = false) {
 
     const payload = await response.json();
     if (!applyMarketDataPayload(payload)) return;
-    saveCacheValue(CACHE_KEYS.marketData, payload);
 
   } catch (err) {
     // Silent fail — static dashboard data remains visible
@@ -3891,24 +3822,14 @@ async function init() {
   initTickerDetailModal();
   initTickerHoverPopup();
   fetchAppVersion();
-  hydrateDashboardFromCache();
   await fetchEconomicCalendar();
-
-  const refreshPlan = getDashboardRefreshPlan();
-  if (refreshPlan.needsInitialLoad) {
-    await Promise.allSettled([
-      fetchOptionsFlow(true),
-      fetchMarketData(true),
-      fetchTopWatch(true),
-      fetchTopTradeToday(true),
-    ]);
-    const meta = getDashboardCacheMeta();
-    meta.initialLoadKey = refreshPlan.dayKey;
-    if (refreshPlan.afterOpen) meta.marketOpenRefreshKey = refreshPlan.dayKey;
-    saveDashboardCacheMeta(meta);
-  } else if (refreshPlan.needsMarketOpenRefresh) {
-    await maybeRunMarketOpenRefresh();
-  }
+  _marketOpenRefreshDoneForDay = isAfterUsMarketOpen();
+  await Promise.allSettled([
+    fetchOptionsFlow(true),
+    fetchMarketData(true),
+    fetchTopWatch(true),
+    fetchTopTradeToday(true),
+  ]);
   // Merge options flow sentiment into signal scores now that both fetches are done
   mergeOptionsFlowIntoScores();
   // Draw sparkline charts after DOM is ready (live data already merged above if available)
