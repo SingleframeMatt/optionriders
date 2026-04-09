@@ -424,6 +424,8 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes, volumes=None, s
     atr_pct  = round(atr_val / price * 100, 2) if price else 0.0
     sma20    = _sma(closes, 20)
     sma50    = _sma(closes, 50)
+    sma100   = _sma(closes, 100)
+    sma200   = _sma(closes, 200)
     macd_h   = round(_macd_histogram(closes), 4)
     vol_r    = round(_volume_ratio(volumes), 2) if volumes else None
     adx_val  = round(_adx(highs, lows, closes), 1)
@@ -431,6 +433,12 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes, volumes=None, s
     pos52    = round(_week52_position(closes), 3)
 
     support, resistance = _levels(highs, lows, price)
+    week_high = round(max(highs[-5:]), 2) if len(highs) >= 5 else round(max(highs), 2)
+    week_low = round(min(lows[-5:]), 2) if len(lows) >= 5 else round(min(lows), 2)
+    month_high = round(max(highs[-21:]), 2) if len(highs) >= 21 else round(max(highs), 2)
+    month_low = round(min(lows[-21:]), 2) if len(lows) >= 21 else round(min(lows), 2)
+    year_high = round(max(highs[-252:]), 2) if len(highs) >= 252 else round(max(highs), 2)
+    year_low = round(min(lows[-252:]), 2) if len(lows) >= 252 else round(min(lows), 2)
     bias_str   = _bias(rsi_val, price, sma20, sma50)
     strat_str  = _strategy(bias_str, rsi_val)
     sig_score  = _signal_score(rsi_val, price, sma20, sma50, closes,
@@ -491,10 +499,12 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes, volumes=None, s
         "rsi":         rsi_val,
         "atr":         atr_val,
         "atrPct":      atr_pct,
-        "prevDayHigh": round(highs[-2], 2) if len(highs) >= 2 else round(highs[-1], 2),
-        "prevDayLow":  round(lows[-2],  2) if len(lows)  >= 2 else round(lows[-1],  2),
-        "fiveDayHigh": round(max(highs[-5:]), 2) if len(highs) >= 5 else round(max(highs), 2),
-        "fiveDayLow":  round(min(lows[-5:]),  2) if len(lows)  >= 5 else round(min(lows),  2),
+        "weekHigh":    week_high,
+        "weekLow":     week_low,
+        "monthHigh":   month_high,
+        "monthLow":    month_low,
+        "yearHigh":    year_high,
+        "yearLow":     year_low,
         "support":     support,
         "resistance":  resistance,
         "bullTrigger": bull_trig,
@@ -505,6 +515,8 @@ def _build_entry(rank, symbol, name, opens, highs, lows, closes, volumes=None, s
         "summary":     summary,
         "sma20":          round(sma20, 2),
         "sma50":          round(sma50, 2),
+        "sma100":         round(sma100, 2),
+        "sma200":         round(sma200, 2),
         "macdHistogram":  macd_h,
         "volumeRatio":    vol_r,
         "adx":            adx_val,

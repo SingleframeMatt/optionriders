@@ -1232,6 +1232,95 @@ function getRadarTone(item) {
   return 'neutral';
 }
 
+function getMarketRadarTechnicalContext(item = {}) {
+  const price = Number(item.price);
+  if (!(price > 0)) {
+    return {
+      direction: item.direction || '',
+      tone: getRadarTone(item),
+      scoreAdjustment: 0,
+      note: '',
+    };
+  }
+
+  const expectedMovePct = Math.max(0, Number(item.expectedMovePct) || 0);
+  const proximityPct = Math.max(0.006, Math.min(0.02, (expectedMovePct || 1.2) / 200));
+  const isNear = (level) => {
+    const numeric = Number(level);
+    return numeric > 0 && Math.abs(price - numeric) / price <= proximityPct;
+  };
+
+  const supportHits = [];
+  const resistanceHits = [];
+  const pushSupport = (label, level) => {
+    const numeric = Number(level);
+    if (numeric > 0 && numeric <= price * 1.006 && isNear(numeric)) supportHits.push(label);
+  };
+  const pushResistance = (label, level) => {
+    const numeric = Number(level);
+    if (numeric > 0 && numeric >= price * 0.994 && isNear(numeric)) resistanceHits.push(label);
+  };
+
+  pushSupport('support', item.support?.[0]);
+  pushSupport('week low', item.weekLow);
+  pushSupport('month low', item.monthLow);
+  pushSupport('year low', item.yearLow);
+  pushResistance('resistance', item.resistance?.[0]);
+  pushResistance('week high', item.weekHigh);
+  pushResistance('month high', item.monthHigh);
+  pushResistance('year high', item.yearHigh);
+
+  const sma100 = Number(item.sma100);
+  const sma200 = Number(item.sma200);
+  if (sma100 > 0 && isNear(sma100)) {
+    (price >= sma100 ? supportHits : resistanceHits).push('100D SMA');
+  }
+  if (sma200 > 0 && isNear(sma200)) {
+    (price >= sma200 ? supportHits : resistanceHits).push('200D SMA');
+  }
+
+  const supportCluster = new Set(supportHits).size;
+  const resistanceCluster = new Set(resistanceHits).size;
+  const originalDirection = String(item.direction || '').toUpperCase();
+  let direction = item.direction || '';
+  let scoreAdjustment = 0;
+  let note = '';
+
+  if (supportCluster >= 2) {
+    scoreAdjustment += supportCluster >= 3 ? 18 : 10;
+  }
+  if (resistanceCluster >= 2) {
+    scoreAdjustment -= resistanceCluster >= 3 ? 18 : 10;
+  }
+
+  if (originalDirection === 'SHORT' && supportCluster >= 2 && resistanceCluster <= 1) {
+    direction = supportCluster >= 3 ? 'LONG' : 'WATCH';
+    scoreAdjustment += supportCluster >= 3 ? 16 : 8;
+    note = `Support cluster: ${supportHits.slice(0, 3).join(', ')}`;
+  } else if (originalDirection === 'LONG' && resistanceCluster >= 2 && supportCluster <= 1) {
+    direction = resistanceCluster >= 3 ? 'SHORT' : 'WATCH';
+    scoreAdjustment -= resistanceCluster >= 3 ? 16 : 8;
+    note = `Resistance cluster: ${resistanceHits.slice(0, 3).join(', ')}`;
+  } else if (!originalDirection) {
+    if (supportCluster >= 3 && resistanceCluster <= 1) {
+      direction = 'LONG';
+      scoreAdjustment += 10;
+      note = `Support cluster: ${supportHits.slice(0, 3).join(', ')}`;
+    } else if (resistanceCluster >= 3 && supportCluster <= 1) {
+      direction = 'SHORT';
+      scoreAdjustment -= 10;
+      note = `Resistance cluster: ${resistanceHits.slice(0, 3).join(', ')}`;
+    }
+  }
+
+  return {
+    direction,
+    tone: getRadarTone({ ...item, direction }),
+    scoreAdjustment,
+    note,
+  };
+}
+
 function getMarketRadarLookup() {
   const lookup = new Map();
   const register = (item, extra = {}) => {
@@ -1380,11 +1469,18 @@ function buildMarketRadarItems() {
   });
 
   return Array.from(merged.values())
-    .map((item) => ({
-      ...item,
-      radarScore: Math.round(Number(item.score) || 0),
-      tone: getRadarTone(item),
-    }))
+    .map((item) => {
+      const technical = getMarketRadarTechnicalContext(item);
+      const adjustedScore = (Number(item.score) || 0) + technical.scoreAdjustment;
+      return {
+        ...item,
+        direction: technical.direction,
+        score: adjustedScore,
+        radarScore: Math.round(adjustedScore),
+        tone: technical.tone,
+        technicalNote: technical.note,
+      };
+    })
     .sort((a, b) => (b.score || 0) - (a.score || 0))
     .slice(0, Math.max(MIN_MARKET_RADAR_BUBBLES, Math.min(MARKET_RADAR_LAYOUT.length, merged.size)));
 }
@@ -1505,7 +1601,7 @@ function renderMarketRadar() {
           : (item.changePct != null ? `${item.changePct > 0 ? '+' : ''}${item.changePct.toFixed(1)}%` : `${item.sourceCount || 1} src`));
     const biasText = item.direction || (item.sourceCount > 1 ? `${item.sourceCount} sources` : 'Watch');
     const featuredClass = index === 0 ? ' is-featured' : '';
-    const bubbleTitle = `${item.ticker}${item.catalyst ? ` — ${item.catalyst}` : ''}${item.expectedMovePct ? ` · ${item.expectedMovePct.toFixed(1)}% exp move` : ''}${item.radarScore ? ` · score ${item.radarScore}` : ''}`;
+    const bubbleTitle = `${item.ticker}${item.catalyst ? ` — ${item.catalyst}` : ''}${item.expectedMovePct ? ` · ${item.expectedMovePct.toFixed(1)}% exp move` : ''}${item.radarScore ? ` · score ${item.radarScore}` : ''}${item.technicalNote ? ` · ${item.technicalNote}` : ''}`;
 
     return `
       <button
@@ -2479,19 +2575,8 @@ async function fetchOptionsFlow(forceFresh = false) {
     }
 
     const payload = await response.json();
-    OPTIONS_FLOW.unusual = payload.unusual || [];
-    OPTIONS_FLOW.mostActive = payload.mostActive || [];
-    OPTIONS_FLOW.atmSpreads = payload.atmSpreads || [];
-    OPTIONS_FLOW.putCallRatio = payload.putCallRatio || null;
-    OPTIONS_FLOW.maxSpreadDollars = typeof payload.maxSpreadDollars === 'number' ? payload.maxSpreadDollars : 0.15;
-    OPTIONS_FLOW.error = '';
-    OPTIONS_FLOW.loading = false;
-    OPTIONS_FLOW.updatedAt = payload.updatedAt
-      ? new Intl.DateTimeFormat('en-US', {
-          hour: 'numeric',
-          minute: '2-digit'
-        }).format(new Date(payload.updatedAt * 1000))
-      : '';
+    applyOptionsFlowPayload(payload);
+    saveCacheValue(CACHE_KEYS.optionsFlow, payload);
   } catch (error) {
     OPTIONS_FLOW.unusual = [];
     OPTIONS_FLOW.mostActive = [];
@@ -2519,6 +2604,244 @@ async function fetchAppVersion() {
   } catch (_) {}
 }
 
+const DASHBOARD_CACHE_PREFIX = 'optionriders:dashboard:v1';
+const CACHE_KEYS = {
+  marketData: `${DASHBOARD_CACHE_PREFIX}:marketData`,
+  optionsFlow: `${DASHBOARD_CACHE_PREFIX}:optionsFlow`,
+  topWatch: `${DASHBOARD_CACHE_PREFIX}:topWatch`,
+  topTrade: `${DASHBOARD_CACHE_PREFIX}:topTrade`,
+  meta: `${DASHBOARD_CACHE_PREFIX}:meta`,
+};
+
+function loadCacheValue(key) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveCacheValue(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (_) {}
+}
+
+function getDashboardCacheMeta() {
+  return loadCacheValue(CACHE_KEYS.meta) || { initialLoadKey: '', marketOpenRefreshKey: '' };
+}
+
+function saveDashboardCacheMeta(meta) {
+  saveCacheValue(CACHE_KEYS.meta, meta);
+}
+
+function getNewYorkTimeParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    weekday: lookup.weekday || '',
+    year: lookup.year || '',
+    month: lookup.month || '',
+    day: lookup.day || '',
+    hour: Number(lookup.hour || 0),
+    minute: Number(lookup.minute || 0),
+  };
+}
+
+function getMarketDayKey(date = new Date()) {
+  const ny = getNewYorkTimeParts(date);
+  return `${ny.year}-${ny.month}-${ny.day}`;
+}
+
+function isUsTradingDay(date = new Date()) {
+  const weekday = getNewYorkTimeParts(date).weekday;
+  return weekday && weekday !== 'Sat' && weekday !== 'Sun';
+}
+
+function isAfterUsMarketOpen(date = new Date()) {
+  if (!isUsTradingDay(date)) return false;
+  const ny = getNewYorkTimeParts(date);
+  const minutes = ny.hour * 60 + ny.minute;
+  return minutes >= (9 * 60 + 30);
+}
+
+function getDashboardRefreshPlan(date = new Date()) {
+  const meta = getDashboardCacheMeta();
+  const dayKey = getMarketDayKey(date);
+  const afterOpen = isAfterUsMarketOpen(date);
+  const hasInitialForDay = meta.initialLoadKey === dayKey;
+  const hasMarketOpenRefreshForDay = meta.marketOpenRefreshKey === dayKey;
+
+  const needsInitialLoad = !hasInitialForDay;
+  const needsMarketOpenRefresh = !needsInitialLoad && afterOpen && !hasMarketOpenRefreshForDay;
+
+  return {
+    dayKey,
+    afterOpen,
+    needsInitialLoad,
+    needsMarketOpenRefresh,
+  };
+}
+
+function applyMarketDataPayload(payload) {
+  if (!payload?.liveData || payload.error) return false;
+
+  if (payload.tickers && payload.tickers.length > 0) {
+    DASHBOARD_DATA.tickers = payload.tickers;
+  }
+  if (payload.indexes && payload.indexes.length > 0) {
+    DASHBOARD_DATA.indexes = payload.indexes;
+  }
+  if (payload.watchlist && payload.watchlist.length > 0) {
+    DASHBOARD_DATA.watchlist = payload.watchlist;
+  }
+  if (payload.chartData && typeof payload.chartData === 'object') {
+    Object.assign(CHART_DATA, payload.chartData);
+  }
+
+  if (payload.updatedAt) {
+    const updatedDate = new Date(payload.updatedAt * 1000);
+    DASHBOARD_DATA.date = updatedDate.toLocaleDateString('en-US', {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+    });
+    DASHBOARD_DATA.lastUpdatedTime = updatedDate.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  }
+
+  renderHeader();
+  renderIndexCards();
+  renderTickerCards();
+  renderWatchlist();
+  renderMarketRadar();
+  renderCustomTickers();
+  evaluateTradeAlerts();
+
+  const footer = document.querySelector('.footer-disclaimer');
+  if (footer && payload.updatedAt) {
+    const t = new Date(payload.updatedAt * 1000);
+    footer.textContent = `Live data as of ${t.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric'
+    })} ${t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. `
+      + 'Indicators computed from Yahoo Finance daily bars. Not financial advice.';
+  }
+
+  renderTickerTape(payload.tickers, payload.indexes, payload.vix);
+  if (payload.vix) {
+    renderVixBadge(payload.vix);
+  }
+  if (payload.marketBreadth) {
+    renderMarketPulse(payload.marketBreadth);
+  }
+  if (payload.backtestStats) {
+    renderBacktest(payload.backtestStats, payload.backtestN || 0);
+  }
+  if (payload.backtestPerTicker) {
+    renderBacktestPerTicker(payload.backtestPerTicker);
+  }
+
+  requestAnimationFrame(() => initAllCharts());
+  return true;
+}
+
+function applyOptionsFlowPayload(payload) {
+  OPTIONS_FLOW.unusual = payload?.unusual || [];
+  OPTIONS_FLOW.mostActive = payload?.mostActive || [];
+  OPTIONS_FLOW.atmSpreads = payload?.atmSpreads || [];
+  OPTIONS_FLOW.putCallRatio = payload?.putCallRatio || null;
+  OPTIONS_FLOW.maxSpreadDollars = typeof payload?.maxSpreadDollars === 'number' ? payload.maxSpreadDollars : 0.15;
+  OPTIONS_FLOW.error = '';
+  OPTIONS_FLOW.loading = false;
+  OPTIONS_FLOW.updatedAt = payload?.updatedAt
+    ? new Intl.DateTimeFormat('en-US', {
+        hour: 'numeric',
+        minute: '2-digit'
+      }).format(new Date(payload.updatedAt * 1000))
+    : '';
+  renderOptionsFlow();
+  renderWatchlist();
+  renderMarketRadar();
+  evaluateTradeAlerts();
+}
+
+function applyTopWatchPayload(payload) {
+  TOP_WATCH.topWatch = payload?.topWatch || [];
+  TOP_WATCH.sourceStatus = payload?.sourceStatus || {};
+  TOP_WATCH.updatedAt = payload?.updatedAt || '';
+  TOP_WATCH.error = '';
+  TOP_WATCH.loading = false;
+  renderTopWatch();
+  renderMarketRadar();
+}
+
+function applyTopTradePayload(payload) {
+  TOP_TRADE_TODAY.picks = payload?.picks || [];
+  TOP_TRADE_TODAY.bestOverallPick = payload?.bestOverallPick || '';
+  TOP_TRADE_TODAY.namesToAvoid = payload?.namesToAvoid || [];
+  TOP_TRADE_TODAY.macroRisks = payload?.macroRisks || [];
+  TOP_TRADE_TODAY.summary = payload?.summary || '';
+  TOP_TRADE_TODAY.sessionType = payload?.sessionType || '';
+  TOP_TRADE_TODAY.sessionLabel = payload?.sessionLabel || '';
+  TOP_TRADE_TODAY.marketDate = payload?.marketDate || '';
+  TOP_TRADE_TODAY.generatedAt = payload?.generatedAt || '';
+  TOP_TRADE_TODAY.choppyDayWarning = Boolean(payload?.choppyDayWarning);
+  TOP_TRADE_TODAY.loading = false;
+  TOP_TRADE_TODAY.error = '';
+  stopTopTradeLoadingProgress();
+  renderTopTradeToday();
+}
+
+function hydrateDashboardFromCache() {
+  const marketData = loadCacheValue(CACHE_KEYS.marketData);
+  const optionsFlow = loadCacheValue(CACHE_KEYS.optionsFlow);
+  const topWatch = loadCacheValue(CACHE_KEYS.topWatch);
+  const topTrade = loadCacheValue(CACHE_KEYS.topTrade);
+
+  if (marketData) applyMarketDataPayload(marketData);
+  if (optionsFlow) applyOptionsFlowPayload(optionsFlow);
+  if (topWatch) applyTopWatchPayload(topWatch);
+  if (topTrade) applyTopTradePayload(topTrade);
+}
+
+let _marketOpenMonitor = null;
+
+async function maybeRunMarketOpenRefresh() {
+  const plan = getDashboardRefreshPlan();
+  if (!plan.needsMarketOpenRefresh) return false;
+
+  await Promise.allSettled([
+    fetchOptionsFlow(true),
+    fetchMarketData(true),
+    fetchTopWatch(true),
+    fetchTopTradeToday(true),
+  ]);
+  mergeOptionsFlowIntoScores();
+
+  const meta = getDashboardCacheMeta();
+  meta.marketOpenRefreshKey = plan.dayKey;
+  saveDashboardCacheMeta(meta);
+  return true;
+}
+
+function initMarketOpenRefreshMonitor() {
+  if (_marketOpenMonitor) clearInterval(_marketOpenMonitor);
+  _marketOpenMonitor = window.setInterval(() => {
+    maybeRunMarketOpenRefresh();
+  }, 60 * 1000);
+}
+
 async function fetchTopWatch(forceFresh = false) {
   TOP_WATCH.loading = true;
   renderTopWatch();
@@ -2529,11 +2852,8 @@ async function fetchTopWatch(forceFresh = false) {
     if (!response.ok) throw new Error('Top watch endpoint unavailable.');
 
     const payload = await response.json();
-    TOP_WATCH.topWatch     = payload.topWatch     || [];
-    TOP_WATCH.sourceStatus = payload.sourceStatus || {};
-    TOP_WATCH.updatedAt    = payload.updatedAt    || '';
-    TOP_WATCH.error        = '';
-    TOP_WATCH.loading      = false;
+    applyTopWatchPayload(payload);
+    saveCacheValue(CACHE_KEYS.topWatch, payload);
   } catch (error) {
     TOP_WATCH.topWatch     = [];
     TOP_WATCH.sourceStatus = {};
@@ -2556,19 +2876,8 @@ async function fetchTopTradeToday(forceFresh = false) {
     if (!response.ok) throw new Error('Daily setup engine unavailable.');
 
     const payload = await response.json();
-    TOP_TRADE_TODAY.picks = payload.picks || [];
-    TOP_TRADE_TODAY.bestOverallPick = payload.bestOverallPick || '';
-    TOP_TRADE_TODAY.namesToAvoid = payload.namesToAvoid || [];
-    TOP_TRADE_TODAY.macroRisks = payload.macroRisks || [];
-    TOP_TRADE_TODAY.summary = payload.summary || '';
-    TOP_TRADE_TODAY.sessionType = payload.sessionType || '';
-    TOP_TRADE_TODAY.sessionLabel = payload.sessionLabel || '';
-    TOP_TRADE_TODAY.marketDate = payload.marketDate || '';
-    TOP_TRADE_TODAY.generatedAt = payload.generatedAt || '';
-    TOP_TRADE_TODAY.choppyDayWarning = Boolean(payload.choppyDayWarning);
-    TOP_TRADE_TODAY.loading = false;
-    stopTopTradeLoadingProgress();
-    TOP_TRADE_TODAY.error = '';
+    applyTopTradePayload(payload);
+    saveCacheValue(CACHE_KEYS.topTrade, payload);
   } catch (error) {
     TOP_TRADE_TODAY.picks = [];
     TOP_TRADE_TODAY.bestOverallPick = '';
@@ -3331,76 +3640,8 @@ async function fetchMarketData(forceFresh = false) {
     if (!response.ok) return;
 
     const payload = await response.json();
-    if (!payload.liveData || payload.error) return;
-
-    // Replace static dashboard data with live computed data
-    if (payload.tickers && payload.tickers.length > 0) {
-      DASHBOARD_DATA.tickers = payload.tickers;
-    }
-    if (payload.indexes && payload.indexes.length > 0) {
-      DASHBOARD_DATA.indexes = payload.indexes;
-    }
-    if (payload.watchlist && payload.watchlist.length > 0) {
-      DASHBOARD_DATA.watchlist = payload.watchlist;
-    }
-
-    // Replace static OHLCV chart data with live bars
-    if (payload.chartData && typeof payload.chartData === 'object') {
-      Object.assign(CHART_DATA, payload.chartData);
-    }
-
-    // Update date label to reflect live data timestamp
-    if (payload.updatedAt) {
-      const updatedDate = new Date(payload.updatedAt * 1000);
-      DASHBOARD_DATA.date = updatedDate.toLocaleDateString('en-US', {
-        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
-      });
-      DASHBOARD_DATA.lastUpdatedTime = updatedDate.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit'
-      });
-    }
-
-    // Re-render all data-driven sections
-    renderHeader();
-    renderIndexCards();
-    renderTickerCards();
-    renderWatchlist();
-    renderMarketRadar();
-    renderCustomTickers();
-    evaluateTradeAlerts();
-
-    // Update footer disclaimer
-    const footer = document.querySelector('.footer-disclaimer');
-    if (footer && payload.updatedAt) {
-      const t = new Date(payload.updatedAt * 1000);
-      footer.textContent = `Live data as of ${t.toLocaleDateString('en-US', {
-        weekday: 'short', month: 'short', day: 'numeric'
-      })} ${t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}. `
-        + 'Indicators computed from Yahoo Finance daily bars. Not financial advice.';
-    }
-
-    // Render ticker tape
-    renderTickerTape(payload.tickers, payload.indexes, payload.vix);
-
-    // Render VIX badge and Market Pulse
-    if (payload.vix) {
-      renderVixBadge(payload.vix);
-    }
-    if (payload.marketBreadth) {
-      renderMarketPulse(payload.marketBreadth);
-    }
-
-    // Render backtest accuracy tables
-    if (payload.backtestStats) {
-      renderBacktest(payload.backtestStats, payload.backtestN || 0);
-    }
-    if (payload.backtestPerTicker) {
-      renderBacktestPerTicker(payload.backtestPerTicker);
-    }
-
-    // Redraw sparkline charts with live OHLCV
-    requestAnimationFrame(() => initAllCharts());
+    if (!applyMarketDataPayload(payload)) return;
+    saveCacheValue(CACHE_KEYS.marketData, payload);
 
   } catch (err) {
     // Silent fail — static dashboard data remains visible
@@ -3604,52 +3845,22 @@ function mergeOptionsFlowIntoScores() {
 // Initialize
 // ============================================
 
-// ============================================
-// Auto-Refresh (every 5 minutes while page is open)
-// ============================================
-
-const AUTO_REFRESH_MS = 5 * 60 * 1000;  // 5 minutes
-let _refreshCountdown = AUTO_REFRESH_MS / 1000;
-let _refreshTimer     = null;
-let _countdownTimer   = null;
-
-function _updateRefreshBadge() {
-  const badge = document.getElementById('refreshCountdown');
-  if (!badge) return;
-  const mins = Math.floor(_refreshCountdown / 60);
-  const secs = String(_refreshCountdown % 60).padStart(2, '0');
-  badge.textContent = `Refresh in ${mins}:${secs}`;
+function getTopTradeHourKey(timestampSeconds) {
+  if (!timestampSeconds) return '';
+  const date = new Date(timestampSeconds * 1000);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  return `${year}-${month}-${day}-${hour}`;
 }
 
-async function _autoRefresh() {
-  _refreshCountdown = AUTO_REFRESH_MS / 1000;
-  const badge = document.getElementById('refreshCountdown');
-  if (badge) badge.textContent = 'Refreshing…';
-
-  await Promise.allSettled([fetchOptionsFlow(true), fetchMarketData(true), fetchTopWatch(true), fetchTopTradeToday(true)]);
-  mergeOptionsFlowIntoScores();
-  requestAnimationFrame(() => initAllCharts());
-}
-
-function initAutoRefresh() {
-  // Inject countdown badge next to market status
-  const headerRight = document.querySelector('.header-right');
-  if (headerRight) {
-    const badge = document.createElement('span');
-    badge.id        = 'refreshCountdown';
-    badge.className = 'badge badge-market';
-    badge.style.cssText = 'font-size:0.62rem;opacity:0.7;cursor:default;';
-    badge.title     = 'Auto-refreshes market data every 5 minutes';
-    headerRight.prepend(badge);
-    _updateRefreshBadge();
-  }
-
-  _countdownTimer = setInterval(() => {
-    _refreshCountdown = Math.max(0, _refreshCountdown - 1);
-    _updateRefreshBadge();
-  }, 1000);
-
-  _refreshTimer = setInterval(_autoRefresh, AUTO_REFRESH_MS);
+function shouldRefreshTopTradeThisHour() {
+  const now = new Date();
+  const currentHourKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}`;
+  const generatedHourKey = getTopTradeHourKey(TOP_TRADE_TODAY.generatedAt);
+  return !generatedHourKey || generatedHourKey !== currentHourKey;
 }
 
 // ============================================
@@ -3680,19 +3891,29 @@ async function init() {
   initTickerDetailModal();
   initTickerHoverPopup();
   fetchAppVersion();
-  await Promise.allSettled([
-    fetchEconomicCalendar(),
-    fetchOptionsFlow(),
-    fetchMarketData(),
-    fetchTopWatch(),
-    fetchTopTradeToday(true),
-  ]);
+  hydrateDashboardFromCache();
+  await fetchEconomicCalendar();
+
+  const refreshPlan = getDashboardRefreshPlan();
+  if (refreshPlan.needsInitialLoad) {
+    await Promise.allSettled([
+      fetchOptionsFlow(true),
+      fetchMarketData(true),
+      fetchTopWatch(true),
+      fetchTopTradeToday(true),
+    ]);
+    const meta = getDashboardCacheMeta();
+    meta.initialLoadKey = refreshPlan.dayKey;
+    if (refreshPlan.afterOpen) meta.marketOpenRefreshKey = refreshPlan.dayKey;
+    saveDashboardCacheMeta(meta);
+  } else if (refreshPlan.needsMarketOpenRefresh) {
+    await maybeRunMarketOpenRefresh();
+  }
   // Merge options flow sentiment into signal scores now that both fetches are done
   mergeOptionsFlowIntoScores();
   // Draw sparkline charts after DOM is ready (live data already merged above if available)
   requestAnimationFrame(() => initAllCharts());
-  // Start auto-refresh cycle
-  initAutoRefresh();
+  initMarketOpenRefreshMonitor();
 }
 
 // Run on DOM ready
