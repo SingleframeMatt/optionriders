@@ -732,7 +732,19 @@ async def _daily_summary_loop():
         today = now.date()
         if _sent_for == today:
             continue   # already sent today's summary
+        # Persist sent date to disk so restarts don't re-send on the same day
+        _sentinel = Path(__file__).parent / ".last_summary_date"
+        try:
+            if _sentinel.exists() and _sentinel.read_text().strip() == str(today):
+                _sent_for = today
+                continue
+        except Exception:
+            pass
         _sent_for = today
+        try:
+            _sentinel.write_text(str(today))
+        except Exception:
+            pass
 
         with _state_lock:
             pnl    = _state["daily_pnl"]
@@ -742,6 +754,10 @@ async def _daily_summary_loop():
             syms   = list(_state["symbols"])
 
         total = wins + losses
+        # Skip summary on days with no trades
+        if total == 0 and pnl == 0:
+            log.info("No trades today — skipping daily summary.")
+            continue
         wr    = f"{wins / total * 100:.1f}%" if total > 0 else "N/A"
         emoji = ":green_circle:" if pnl >= 0 else ":red_circle:"
         lines = [
