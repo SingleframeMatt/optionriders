@@ -271,7 +271,7 @@ footer { border-top:1px solid rgba(255,255,255,.05); padding:28px; }
       <a href="#faq">FAQ</a>
     </div>
     <div class="nav-right">
-      <button type="button" class="btn-secondary" onclick="signInWithGoogleFromLanding()" style="padding:8px 20px;border-radius:10px;font-size:13px;">Sign in</button>
+      <button type="button" id="landingSignInBtn" class="btn-secondary" onclick="signInWithGoogleFromLanding()" style="padding:8px 20px;border-radius:10px;font-size:13px;">Sign in</button>
       <a href="index.html" class="btn-primary" style="padding:8px 20px;border-radius:10px;font-size:13px;">Get Access →</a>
     </div>
   </div>
@@ -594,15 +594,31 @@ footer { border-top:1px solid rgba(255,255,255,.05); padding:28px; }
     } catch (e) { /* leave password fallback in place */ }
   }
   async function signInWithGoogleFromLanding() {
+    const btn = document.getElementById('landingSignInBtn');
+    // Wait briefly if initLandingAuth is still running — avoids a redirect loop
+    // with index.html's new auth gate when the Supabase client isn't ready yet.
     if (!_landingSupabase) {
-      // Fallback: navigate to dashboard, which has its own sign-in.
-      window.location.href = 'index.html';
-      return;
+      if (btn) { btn.textContent = 'Loading…'; btn.disabled = true; }
+      for (let i = 0; i < 20 && !_landingSupabase; i++) {
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      if (btn) { btn.textContent = 'Sign in'; btn.disabled = false; }
+      if (!_landingSupabase) {
+        alert('Sign-in is still loading. Please refresh the page and try again.');
+        return;
+      }
     }
-    await _landingSupabase.auth.signInWithOAuth({
+    // Use origin + '/' — that's the redirect URI whitelisted in Supabase/Google OAuth.
+    // After Google, Vercel routes '/' → landing.html, initLandingAuth detects the
+    // session, then forwards to index.html.
+    const { error } = await _landingSupabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin + '/index.html' },
+      options: { redirectTo: window.location.origin + '/' },
     });
+    if (error) {
+      console.error('[sign-in] OAuth error', error);
+      alert('Sign-in failed: ' + (error.message || 'unknown error'));
+    }
   }
   initLandingAuth();
 
