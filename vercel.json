@@ -1,15 +1,9 @@
 {
   "version": 2,
   "functions": {
-    "api/journal-stats.py":       { "includeFiles": "{journal_cloud,api_helpers,trade_journal}.py" },
-    "api/journal-fills.py":       { "includeFiles": "{journal_cloud,api_helpers,trade_journal}.py" },
-    "api/journal-equity.py":      { "includeFiles": "{journal_cloud,api_helpers,trade_journal}.py" },
-    "api/journal-calendar.py":    { "includeFiles": "{journal_cloud,api_helpers,trade_journal}.py" },
-    "api/journal-day.py":         { "includeFiles": "{journal_cloud,api_helpers,trade_journal}.py" },
-    "api/journal-sync.py":        { "includeFiles": "{journal_cloud,api_helpers,trade_journal}.py" },
-    "api/journal-import-flex.py": { "includeFiles": "{journal_cloud,api_helpers,trade_journal}.py" },
-    "api/journal-clear.py":       { "includeFiles": "{journal_cloud,api_helpers,trade_journal}.py" },
-    "api/journal-last-sync.py":   { "includeFiles": "{api_helpers}.py" }
+    "api/journal.py": {
+      "includeFiles": "{journal_cloud,trade_journal}.py"
+    }
   },
   "routes": [
     {
@@ -52,15 +46,7 @@
       "src": "/api/stripe-portal",
       "dest": "/api/stripe-portal.py"
     },
-    { "src": "/api/journal/stats",        "dest": "/api/journal-stats.py" },
-    { "src": "/api/journal/fills",        "dest": "/api/journal-fills.py" },
-    { "src": "/api/journal/equity",       "dest": "/api/journal-equity.py" },
-    { "src": "/api/journal/calendar",     "dest": "/api/journal-calendar.py" },
-    { "src": "/api/journal/day",          "dest": "/api/journal-day.py" },
-    { "src": "/api/journal/sync",         "dest": "/api/journal-sync.py" },
-    { "src": "/api/journal/import-flex",  "dest": "/api/journal-import-flex.py" },
-    { "src": "/api/journal/clear",        "dest": "/api/journal-clear.py" },
-    { "src": "/api/journal/last-sync",    "dest": "/api/journal-last-sync.py" },
+    { "src": "/api/journal/([^/?]+).*", "dest": "/api/journal.py?action=$1" },
     {
       "src": "/crypto-bot",
       "dest": "/crypto-bot.html"
