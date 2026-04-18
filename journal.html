@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Option Riders — Trade Journal (IBKR)</title>
+<meta name="description" content="IBKR trade journal — import Flex CSV, see P&L, win rate, equity curve, and per-symbol performance.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="journal.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="journal-body">
+  <!-- Sign-in gate -->
+  <div class="auth-gate" id="authGate" hidden>
+    <div class="auth-gate-card">
+      <span class="auth-gate-kicker">OptionRiders Journal</span>
+      <h2 class="auth-gate-title">Sign in to access your trade journal</h2>
+      <p class="auth-gate-copy">Continue with Google to sync your IBKR account and see your trades, stats, and calendar.</p>
+      <button class="btn btn-primary" type="button" id="authGateSignInBtn">Continue with Google</button>
+      <span class="auth-gate-note" id="authGateNote">Your IBKR credentials stay in your browser only.</span>
+    </div>
+  </div>
+  <header class="journal-header">
+    <a class="logo" href="index.html" aria-label="Back to dashboard">
+      <img class="logo-image" src="assets/optionriders-horse-transparent.png" alt="Option Riders">
+      <div class="logo-copy">
+        <span class="logo-title">Dashboard</span>
+        <span class="logo-tagline">IBKR Trade Journal</span>
+      </div>
+    </a>
+    <div class="journal-header-actions">
+      <div class="header-filter">
+        <span class="header-filter-label">Currency</span>
+        <select id="filterCurrency">
+          <option value="GBP">£ GBP</option>
+          <option value="USD">$ USD</option>
+          <option value="EUR">€ EUR</option>
+        </select>
+      </div>
+      <div class="header-filter">
+        <span class="header-filter-label">Asset</span>
+        <select id="filterAsset">
+          <option value="">All</option>
+          <option>STK</option>
+          <option>OPT</option>
+          <option>FUT</option>
+          <option>FOP</option>
+          <option>CASH</option>
+        </select>
+      </div>
+      <div class="header-filter">
+        <span class="header-filter-label">From</span>
+        <input type="date" id="filterFrom">
+      </div>
+      <div class="header-filter">
+        <span class="header-filter-label">To</span>
+        <input type="date" id="filterTo">
+      </div>
+      <button class="btn btn-primary" id="syncBtn" type="button" title="Fetch latest trades from IBKR Flex Web Service">
+        <span class="sync-dot" id="syncDot"></span>
+        Sync IBKR
+      </button>
+      <button class="btn btn-ghost btn-icon" id="settingsBtn" type="button" title="IBKR settings" aria-label="Settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <label class="auto-sync-toggle">
+        <input type="checkbox" id="autoSyncToggle">
+        <span>Auto</span>
+      </label>
+      <label class="btn btn-ghost">
+        <input type="file" id="csvFile" accept=".csv,text/csv,.xml" hidden>
+        Import File
+      </label>
+      <button class="btn btn-ghost" id="refreshBtn" type="button">Refresh</button>
+      <button class="btn btn-danger-ghost" id="clearBtn" type="button">Clear</button>
+    </div>
+  </header>
+
+  <div class="journal-status-bar">
+    <span class="journal-status" id="lastSync"></span>
+    <span class="journal-status" id="statusLine">No data yet — Sync IBKR or import a file.</span>
+  </div>
+
+  <section class="stat-grid">
+    <div class="stat-card"><span class="stat-label">Net P&amp;L</span><span class="stat-value" id="netPnl">—</span></div>
+    <div class="stat-card">
+      <span class="stat-label">Zella Score</span>
+      <span class="stat-value" id="zellaScore">—</span>
+      <div class="score-bar"><div class="score-bar-fill" id="scoreBarFill"></div><div class="score-bar-knob" id="scoreBarKnob"></div></div>
+    </div>
+    <div class="stat-card"><span class="stat-label">Win Rate</span><span class="stat-value" id="winRate">—</span></div>
+    <div class="stat-card"><span class="stat-label">Profit Factor</span><span class="stat-value" id="profitFactor">—</span></div>
+    <div class="stat-card"><span class="stat-label">Expectancy</span><span class="stat-value" id="expectancy">—</span></div>
+    <div class="stat-card"><span class="stat-label">Avg Win / Loss</span><span class="stat-value" id="avgWinLoss">—</span></div>
+    <div class="stat-card"><span class="stat-label">Best / Worst</span><span class="stat-value" id="bestWorst">—</span></div>
+    <div class="stat-card"><span class="stat-label">Trades / Closes</span><span class="stat-value" id="tradeCount">—</span></div>
+  </section>
+
+  <section class="main-grid">
+    <aside class="panel panel-trades">
+      <div class="tabs">
+        <button class="tab is-active" data-tab="recent">Recent trades</button>
+        <button class="tab" data-tab="open">Open positions</button>
+      </div>
+      <div class="table-wrap">
+        <table class="journal-table" id="recentTradesTable">
+          <thead><tr><th>Close Date</th><th>Symbol</th><th class="num">Net P&amp;L</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </aside>
+
+    <section class="panel panel-calendar">
+      <div class="calendar-head">
+        <div class="calendar-nav">
+          <button class="cal-nav-btn" id="calPrev" type="button" aria-label="Previous month">‹</button>
+          <span class="calendar-title" id="calendarTitle">—</span>
+          <button class="cal-nav-btn" id="calNext" type="button" aria-label="Next month">›</button>
+          <button class="btn btn-ghost btn-sm" id="calThisMonth" type="button">This month</button>
+        </div>
+        <div class="calendar-stats">
+          <span class="cal-stat-label">Monthly stats:</span>
+          <span class="cal-stat-chip pos" id="calMonthPnl">—</span>
+          <span class="cal-stat-sub" id="calActiveDays">— days</span>
+        </div>
+      </div>
+
+      <div class="calendar-layout">
+        <div class="calendar-grid-wrap">
+          <div class="calendar-weekdays">
+            <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+          </div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+        </div>
+        <div class="calendar-weekly" id="calendarWeekly"></div>
+      </div>
+    </section>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Equity Curve</h2><span class="panel-sub" id="equitySub"></span></div>
+    <canvas id="equityChart" height="260"></canvas>
+  </section>
+
+  <section class="two-col">
+    <div class="panel">
+      <div class="panel-head"><h2>By Symbol</h2></div>
+      <table class="journal-table" id="symbolTable">
+        <thead><tr><th>Symbol</th><th class="num">P&amp;L</th><th class="num">Trades</th><th class="num">Win %</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>By Day</h2></div>
+      <table class="journal-table" id="dayTable">
+        <thead><tr><th>Date</th><th class="num">P&amp;L</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>Recent Fills</h2><span class="panel-sub" id="fillsSub"></span></div>
+    <div class="table-wrap">
+      <table class="journal-table" id="fillsTable">
+        <thead>
+          <tr>
+            <th>Date/Time</th><th>Symbol</th><th>Asset</th><th>Side</th>
+            <th class="num">Qty</th><th class="num">Price</th><th class="num">Proceeds</th>
+            <th class="num">Comm.</th><th class="num">Realized</th><th>O/C</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel panel-help">
+    <div class="panel-head"><h2>Auto-sync with IBKR (Flex Web Service)</h2></div>
+    <ol class="help-list">
+      <li>In IBKR Client Portal → <strong>Performance &amp; Reports</strong> → <strong>Flex Queries</strong> → create a <strong>Custom Flex Query</strong>. Section: <strong>Trades</strong>. Format: XML or CSV (both supported).</li>
+      <li>Include: Symbol, AssetClass, DateTime, TradeDate, Quantity, TradePrice, Proceeds, IBCommission, FifoPnlRealized, Open/CloseIndicator, Buy/Sell.</li>
+      <li>Enable <strong>Flex Web Service</strong> under Reports → Settings → Flex Web Service. Generate a <strong>token</strong>.</li>
+      <li>Add to your <code>.env</code>:
+        <pre class="env-block">IBKR_FLEX_TOKEN=your_token_here
+IBKR_FLEX_QUERY_ID=123456</pre>
+      </li>
+      <li>Click <strong>Sync IBKR</strong> — or flip the <strong>Auto</strong> toggle to poll every 15 min while this tab is open.</li>
+      <li>Or for a one-off: click <strong>Import File</strong> and upload the CSV/XML you downloaded manually.</li>
+    </ol>
+  </section>
+
+  <!-- Settings modal -->
+  <div class="day-modal" id="settingsModal" hidden>
+    <div class="day-modal-backdrop" id="settingsBackdrop"></div>
+    <div class="day-modal-card settings-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <button class="day-modal-close" id="settingsClose" type="button" aria-label="Close">×</button>
+      <header class="day-modal-head">
+        <h3 id="settingsTitle">IBKR Settings</h3>
+        <span class="day-modal-subtitle">Stored locally in your browser only — never sent to any server except IBKR's.</span>
+      </header>
+      <form id="settingsForm" class="settings-form">
+        <label>
+          <span class="settings-label">Flex Web Service Token</span>
+          <input type="password" id="settingsToken" placeholder="347041541958332375690482" autocomplete="off" spellcheck="false">
+          <span class="settings-hint">IBKR → Reporting → Flex Web Service → generate a token.</span>
+        </label>
+        <label>
+          <span class="settings-label">Flex Query ID</span>
+          <input type="text" id="settingsQueryId" placeholder="1241691" autocomplete="off" spellcheck="false" inputmode="numeric">
+          <span class="settings-hint">The numeric ID next to your Trades Flex Query (ℹ icon).</span>
+        </label>
+        <div class="settings-actions">
+          <button class="btn btn-danger-ghost btn-sm" type="button" id="settingsClear">Clear saved credentials</button>
+          <div class="settings-spacer"></div>
+          <button class="btn btn-ghost btn-sm" type="button" id="settingsCancel">Cancel</button>
+          <button class="btn btn-primary btn-sm" type="submit">Save</button>
+        </div>
+        <span class="settings-status" id="settingsStatus"></span>
+      </form>
+    </div>
+  </div>
+
+  <!-- Day-detail modal -->
+  <div class="day-modal" id="dayModal" hidden>
+    <div class="day-modal-backdrop" id="dayModalBackdrop"></div>
+    <div class="day-modal-card" role="dialog" aria-modal="true" aria-labelledby="dayModalTitle">
+      <button class="day-modal-close" id="dayModalClose" type="button" aria-label="Close">×</button>
+      <header class="day-modal-head">
+        <div>
+          <h3 id="dayModalTitle">—</h3>
+          <span class="day-modal-subtitle">Net P&amp;L <span id="dayModalPnl">—</span></span>
+        </div>
+      </header>
+
+      <div class="day-modal-top">
+        <canvas id="dayModalChart" height="120"></canvas>
+        <div class="day-modal-stats">
+          <div><span class="stat-label">Total Trades</span><span class="stat-value" id="dayModalTotal">—</span></div>
+          <div><span class="stat-label">Gross P&amp;L</span><span class="stat-value" id="dayModalGross">—</span></div>
+          <div><span class="stat-label">Winners / Losers</span><span class="stat-value" id="dayModalWL">—</span></div>
+          <div><span class="stat-label">Commissions</span><span class="stat-value" id="dayModalComm">—</span></div>
+          <div><span class="stat-label">Win Rate</span><span class="stat-value" id="dayModalWinRate">—</span></div>
+          <div><span class="stat-label">Volume</span><span class="stat-value" id="dayModalVolume">—</span></div>
+          <div><span class="stat-label">Profit Factor</span><span class="stat-value" id="dayModalPF">—</span></div>
+        </div>
+      </div>
+
+      <div class="table-wrap day-modal-table-wrap">
+        <table class="journal-table" id="dayModalTable">
+          <thead>
+            <tr>
+              <th>Open time</th>
+              <th>Ticker</th>
+              <th>Side</th>
+              <th>Instrument</th>
+              <th class="num">Net P&amp;L</th>
+              <th class="num">Net ROI</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="journal.js"></script>
+</body>
+</html>

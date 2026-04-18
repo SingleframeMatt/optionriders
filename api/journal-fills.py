@@ -1,0 +1,20 @@
+"""GET /api/journal/fills — list of recent fills for the authenticated user."""
+import os, sys
+from http.server import BaseHTTPRequestHandler
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import journal_cloud as jc
+from api_helpers import bearer, query_filters, query_param, respond, handle_options
+
+
+class handler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self): handle_options(self)
+
+    def do_GET(self):
+        token = bearer(self)
+        if not token or not jc.verify_user(token):
+            return respond(self, 401, {"error": "unauthorized"})
+        try:
+            limit = int(query_param(self.path, "limit", "500") or 500)
+            respond(self, 200, jc.fetch_user_fills(token, query_filters(self.path), limit=limit))
+        except Exception as exc:
+            respond(self, 500, {"error": str(exc)})

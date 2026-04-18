@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "functions": {
+    "api/journal-sync.py": { "maxDuration": 60 }
+  },
   "routes": [
     {
       "src": "/api/alpha-vantage",
@@ -41,6 +44,15 @@
       "src": "/api/stripe-portal",
       "dest": "/api/stripe-portal.py"
     },
+    { "src": "/api/journal/stats",        "dest": "/api/journal-stats.py" },
+    { "src": "/api/journal/fills",        "dest": "/api/journal-fills.py" },
+    { "src": "/api/journal/equity",       "dest": "/api/journal-equity.py" },
+    { "src": "/api/journal/calendar",     "dest": "/api/journal-calendar.py" },
+    { "src": "/api/journal/day",          "dest": "/api/journal-day.py" },
+    { "src": "/api/journal/sync",         "dest": "/api/journal-sync.py" },
+    { "src": "/api/journal/import-flex",  "dest": "/api/journal-import-flex.py" },
+    { "src": "/api/journal/clear",        "dest": "/api/journal-clear.py" },
+    { "src": "/api/journal/last-sync",    "dest": "/api/journal-last-sync.py" },
     {
       "src": "/crypto-bot",
       "dest": "/crypto-bot.html"

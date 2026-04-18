@@ -2,6 +2,8 @@
 
 import json
 import os
+import urllib.request
+from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -14,6 +16,8 @@ from market_data import fetch_market_data
 from top_trade_today import fetch_top_trade_today
 from top_watch import fetch_top_watch
 from bot_core import bot as _bot
+from scalp_bot_core import bot as _scalp_bot
+import trade_journal
 
 
 def _load_api_handler(name: str):
@@ -76,6 +80,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/bot-status"):
             self.handle_bot_status()
             return
+        if self.path.startswith("/api/scalp-bot-status"):
+            self.handle_scalp_bot_status()
+            return
+        if self.path.startswith("/api/journal/"):
+            self.handle_journal_get()
+            return
         # Subscription / billing endpoints
         if self.path.startswith("/api/subscription-status"):
             self._delegate("subscription-status", "do_GET")
@@ -97,6 +107,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path.startswith("/api/bot-control"):
             self.handle_bot_control()
+            return
+        if self.path.startswith("/api/scalp-bot-control"):
+            self.handle_scalp_bot_control()
+            return
+        if self.path.startswith("/api/journal/"):
+            self.handle_journal_post()
             return
         # Subscription / billing endpoints
         if self.path.startswith("/api/stripe-checkout"):
@@ -137,6 +153,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def handle_scalp_bot_status(self):
+        body = json.dumps(_scalp_bot.get_state()).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def handle_bot_control(self):
         try:
             length  = int(self.headers.get("Content-Length", 0))
@@ -146,6 +171,31 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 result = _bot.start()
             elif action == "stop":
                 result = _bot.stop()
+            else:
+                result = {"ok": False, "message": f"Unknown action: {action}"}
+            body = json.dumps(result).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:
+            body = json.dumps({"ok": False, "message": str(exc)}).encode("utf-8")
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    def handle_scalp_bot_control(self):
+        try:
+            length  = int(self.headers.get("Content-Length", 0))
+            payload = json.loads(self.rfile.read(length)) if length else {}
+            action  = payload.get("action", "")
+            if action == "start":
+                result = _scalp_bot.start()
+            elif action == "stop":
+                result = _scalp_bot.stop()
             else:
                 result = {"ok": False, "message": f"Unknown action: {action}"}
             body = json.dumps(result).encode("utf-8")
@@ -269,8 +319,128 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
 
+    def _json(self, payload, status=200, cache="no-store"):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", cache)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _journal_user_id(self):
+        """
+        Verify the caller's Supabase access token and return their user_id.
+        Falls back to a dev user when running locally without auth.
+        """
+        auth = self.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            # Local dev fallback — single-user mode.
+            return os.environ.get("LOCAL_DEV_USER_ID", "local")
+        token = auth[7:]
+        supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+        anon_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_ANON_KEY", "")
+        if not supabase_url or not anon_key:
+            return os.environ.get("LOCAL_DEV_USER_ID", "local")
+        try:
+            req = urllib.request.Request(
+                f"{supabase_url}/auth/v1/user",
+                headers={"apikey": anon_key, "Authorization": f"Bearer {token}"},
+            )
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                data = json.loads(resp.read())
+                return data.get("id") or None
+        except Exception:
+            return None
+
+    def _journal_filters(self, user_id=None):
+        params = parse_qs(urlparse(self.path).query)
+        filters = {}
+        if user_id:
+            filters["user_id"] = user_id
+        for key in ("from", "to", "symbol", "asset_class"):
+            values = params.get(key)
+            if values and values[0]:
+                filters[key] = values[0].strip().upper() if key == "symbol" else values[0].strip()
+        return filters
+
+    def handle_journal_get(self):
+        try:
+            user_id = self._journal_user_id()
+            if user_id is None:
+                self._json({"error": "unauthorized"}, status=401); return
+            path = urlparse(self.path).path
+            filters = self._journal_filters(user_id=user_id)
+            if path == "/api/journal/stats":
+                self._json(trade_journal.compute_stats(filters))
+            elif path == "/api/journal/fills":
+                params = parse_qs(urlparse(self.path).query)
+                limit = int(params.get("limit", ["500"])[0])
+                self._json(trade_journal.list_fills(filters, limit=limit))
+            elif path == "/api/journal/equity":
+                self._json(trade_journal.equity_curve(filters))
+            elif path == "/api/journal/last-sync":
+                self._json(trade_journal.last_sync())
+            elif path == "/api/journal/day":
+                params = parse_qs(urlparse(self.path).query)
+                date = (params.get("date", [""])[0] or "").strip()
+                if not date:
+                    self._json({"error": "missing date"}, status=400)
+                else:
+                    self._json(trade_journal.day_detail(date, user_id=user_id))
+            elif path == "/api/journal/calendar":
+                params = parse_qs(urlparse(self.path).query)
+                now = datetime.now()
+                year = int(params.get("year", [str(now.year)])[0])
+                month = int(params.get("month", [str(now.month)])[0])
+                self._json(trade_journal.calendar_month(year, month, filters))
+            else:
+                self._json({"error": "not found"}, status=404)
+        except Exception as exc:
+            self._json({"error": str(exc)}, status=500)
+
+    def handle_journal_post(self):
+        try:
+            user_id = self._journal_user_id()
+            if user_id is None:
+                self._json({"error": "unauthorized"}, status=401); return
+            path = urlparse(self.path).path
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length) if length else b""
+            if path == "/api/journal/import-flex":
+                text = body.decode("utf-8", errors="replace")
+                # Accept either raw CSV text or JSON {"csv": "..."}
+                if text.lstrip().startswith("{") and not text.lstrip().startswith("<"):
+                    try:
+                        text = json.loads(text).get("csv", text)
+                    except json.JSONDecodeError:
+                        pass
+                result = trade_journal.import_flex_report(text, user_id=user_id)
+                self._json(result)
+            elif path == "/api/journal/sync":
+                token = query_id = None
+                if body:
+                    try:
+                        payload = json.loads(body)
+                        token = payload.get("token")
+                        query_id = payload.get("query_id")
+                    except json.JSONDecodeError:
+                        pass
+                self._json(trade_journal.sync_from_ibkr(
+                    token=token, query_id=query_id, user_id=user_id,
+                ))
+            elif path == "/api/journal/clear":
+                self._json(trade_journal.clear_all(user_id=user_id))
+            else:
+                self._json({"error": "not found"}, status=404)
+        except Exception as exc:
+            self._json({"error": str(exc)}, status=500)
+
     def handle_public_config(self):
         body = json.dumps({
+            "supabaseUrl": os.environ.get("SUPABASE_URL", ""),
+            "supabaseAnonKey": os.environ.get("SUPABASE_ANON_KEY", ""),
             "googleClientId": os.environ.get("GOOGLE_CLIENT_ID", ""),
             "stripePaymentLink": os.environ.get("STRIPE_PAYMENT_LINK", ""),
             "tradingViewProductName": os.environ.get("TRADINGVIEW_PRODUCT_NAME", "Option Riders TradingView Script"),
