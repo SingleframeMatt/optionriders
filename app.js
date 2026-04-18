@@ -1129,12 +1129,6 @@ function renderAuthControls() {
   const controls = document.getElementById('authControls');
   if (!controls) return;
 
-  // Show the Journal nav button only when signed in.
-  const journalBtn = document.getElementById('journalNavBtn');
-  if (journalBtn) {
-    journalBtn.style.display = AUTH_STATE.user ? 'inline-flex' : 'none';
-  }
-
   if (!AUTH_STATE.configLoaded) {
     controls.innerHTML = `<span class="auth-status-pill">Auth loading...</span>`;
     return;
