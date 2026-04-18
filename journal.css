@@ -1,37 +1,37 @@
-/* Option Riders — Trade Journal styles (TradeZella-inspired light theme) */
+/* Option Riders — Trade Journal styles (dark theme, TradeZella structure) */
 
 .journal-body {
-  /* Theme overrides — scoped to the journal page only */
-  --bg-deep:         #f6f7fb;
-  --bg-primary:      #ffffff;
-  --bg-card:         #ffffff;
-  --bg-card-alt:     #fafbfc;
-  --bg-surface:      #f3f4f7;
-  --bg-row-alt:      rgba(0, 0, 0, 0.015);
-  --border:          #8b92a0;
-  --border-subtle:   #a0a7b4;
-  --border-highlight:#5b6472;
+  /* Scoped overrides — most values inherit dark-theme tokens from style.css */
+  --bg-deep:         #070a12;
+  --bg-primary:      #0a0d18;
+  --bg-card:         #0a0d18;
+  --bg-card-alt:     #080b14;
+  --bg-surface:      #0f1220;
+  --bg-row-alt:      rgba(255, 255, 255, 0.02);
+  --border:          rgba(255, 255, 255, 0.10);
+  --border-subtle:   rgba(255, 255, 255, 0.05);
+  --border-highlight:rgba(255, 255, 255, 0.22);
 
   --green:           #10b981;
-  --green-dim:       #d1fae5;
-  --green-glow:      rgba(16, 185, 129, 0.22);
+  --green-dim:       rgba(16, 185, 129, 0.12);
+  --green-glow:      rgba(16, 185, 129, 0.28);
   --red:             #ef4444;
-  --red-dim:         #fee2e2;
-  --red-glow:        rgba(239, 68, 68, 0.22);
-  --cyan:            #6366f1;                       /* indigo accent */
-  --cyan-dim:        #e0e7ff;
+  --red-dim:         rgba(239, 68, 68, 0.12);
+  --red-glow:        rgba(239, 68, 68, 0.28);
+  --cyan:            #818cf8;                       /* indigo accent (brighter on dark) */
+  --cyan-dim:        rgba(129, 140, 248, 0.15);
   --amber:           #f59e0b;
-  --amber-dim:       #fef3c7;
-  --amber-glow:      rgba(245, 158, 11, 0.22);
+  --amber-dim:       rgba(245, 158, 11, 0.15);
+  --amber-glow:      rgba(245, 158, 11, 0.3);
 
-  --text-primary:    #111827;
-  --text-secondary:  #6b7280;
-  --text-muted:      #9ca3af;
-  --text-bright:     #0b1220;
+  --text-primary:    #e8e8f0;
+  --text-secondary:  #9898b0;
+  --text-muted:      #6b7280;
+  --text-bright:     #ffffff;
 
-  --chart-grid:      rgba(17, 24, 39, 0.06);
-  --chart-axis:      rgba(17, 24, 39, 0.5);
-  --chart-zero:      rgba(17, 24, 39, 0.22);
+  --chart-grid:      rgba(255, 255, 255, 0.06);
+  --chart-axis:      rgba(255, 255, 255, 0.45);
+  --chart-zero:      rgba(255, 255, 255, 0.22);
 
   background: var(--bg-deep);
   color: var(--text-primary);
@@ -95,8 +95,8 @@
 .btn:hover  { background: var(--bg-surface); border-color: var(--border-highlight); }
 .btn:active { transform: translateY(1px); }
 .btn-sm { padding: 5px 10px; font-size: 12px; }
-.btn-primary       { background: var(--cyan); border-color: var(--cyan); color: #fff; }
-.btn-primary:hover { background: #4f46e5; border-color: #4f46e5; }
+.btn-primary       { background: var(--cyan-dim); border-color: var(--cyan); color: var(--cyan); }
+.btn-primary:hover { background: rgba(129, 140, 248, 0.28); border-color: var(--cyan); }
 .btn-ghost         { background: transparent; }
 .btn-danger-ghost  { background: transparent; color: var(--red); border-color: rgba(255,68,68,0.4); }
 .btn-danger-ghost:hover { background: var(--red-dim); }
@@ -122,7 +122,6 @@
   padding: 14px 16px;
   display: flex; flex-direction: column; gap: 6px;
   position: relative;
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
 }
 .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); }
 .stat-value {
@@ -161,10 +160,10 @@
   position: absolute; top: 50%;
   width: 14px; height: 14px;
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--text-bright);
   border: 2px solid var(--bg-card);
   transform: translate(-50%, -50%);
-  box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.25), 0 1px 3px rgba(17, 24, 39, 0.15);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
 }
 
 /* ── Main grid: trades + calendar ── */
@@ -183,7 +182,6 @@
   border-radius: 10px;
   padding: 16px 18px;
   margin-bottom: 18px;
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
 }
 .panel-head {
   display: flex; align-items: baseline; justify-content: space-between;
@@ -371,9 +369,9 @@
 }
 .cal-clickable { cursor: pointer; }
 .cal-clickable:hover { transform: translateY(-2px); border-color: var(--border-highlight); }
-.cal-pos     { background: var(--green-dim); border-color: rgba(16, 185, 129, 0.8); }
+.cal-pos     { background: rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.4); }
 .cal-pos .cal-cell-day { color: var(--green); font-weight: 600; }
-.cal-neg     { background: var(--red-dim); border-color: rgba(239, 68, 68, 0.8); }
+.cal-neg     { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.4); }
 .cal-neg .cal-cell-day { color: var(--red); font-weight: 600; }
 .cal-neutral { background: var(--bg-surface); }
 
@@ -389,8 +387,8 @@
   min-height: 68px;
   display: flex; flex-direction: column; justify-content: center; gap: 2px;
 }
-.week-card.pos { background: var(--green-dim); border-color: rgba(16, 185, 129, 0.3); }
-.week-card.neg { background: var(--red-dim); border-color: rgba(239, 68, 68, 0.3); }
+.week-card.pos { background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); }
+.week-card.neg { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }
 .week-card.empty { opacity: 0.5; }
 .week-title { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.06em; }
 .week-pnl { font-family: var(--font-mono); font-size: 16px; font-weight: 600; color: var(--text-bright); }
@@ -478,8 +476,8 @@
 }
 .day-modal-backdrop {
   position: absolute; inset: 0;
-  background: rgba(17, 24, 39, 0.45);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(6px);
 }
 .day-modal-card {
   position: relative;
