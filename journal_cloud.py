@@ -144,6 +144,12 @@ def insert_fills(bearer_token: str, user_id: str, rows: list[dict]) -> dict:
     updated = 0
     for i in range(0, len(rows), CHUNK):
         chunk = rows[i:i + CHUNK]
+        # PostgREST (PGRST102) requires every row in a bulk insert to have the
+        # exact same set of keys. Build the union and fill missing keys with None.
+        all_keys: set[str] = set()
+        for r in chunk:
+            all_keys.update(r.keys())
+        chunk = [{k: r.get(k) for k in all_keys} for r in chunk]
         resp = requests.post(
             f"{SUPABASE_URL}/rest/v1/journal_fills",
             headers=_rest_headers(bearer_token, {
@@ -180,8 +186,7 @@ def _normalize_row_for_insert(raw: dict, user_id: str) -> dict:
     row["user_id"] = user_id
     row["source"] = row.get("source") or "ibkr_flex"
     row["imported_at"] = datetime.now(timezone.utc).isoformat()
-    # Drop None values to keep payload small (PostgREST handles missing fields).
-    return {k: v for k, v in row.items() if v is not None}
+    return row
 
 
 def _parse_flex_and_normalize(raw_text: str, user_id: str) -> list[dict]:
