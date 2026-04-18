@@ -3106,17 +3106,12 @@ async function signInWithGoogle() {
   });
 }
 
-/** Sign out of Supabase and reset all local state. */
+/** Sign out of Supabase and send the user back to the landing page. */
 async function signOut() {
   saveTickerList(AUTH_STATE.user, customTickersList);
   if (_supabase) await _supabase.auth.signOut();
-  AUTH_STATE.user = null;
-  AUTH_STATE.subscription = { checked: false, hasAccess: false, status: 'none', trialEndsAt: null, currentPeriodEndsAt: null };
   saveStoredGoogleUser(null);
-  customTickersList = loadSavedTickers(null);
-  renderAuthControls();
-  renderCustomTickers();
-  await Promise.allSettled([fetchOptionsFlow(), fetchMarketData()]);
+  window.location.replace('/landing.html');
 }
 
 /**
@@ -3328,6 +3323,9 @@ async function initAuth(forceRefresh = false) {
             Promise.allSettled([fetchOptionsFlow(), fetchMarketData(), fetchTopTradeToday(true)]);
           }
         });
+      } else if (event === 'SIGNED_OUT') {
+        // Session ended mid-use (expiry, manual sign-out) — dashboard is account-gated.
+        window.location.replace('/landing.html');
       } else {
         customTickersList = loadSavedTickers(null);
         renderAuthControls();
@@ -3341,6 +3339,10 @@ async function initAuth(forceRefresh = false) {
       AUTH_STATE.user = session.user;
       syncTickersForCurrentUser();
       await checkSubscriptionStatus();
+    } else {
+      // Dashboard requires an account. Session was missing/expired — send to landing.
+      window.location.replace('/landing.html');
+      return;
     }
 
     renderAuthControls();

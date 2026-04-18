@@ -26,6 +26,24 @@
 <link rel="stylesheet" href="style.css">
 <!-- Supabase JS (provides Auth with Google OAuth + session management) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // Dashboard is account-gated: redirect visitors without a stored session
+  // (and not mid-OAuth-callback) to the landing page before the UI renders.
+  (function () {
+    try {
+      var hash = window.location.hash || '';
+      if (hash.indexOf('access_token=') !== -1 || hash.indexOf('error_description=') !== -1) return;
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('sb-') === 0 && k.indexOf('-auth-token') !== -1) {
+          var raw = localStorage.getItem(k);
+          if (raw && raw.indexOf('access_token') !== -1) return;
+        }
+      }
+    } catch (_) { /* if storage is blocked, fall through to redirect */ }
+    window.location.replace('/landing.html');
+  })();
+</script>
 </head>
 <body>
   <!-- Ticker Tape -->
