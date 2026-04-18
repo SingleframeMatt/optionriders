@@ -114,6 +114,12 @@ const TOP_WATCH = {
   error: "",
 };
 
+const MARKET_RADAR_STATE = {
+  loading: true,
+  loadingProgress: 0,
+  loadingTimer: null,
+};
+
 const TOP_TRADE_TODAY = {
   picks: [],
   bestOverallPick: "",
@@ -1123,6 +1129,12 @@ function renderAuthControls() {
   const controls = document.getElementById('authControls');
   if (!controls) return;
 
+  // Show the Journal nav button only when signed in.
+  const journalBtn = document.getElementById('journalNavBtn');
+  if (journalBtn) {
+    journalBtn.style.display = AUTH_STATE.user ? 'inline-flex' : 'none';
+  }
+
   if (!AUTH_STATE.configLoaded) {
     controls.innerHTML = `<span class="auth-status-pill">Auth loading...</span>`;
     return;
@@ -1518,6 +1530,42 @@ function renderMarketRadarStats(items) {
   `;
 }
 
+function startMarketRadarLoadingProgress() {
+  if (MARKET_RADAR_STATE.loadingTimer) {
+    clearInterval(MARKET_RADAR_STATE.loadingTimer);
+  }
+
+  MARKET_RADAR_STATE.loading = true;
+  MARKET_RADAR_STATE.loadingProgress = 0;
+  MARKET_RADAR_STATE.loadingTimer = window.setInterval(() => {
+    if (!MARKET_RADAR_STATE.loading) {
+      clearInterval(MARKET_RADAR_STATE.loadingTimer);
+      MARKET_RADAR_STATE.loadingTimer = null;
+      return;
+    }
+
+    const current = MARKET_RADAR_STATE.loadingProgress || 0;
+    let next = current;
+    if (current < 28) next += 4.2;
+    else if (current < 52) next += 2.8;
+    else if (current < 74) next += 1.5;
+    else if (current < 90) next += 0.75;
+    else if (current < 96) next += 0.22;
+
+    MARKET_RADAR_STATE.loadingProgress = Math.min(97, next);
+    renderMarketRadar();
+  }, 180);
+}
+
+function stopMarketRadarLoadingProgress() {
+  if (MARKET_RADAR_STATE.loadingTimer) {
+    clearInterval(MARKET_RADAR_STATE.loadingTimer);
+    MARKET_RADAR_STATE.loadingTimer = null;
+  }
+  MARKET_RADAR_STATE.loading = false;
+  MARKET_RADAR_STATE.loadingProgress = 100;
+}
+
 function getMarketRadarSizeWeights(items) {
   if (!items.length) return [];
 
@@ -1579,10 +1627,21 @@ function getMarketRadarBubbleSizes(items, grid) {
 
 function renderMarketRadar() {
   const grid = document.getElementById('marketRadarGrid');
+  const loading = document.getElementById('marketRadarLoading');
+  const loadingFill = document.getElementById('marketRadarLoadingFill');
   if (!grid) return;
 
   const items = buildMarketRadarItems();
   renderMarketRadarStats(items);
+
+  if (loading) {
+    const isLoading = MARKET_RADAR_STATE.loading;
+    loading.hidden = !isLoading;
+    loading.classList.toggle('is-active', isLoading);
+  }
+  if (loadingFill) {
+    loadingFill.style.width = `${Math.max(0, Math.min(100, MARKET_RADAR_STATE.loadingProgress || 0))}%`;
+  }
 
   if (!items.length) {
     grid.innerHTML = '<div class="market-radar-empty">Market Radar will populate as watchlist and scanner data come online.</div>';
@@ -2561,6 +2620,7 @@ function renderOptionsFlow() {
 
 async function fetchOptionsFlow(forceFresh = false) {
   OPTIONS_FLOW.loading = true;
+  startMarketRadarLoadingProgress();
   renderOptionsFlow();
 
   try {
@@ -2589,6 +2649,7 @@ async function fetchOptionsFlow(forceFresh = false) {
 
   renderOptionsFlow();
   renderWatchlist();
+  stopMarketRadarLoadingProgress();
   renderMarketRadar();
   evaluateTradeAlerts();
 }
@@ -2778,6 +2839,7 @@ function initMarketOpenRefreshMonitor() {
 
 async function fetchTopWatch(forceFresh = false) {
   TOP_WATCH.loading = true;
+  startMarketRadarLoadingProgress();
   renderTopWatch();
 
   try {
@@ -2795,6 +2857,7 @@ async function fetchTopWatch(forceFresh = false) {
   }
 
   renderTopWatch();
+  stopMarketRadarLoadingProgress();
   renderMarketRadar();
 }
 
