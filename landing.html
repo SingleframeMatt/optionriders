@@ -440,9 +440,10 @@ footer { border-top:1px solid rgba(255,255,255,.05); padding:28px; }
           </div>
           <h3 class="signin-title">Sign in to start riding.</h3>
           <p class="signin-sub">Email/password or Google unlocks the full dashboard. Browsing is free, but saved watchlists stay tied to your signed-in account.</p>
-          <input type="email" class="input-field" placeholder="Email address">
-          <input type="password" class="input-field" placeholder="Password">
-          <button class="btn-primary" style="width:100%;padding:16px;border-radius:14px;font-size:15px;margin-bottom:0;" onclick="goToDashboard()">Sign In / Create Account →</button>
+          <input type="email" id="landingEmail" class="input-field" placeholder="Email address" autocomplete="email">
+          <input type="password" id="landingPassword" class="input-field" placeholder="Password" autocomplete="current-password">
+          <div id="landingEmailError" style="display:none;color:#f87171;font-size:13px;margin:-8px 0 12px;"></div>
+          <button id="landingEmailSubmit" class="btn-primary" style="width:100%;padding:16px;border-radius:14px;font-size:15px;margin-bottom:0;" onclick="signInOrSignUpWithEmail()">Sign In / Create Account →</button>
           <div class="or-divider"><div class="or-line"></div><span class="or-text">OR</span><div class="or-line"></div></div>
           <button class="google-btn" onclick="signInWithGoogleFromLanding()">
             <svg width="20" height="20" viewBox="0 0 24 24">
@@ -593,6 +594,54 @@ footer { border-top:1px solid rgba(255,255,255,.05); padding:28px; }
       }
     } catch (e) { /* leave password fallback in place */ }
   }
+  // Email/password sign-in + sign-up. Tries sign-in first; on "invalid credentials"
+  // creates a new account. On success, forwards to the gated dashboard.
+  async function signInOrSignUpWithEmail() {
+    const emailInput = document.getElementById('landingEmail');
+    const pwInput = document.getElementById('landingPassword');
+    const errEl = document.getElementById('landingEmailError');
+    const btn = document.getElementById('landingEmailSubmit');
+    const showErr = (msg) => { if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; } };
+    const clearErr = () => { if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; } };
+    const email = (emailInput?.value || '').trim();
+    const password = pwInput?.value || '';
+    clearErr();
+    if (!email || !password) { showErr('Enter an email and password.'); return; }
+    if (password.length < 6) { showErr('Password must be at least 6 characters.'); return; }
+
+    if (!_landingSupabase) {
+      if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+      for (let i = 0; i < 20 && !_landingSupabase; i++) {
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      if (btn) { btn.disabled = false; btn.textContent = 'Sign In / Create Account →'; }
+      if (!_landingSupabase) { showErr('Sign-in is still loading. Refresh and try again.'); return; }
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
+    try {
+      const { data, error } = await _landingSupabase.auth.signInWithPassword({ email, password });
+      if (!error && data?.session) { window.location.href = 'index.html'; return; }
+
+      // No existing account — try sign-up.
+      const msg = (error?.message || '').toLowerCase();
+      if (msg.includes('invalid login credentials') || msg.includes('invalid') || msg.includes('email not confirmed')) {
+        const { data: suData, error: suError } = await _landingSupabase.auth.signUp({ email, password });
+        if (suError) { showErr(suError.message); return; }
+        if (suData?.session) { window.location.href = 'index.html'; return; }
+        // Email confirmation is required
+        showErr('Account created. Check your email to confirm, then sign in.');
+        return;
+      }
+      showErr(error?.message || 'Sign-in failed.');
+    } catch (e) {
+      console.error('[email-auth]', e);
+      showErr('Unexpected error. Please try again.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Sign In / Create Account →'; }
+    }
+  }
+
   async function signInWithGoogleFromLanding() {
     const btn = document.getElementById('landingSignInBtn');
     // Wait briefly if initLandingAuth is still running — avoids a redirect loop
