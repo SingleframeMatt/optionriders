@@ -191,9 +191,9 @@ body {
   font-size: 0.62rem;
   font-weight: 600;
   letter-spacing: 0.5px;
-  color: rgba(34, 211, 238, 0.7);
-  background: rgba(34, 211, 238, 0.08);
-  border: 1px solid rgba(34, 211, 238, 0.2);
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   white-space: nowrap;
 }
 
@@ -249,8 +249,8 @@ body {
 
 .alerts-pill:hover:not(:disabled) {
   transform: translateY(-1px);
-  border-color: rgba(0, 212, 255, 0.22);
-  box-shadow: 0 0 18px rgba(0, 212, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.08);
 }
 
 .alerts-pill:disabled {
@@ -262,9 +262,9 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  border-color: rgba(0, 255, 136, 0.22);
-  background: rgba(0, 255, 136, 0.09);
-  color: var(--green);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
 }
 
 .signed-in-name {
@@ -275,7 +275,7 @@ body {
   font-size: 0.58rem;
   font-weight: 500;
   letter-spacing: 0.04em;
-  color: rgba(0, 255, 136, 0.5);
+  color: rgba(255, 255, 255, 0.45);
   white-space: nowrap;
 }
 
@@ -292,16 +292,17 @@ body {
 }
 
 .auth-action-btn {
-  border: 1px solid rgba(0, 212, 255, 0.2);
-  background: rgba(0, 212, 255, 0.08);
-  color: var(--cyan);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
 }
 
 .auth-action-btn:hover {
-  border-color: rgba(0, 212, 255, 0.34);
-  background: rgba(0, 212, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .alert-bar {
@@ -2909,9 +2910,9 @@ body {
   flex-shrink: 0;
 }
 .add-ticker-btn:hover {
-  border-color: var(--cyan);
-  color: var(--cyan);
-  background: rgba(0, 212, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.04);
 }
 .add-ticker-btn:active {
   transform: scale(0.97);
@@ -2920,16 +2921,16 @@ body {
   flex-shrink: 0;
 }
 
-/* Journal nav button — matches add-ticker style but with purple accent */
+/* Journal nav button — pink accent so it stands out from the grey header pills */
 .journal-nav-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  background: transparent;
-  border: 1px solid var(--border-subtle);
+  background: rgba(236, 72, 153, 0.10);
+  border: 1px solid rgba(236, 72, 153, 0.35);
   border-radius: 6px;
-  color: var(--text-secondary);
+  color: #f472b6;
   font-family: var(--font-sans);
   font-size: 0.72rem;
   font-weight: 600;
@@ -2942,9 +2943,9 @@ body {
   text-decoration: none;
 }
 .journal-nav-btn:hover {
-  border-color: #818cf8;
-  color: #818cf8;
-  background: rgba(129, 140, 248, 0.08);
+  border-color: #f472b6;
+  color: #f9a8d4;
+  background: rgba(236, 72, 153, 0.16);
 }
 .journal-nav-btn:active { transform: scale(0.97); }
 .journal-nav-btn svg { flex-shrink: 0; }

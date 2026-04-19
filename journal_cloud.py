@@ -761,6 +761,221 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
     }
 
 
+def week_detail(bearer_token: str, start_iso: str) -> dict:
+    """Aggregate a Sun–Sat week for the Week view."""
+    from datetime import timedelta
+
+    start_dt = datetime.fromisoformat(start_iso).date()
+    days_iso = [(start_dt + timedelta(days=i)).isoformat() for i in range(7)]
+    end_iso = days_iso[-1]
+
+    rows = fetch_all_user_fills(bearer_token)
+    trades = trade_journal._build_trades(rows)
+    week_trades = [t for t in trades if t["close_date"] in days_iso]
+    week_rows = [r for r in rows if r.get("trade_date") in days_iso and r.get("asset_class") != "CASH"]
+
+    per_day = {d: {"pnl": 0.0, "trades": 0, "wins": 0} for d in days_iso}
+    for t in week_trades:
+        b = per_day.get(t["close_date"])
+        if not b:
+            continue
+        b["pnl"] += t["gross_pnl"]
+        b["trades"] += 1
+        if t["is_win"]:
+            b["wins"] += 1
+
+    weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    day_summaries = []
+    for d in days_iso:
+        dt = datetime.fromisoformat(d).date()
+        b = per_day[d]
+        win_rate = (b["wins"] / b["trades"] * 100) if b["trades"] else 0.0
+        day_summaries.append({
+            "date": d,
+            "day": dt.day,
+            "weekday": weekday_names[dt.weekday()],
+            "pnl": round(b["pnl"], 2),
+            "trades": b["trades"],
+            "win_rate": round(win_rate, 2),
+        })
+
+    pnls = [t["gross_pnl"] for t in week_trades]
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+    gross_profit = sum(wins)
+    gross_loss = sum(losses)
+    commissions = sum(t["commission"] for t in week_trades)
+    volume = sum(abs(r.get("quantity") or 0.0) for r in week_rows)
+    max_profit = max(pnls) if pnls else 0.0
+    max_loss = min(pnls) if pnls else 0.0
+
+    meta_by_symbol = {}
+    for r in week_rows:
+        meta_by_symbol.setdefault(r.get("symbol"), r)
+
+    trades_out = []
+    for t in sorted(week_trades, key=lambda x: x["close_datetime"] or ""):
+        open_iso = t["open_datetime"] or t["close_datetime"] or ""
+        time_str = _fmt_display_time(open_iso)
+        meta = meta_by_symbol.get(t["symbol"], {})
+        is_opt = meta.get("asset_class") in ("OPT", "FOP")
+        side = (meta.get("put_call") or "").upper() if is_opt else ""
+        if is_opt and side == "C":
+            side = "CALL"
+        elif is_opt and side == "P":
+            side = "PUT"
+        if not is_opt:
+            side = (meta.get("buy_sell") or "").upper()
+        strike = meta.get("strike")
+        expiry = meta.get("expiry")
+        if is_opt and expiry and strike is not None:
+            y, m, d = str(expiry).split("-")
+            strike_s = str(int(strike)) if float(strike).is_integer() else f"{strike:.2f}".rstrip("0").rstrip(".")
+            pc = "PUT" if meta.get("put_call") == "P" else "CALL" if meta.get("put_call") == "C" else ""
+            instrument = f"{m}-{d}-{y} {strike_s} {pc}".strip()
+        else:
+            instrument = t["underlying"] or t["symbol"]
+        roi = None
+        basis = meta.get("cost_basis")
+        if not basis:
+            qty = abs(meta.get("quantity") or 0.0)
+            mult = meta.get("multiplier") or 1.0
+            price = meta.get("trade_price") or 0.0
+            basis = qty * mult * price if price else None
+        if basis:
+            roi = t["gross_pnl"] / abs(basis) * 100.0
+        trade_fills = _fills_for_trade(
+            rows, t.get("account") or "", t["symbol"],
+            t.get("open_datetime"), t.get("close_datetime"),
+        )
+        tmetrics = _trade_metrics(trade_fills)
+        trades_out.append({
+            "time": time_str,
+            "trade_date": t["close_date"],
+            "ticker": t["underlying"] or t["symbol"],
+            "symbol": t["symbol"],
+            "side": side,
+            "instrument": instrument,
+            "asset_class": meta.get("asset_class"),
+            "strike": meta.get("strike"),
+            "expiry": meta.get("expiry"),
+            "put_call": meta.get("put_call"),
+            "multiplier": meta.get("multiplier"),
+            "currency": meta.get("currency"),
+            "fill_count": t["fill_count"],
+            "net_pnl": t["gross_pnl"],
+            "gross_pnl": t["gross_pnl"],
+            "net_after_comm": t["net_pnl"],
+            "realized_pnl": t["realized_pnl"],
+            "commission": t["commission"],
+            "net_roi": round(roi, 2) if roi is not None else None,
+            "is_open": False,
+            "open_datetime": t.get("open_datetime"),
+            "close_datetime": t.get("close_datetime"),
+            "avg_entry_price": tmetrics["avg_entry_price"],
+            "avg_exit_price": tmetrics["avg_exit_price"],
+            "qty_opened": tmetrics["qty_opened"],
+            "qty_closed": tmetrics["qty_closed"],
+            "fills": [_fill_summary(f) for f in trade_fills],
+        })
+
+    return {
+        "start": start_iso,
+        "end": end_iso,
+        "days": day_summaries,
+        "total_trades": len(week_trades),
+        "gross_pnl": round(sum(pnls), 2),
+        "net_pnl": round(sum(pnls), 2),
+        "commissions": round(commissions, 2),
+        "wins": len(wins),
+        "losses": len(losses),
+        "win_rate": round(len(wins) / len(week_trades) * 100, 2) if week_trades else 0.0,
+        "profit_factor": round(gross_profit / abs(gross_loss), 3) if gross_loss else 0.0,
+        "volume": round(volume, 2),
+        "max_profit": round(max_profit, 2),
+        "max_loss": round(max_loss, 2),
+        "trades": trades_out,
+    }
+
+
+# ---------- notes ----------
+
+def get_trade_note(bearer_token: str, user_id: str, symbol: str, close_datetime: str) -> dict:
+    """Read a trade's note via PostgREST. Returns empty body if none exists."""
+    try:
+        resp = requests.get(
+            f"{SUPABASE_URL}/rest/v1/journal_notes",
+            headers=_rest_headers(bearer_token),
+            params=[
+                ("user_id", f"eq.{user_id}"),
+                ("symbol", f"eq.{symbol}"),
+                ("close_datetime", f"eq.{close_datetime}"),
+                ("select", "body,updated_at"),
+                ("limit", "1"),
+            ],
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return {"symbol": symbol, "close_datetime": close_datetime,
+                    "body": "", "updated_at": None,
+                    "error": f"{resp.status_code}: {resp.text[:200]}"}
+        rows = resp.json() or []
+        row = rows[0] if rows else {}
+        return {
+            "symbol": symbol,
+            "close_datetime": close_datetime,
+            "body": row.get("body") or "",
+            "updated_at": row.get("updated_at"),
+        }
+    except Exception as exc:
+        return {"symbol": symbol, "close_datetime": close_datetime,
+                "body": "", "updated_at": None, "error": str(exc)}
+
+
+def set_trade_note(bearer_token: str, user_id: str, symbol: str, close_datetime: str,
+                   body: str, trade_date: str | None = None) -> dict:
+    """Upsert a trade's note. Deletes when body is empty."""
+    body = body or ""
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if not body.strip():
+        # Delete if empty
+        resp = requests.delete(
+            f"{SUPABASE_URL}/rest/v1/journal_notes",
+            headers=_rest_headers(bearer_token),
+            params=[
+                ("user_id", f"eq.{user_id}"),
+                ("symbol", f"eq.{symbol}"),
+                ("close_datetime", f"eq.{close_datetime}"),
+            ],
+            timeout=10,
+        )
+        if resp.status_code not in (200, 204):
+            raise RuntimeError(f"set_trade_note delete: {resp.status_code} {resp.text[:200]}")
+        return {"ok": True, "body": "", "updated_at": None}
+
+    payload = {
+        "user_id": user_id,
+        "symbol": symbol,
+        "close_datetime": close_datetime,
+        "trade_date": trade_date,
+        "body": body,
+        "updated_at": now_iso,
+    }
+    resp = requests.post(
+        f"{SUPABASE_URL}/rest/v1/journal_notes"
+        "?on_conflict=user_id,symbol,close_datetime",
+        headers=_rest_headers(bearer_token, {
+            "Prefer": "return=representation,resolution=merge-duplicates",
+        }),
+        data=json.dumps(payload),
+        timeout=10,
+    )
+    if resp.status_code not in (200, 201):
+        raise RuntimeError(f"set_trade_note upsert: {resp.status_code} {resp.text[:200]}")
+    return {"ok": True, "body": body, "updated_at": now_iso}
+
+
 # ---------- IBKR sync ----------
 
 def intraday_bars(symbol: str, date_iso: str, interval: str = "5min") -> dict:
