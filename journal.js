@@ -849,6 +849,18 @@ function openTradeDetail(trade) {
   $("tdQtyClose").textContent = trade.qty_closed != null ? fmt.num(trade.qty_closed, 0) : "—";
   $("tdAvgEntry").textContent = trade.avg_entry_price != null ? fmt.money(trade.avg_entry_price, { compact: false, sign: false }) : "—";
   $("tdAvgExit").textContent = trade.avg_exit_price != null ? fmt.money(trade.avg_exit_price, { compact: false, sign: false }) : "—";
+
+  // Total premium paid on entry, received on exit. For options the contract
+  // multiplier (usually 100) turns per-contract price into per-contract notional.
+  const mult = trade.multiplier || (isOpt ? 100 : 1);
+  const totalCost = (trade.avg_entry_price != null && trade.qty_opened != null)
+    ? trade.avg_entry_price * trade.qty_opened * mult : null;
+  const totalProceeds = (trade.avg_exit_price != null && trade.qty_closed != null && !trade.is_open)
+    ? trade.avg_exit_price * trade.qty_closed * mult : null;
+  $("tdTotalCost").textContent = totalCost != null
+    ? fmt.money(totalCost, { compact: false, sign: false }) : "—";
+  $("tdTotalProceeds").textContent = totalProceeds != null
+    ? fmt.money(totalProceeds, { compact: false, sign: false }) : "—";
   const gross = $("tdGross");
   gross.textContent = fmt.money(trade.gross_pnl);
   gross.className = signClass(trade.gross_pnl);
