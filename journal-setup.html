@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IBKR Setup Guide — Option Riders Journal</title>
+<meta name="description" content="Step-by-step guide to connect your Interactive Brokers account to the Option Riders Trade Journal.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="journal.css">
+<style>
+  .setup-main {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 40px 28px 96px;
+  }
+  .setup-hero {
+    text-align: center;
+    padding: 24px 0 32px;
+  }
+  .setup-kicker {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--cyan);
+    padding: 4px 12px;
+    border: 1px solid var(--border-highlight);
+    border-radius: 999px;
+    margin-bottom: 16px;
+  }
+  .setup-hero h1 {
+    font-size: 36px;
+    letter-spacing: -0.02em;
+    margin: 0 0 12px;
+    color: var(--text-bright);
+  }
+  .setup-hero p {
+    font-size: 15px;
+    color: var(--text-secondary);
+    max-width: 520px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+  .setup-toc {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin: 32px 0 48px;
+  }
+  .setup-toc a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: border-color .2s ease, background .2s ease, transform .2s ease;
+  }
+  .setup-toc a:hover {
+    border-color: var(--cyan);
+    background: var(--bg-surface);
+    transform: translateY(-1px);
+  }
+  .setup-toc-num {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--cyan);
+    width: 22px;
+    text-align: center;
+  }
+  .setup-toc-title {
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .setup-section {
+    padding: 40px 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .setup-section-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .setup-section h2 {
+    font-size: 26px;
+    letter-spacing: -0.01em;
+    margin: 0 0 16px;
+    color: var(--text-bright);
+  }
+  .setup-section p {
+    color: var(--text-secondary);
+    line-height: 1.7;
+    margin: 0 0 16px;
+    font-size: 15px;
+  }
+  .setup-section strong { color: var(--text-primary); }
+  .setup-steps {
+    counter-reset: step;
+    list-style: none;
+    padding: 0;
+    margin: 24px 0 0;
+  }
+  .setup-steps > li {
+    counter-increment: step;
+    position: relative;
+    padding: 0 0 20px 56px;
+    margin-bottom: 4px;
+  }
+  .setup-steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: -2px;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 600;
+    border: 1px solid var(--border-highlight);
+  }
+  .setup-steps > li::after {
+    content: "";
+    position: absolute;
+    left: 17px;
+    top: 40px;
+    bottom: 0;
+    width: 2px;
+    background: var(--border-subtle);
+  }
+  .setup-steps > li:last-child::after { display: none; }
+  .setup-steps > li h3 {
+    font-size: 16px;
+    margin: 6px 0 6px;
+    color: var(--text-primary);
+  }
+  .setup-steps > li .body {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+  .setup-steps code {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-bright);
+  }
+  .setup-steps ul, .setup-steps ol {
+    padding-left: 20px;
+    margin: 8px 0 0;
+  }
+  .setup-steps li ul li, .setup-steps li ol li {
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.7;
+    margin-bottom: 4px;
+  }
+  .setup-callout {
+    display: flex;
+    gap: 12px;
+    padding: 16px 18px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    margin: 16px 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  .setup-callout.is-warn { border-color: rgba(245, 158, 11, 0.35); background: var(--amber-dim); }
+  .setup-callout.is-info { border-color: var(--border-highlight); }
+  .setup-callout-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-right: 6px;
+    font-weight: 600;
+  }
+  .setup-callout.is-info .setup-callout-label { color: var(--cyan); }
+  .setup-values {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: 18px;
+    row-gap: 8px;
+    margin: 12px 0 0;
+    padding: 14px 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+  }
+  .setup-values dt {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+  }
+  .setup-values dd {
+    margin: 0;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+  }
+  .setup-cta {
+    text-align: center;
+    padding: 48px 0 16px;
+  }
+  .setup-cta a {
+    display: inline-block;
+    padding: 14px 28px;
+    border-radius: var(--radius-md);
+    background: var(--cyan);
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+    transition: transform .15s ease;
+  }
+  .setup-cta a:hover { transform: translateY(-1px); }
+  .setup-footer-note {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  .setup-nav-back {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .setup-nav-back:hover { color: var(--text-primary); }
+</style>
+</head>
+<body class="journal-body">
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("journal_theme") === "light") {
+          document.body.classList.add("is-light");
+        }
+      } catch (_) { /* storage disabled — stay on default dark */ }
+    })();
+  </script>
+
+  <header class="journal-header">
+    <a class="logo" href="index.html" aria-label="Back to dashboard">
+      <img class="logo-image" src="assets/optionriders-horse-transparent.png" alt="Option Riders">
+      <div class="logo-copy">
+        <span class="logo-title">Setup Guide</span>
+        <span class="logo-tagline">Connect IBKR to the Journal</span>
+      </div>
+    </a>
+    <div class="journal-header-actions">
+      <a class="setup-nav-back" href="journal.html">&larr; Back to Journal</a>
+    </div>
+  </header>
+
+  <main class="setup-main">
+    <section class="setup-hero">
+      <span class="setup-kicker">Takes about 5 minutes</span>
+      <h1>Connect your IBKR account</h1>
+      <p>Option Riders reads your trades directly from Interactive Brokers using a feature called <strong>Flex Web Service</strong>. Nothing is shared with us — the credentials stay in your browser, and IBKR serves the report straight to your journal. Follow these three parts in order.</p>
+    </section>
+
+    <nav class="setup-toc">
+      <a href="#part1">
+        <span class="setup-toc-num">01</span>
+        <span class="setup-toc-title">Enable Flex Web Service</span>
+      </a>
+      <a href="#part2">
+        <span class="setup-toc-num">02</span>
+        <span class="setup-toc-title">Create the Flex Query</span>
+      </a>
+      <a href="#part3">
+        <span class="setup-toc-num">03</span>
+        <span class="setup-toc-title">Paste into Option Riders</span>
+      </a>
+    </nav>
+
+    <section id="part1" class="setup-section">
+      <div class="setup-section-label">Part 01</div>
+      <h2>Enable the Flex Web Service &amp; get your token</h2>
+      <p>The token lets Option Riders request your report on your behalf. It can be revoked at any time from the same page.</p>
+
+      <ol class="setup-steps">
+        <li>
+          <h3>Log in to IBKR Client Portal</h3>
+          <div class="body">Open <a href="https://www.interactivebrokers.com" target="_blank" rel="noopener">interactivebrokers.com</a> and sign in to Client Portal with your normal account credentials.</div>
+        </li>
+        <li>
+          <h3>Navigate to Flex Web Service</h3>
+          <div class="body">Click your user icon (top-right) &rarr; <strong>Settings</strong> &rarr; under <em>Reporting</em>, select <strong>Flex Web Service</strong>.</div>
+        </li>
+        <li>
+          <h3>Turn it on</h3>
+          <div class="body">If it's disabled, toggle it <strong>on</strong>. IBKR will generate a long token string.</div>
+        </li>
+        <li>
+          <h3>Copy the token</h3>
+          <div class="body">Click the copy icon next to the token. It's long (~60 characters). Paste it somewhere temporary — you'll need it in Part 3.</div>
+          <div class="setup-callout is-warn">
+            <div>
+              <span class="setup-callout-label">Keep private</span>
+              Anyone with this token plus a query ID can download your trade history. Don't share it. You can revoke and regenerate it at any time from this same page.
+            </div>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section id="part2" class="setup-section">
+      <div class="setup-section-label">Part 02</div>
+      <h2>Create the Flex Query</h2>
+      <p>A Flex Query is a saved report definition. Option Riders will request this report every time you click Sync.</p>
+
+      <ol class="setup-steps">
+        <li>
+          <h3>Open Flex Queries</h3>
+          <div class="body">Still under <strong>Settings</strong> &rarr; <em>Reporting</em>, click <strong>Flex Queries</strong>.</div>
+        </li>
+        <li>
+          <h3>Create a new Activity Flex Query</h3>
+          <div class="body">Find the <strong>Activity Flex Query</strong> section and click <strong>Create New</strong> (the "+" button). A name field will appear.</div>
+        </li>
+        <li>
+          <h3>Name it</h3>
+          <div class="body">Use anything memorable — e.g. <code>OptionRiders Journal</code>.</div>
+        </li>
+        <li>
+          <h3>Add the <em>Trades</em> section</h3>
+          <div class="body">
+            In the Sections list, click <strong>Trades</strong>. In the popup:
+            <ul>
+              <li>Under <strong>Options</strong>, keep <strong>Execution</strong> selected.</li>
+              <li>At the top of the column list, click <strong>Select All</strong>.</li>
+              <li>Click <strong>Save</strong>.</li>
+            </ul>
+          </div>
+        </li>
+        <li>
+          <h3>Add the <em>Mark-to-Market Performance Summary in Base</em> section</h3>
+          <div class="body">
+            Back in the Sections list, click <strong>Mark-to-Market Performance Summary in Base</strong>.
+            <ul>
+              <li>Click <strong>Select All</strong> at the top of the column list.</li>
+              <li>Click <strong>Save</strong>.</li>
+            </ul>
+          </div>
+        </li>
+        <li>
+          <h3>Add the <em>Realized &amp; Unrealized Performance Summary in Base</em> section</h3>
+          <div class="body">
+            Click <strong>Realized &amp; Unrealized Performance Summary in Base</strong>.
+            <ul>
+              <li>Click <strong>Select All</strong>.</li>
+              <li>Click <strong>Save</strong>.</li>
+            </ul>
+          </div>
+        </li>
+        <li>
+          <h3>Set the Delivery Configuration</h3>
+          <div class="body">
+            Scroll to <strong>Delivery Configuration</strong>. Use exactly these values:
+            <dl class="setup-values">
+              <dt>Accounts</dt><dd>your account (already selected)</dd>
+              <dt>Models</dt><dd>Optional</dd>
+              <dt>Format</dt><dd>XML</dd>
+              <dt>Period</dt><dd>Year to Date</dd>
+            </dl>
+          </div>
+        </li>
+        <li>
+          <h3>Set the General Configuration</h3>
+          <div class="body">
+            Scroll to <strong>General Configuration</strong>. Use these values:
+            <dl class="setup-values">
+              <dt>Date Format</dt><dd>yyyyMMdd</dd>
+              <dt>Time Format</dt><dd>HHmmss</dd>
+              <dt>Date/Time Separator</dt><dd>; (semi-colon)</dd>
+              <dt>Profit and Loss</dt><dd>Default</dd>
+              <dt>Include Canceled Trades?</dt><dd>No</dd>
+            </dl>
+          </div>
+        </li>
+        <li>
+          <h3>Save the query</h3>
+          <div class="body">Scroll to the bottom and click <strong>Continue</strong>, then <strong>Create</strong>. IBKR will confirm and return you to the Flex Queries list.</div>
+        </li>
+        <li>
+          <h3>Copy the Query ID</h3>
+          <div class="body">Next to your new query, a numeric <strong>Query ID</strong> is shown (looks like <code>1234567</code>). Copy that — you'll need it in Part 3.</div>
+        </li>
+      </ol>
+    </section>
+
+    <section id="part3" class="setup-section">
+      <div class="setup-section-label">Part 03</div>
+      <h2>Paste them into Option Riders</h2>
+      <p>Your token and query ID stay in this browser only — they never touch our servers. Sync requests go directly from your browser to IBKR.</p>
+
+      <ol class="setup-steps">
+        <li>
+          <h3>Open the Journal Settings</h3>
+          <div class="body">On the Journal page, click the gear icon <strong>(&#9881;)</strong> in the top-right.</div>
+        </li>
+        <li>
+          <h3>Paste the token and query ID</h3>
+          <div class="body">
+            Fill in:
+            <ul>
+              <li><strong>Flex Web Service Token</strong> — paste the token from Part 1.</li>
+              <li><strong>Flex Query ID</strong> — paste the ID from Part 2.</li>
+            </ul>
+          </div>
+        </li>
+        <li>
+          <h3>Save</h3>
+          <div class="body">Click <strong>Save</strong>. The modal closes and the inputs are stored locally.</div>
+        </li>
+        <li>
+          <h3>Sync your trades</h3>
+          <div class="body">Click <strong>Sync IBKR</strong> in the Journal header. Year-to-date trades will import within a few seconds. The calendar and stats will populate.</div>
+          <div class="setup-callout is-info">
+            <div>
+              <span class="setup-callout-label">Heads up</span>
+              The first sync can take 10–30 seconds if you have a lot of trades. Subsequent syncs are much faster because only new trades are inserted.
+            </div>
+          </div>
+        </li>
+      </ol>
+
+      <div class="setup-cta">
+        <a href="journal.html">Go to the Journal &rarr;</a>
+        <div class="setup-footer-note">Run into trouble? Re-check that the query includes the three sections and that Period is set to <strong>Year to Date</strong>.</div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
