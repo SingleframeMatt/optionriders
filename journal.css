@@ -599,7 +599,8 @@ body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-ev
   color: var(--text-secondary);
   font-weight: 600;
 }
-.settings-form input {
+.settings-form input,
+.settings-form select {
   background: var(--bg-surface);
   color: var(--text-primary);
   border: 1px solid var(--border-highlight);
@@ -608,7 +609,8 @@ body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-ev
   font-family: var(--font-mono);
   font-size: 13px;
 }
-.settings-form input:focus {
+.settings-form input:focus,
+.settings-form select:focus {
   outline: none;
   border-color: var(--cyan);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
@@ -628,4 +630,43 @@ body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-ev
   font-size: 12px; color: var(--text-secondary);
   font-family: var(--font-mono);
   min-height: 16px;
+}
+
+/* ---------- Light theme ----------
+   Opt-in by adding `is-light` to `.journal-body`. Flips the CSS custom
+   properties defined at the top of this file so every component picks up
+   light backgrounds/text without bespoke overrides. */
+.journal-body.is-light {
+  --bg-deep:          #f6f7fb;
+  --bg-primary:       #ffffff;
+  --bg-card:          #ffffff;
+  --bg-card-alt:      #f9fafb;
+  --bg-surface:       #f3f4f6;
+  --bg-row-alt:       rgba(0, 0, 0, 0.02);
+  --border:           rgba(0, 0, 0, 0.10);
+  --border-subtle:    rgba(0, 0, 0, 0.05);
+  --border-highlight: rgba(0, 0, 0, 0.22);
+
+  --green:            #059669;
+  --green-dim:        rgba(5, 150, 105, 0.10);
+  --green-glow:       rgba(5, 150, 105, 0.22);
+  --red:              #dc2626;
+  --red-dim:          rgba(220, 38, 38, 0.10);
+  --red-glow:         rgba(220, 38, 38, 0.22);
+  --cyan:             #4f46e5;
+  --cyan-dim:         rgba(79, 70, 229, 0.14);
+  --amber:            #d97706;
+  --amber-dim:        rgba(217, 119, 6, 0.14);
+  --amber-glow:       rgba(217, 119, 6, 0.28);
+
+  --text-primary:     #1f2937;
+  --text-secondary:   #4b5563;
+  --text-muted:       #6b7280;
+  --text-bright:      #111827;
+
+  --chart-grid:       rgba(0, 0, 0, 0.06);
+  --chart-axis:       rgba(0, 0, 0, 0.45);
+  --chart-zero:       rgba(0, 0, 0, 0.22);
+
+  color-scheme: light;
 }

@@ -13,6 +13,18 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="journal-body">
+  <script>
+    // Apply saved theme synchronously so the page doesn't flash the wrong
+    // palette before journal.js runs. Matches getStoredTheme() / applyTheme()
+    // in journal.js.
+    (function () {
+      try {
+        if (localStorage.getItem("journal_theme") === "light") {
+          document.body.classList.add("is-light");
+        }
+      } catch (_) { /* storage disabled — stay on default dark */ }
+    })();
+  </script>
   <!-- Sign-in gate -->
   <div class="auth-gate" id="authGate" hidden>
     <div class="auth-gate-card">
@@ -212,6 +224,14 @@ IBKR_FLEX_QUERY_ID=123456</pre>
           <span class="settings-label">Flex Query ID</span>
           <input type="text" id="settingsQueryId" placeholder="e.g. 1234567" autocomplete="off" spellcheck="false" inputmode="numeric">
           <span class="settings-hint">The numeric ID next to your Trades Flex Query (ℹ icon in Flex Queries list).</span>
+        </label>
+        <label>
+          <span class="settings-label">Theme</span>
+          <select id="settingsTheme">
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+          <span class="settings-hint">Switches the journal interface between dark and light mode. Saved in this browser.</span>
         </label>
         <div class="settings-actions">
           <button class="btn btn-danger-ghost btn-sm" type="button" id="settingsClear">Clear saved credentials</button>
