@@ -721,6 +721,30 @@ function handleSettingsClear() {
   $("settingsStatus").textContent = "Credentials removed.";
 }
 
+async function handleSettingsDiagnose() {
+  const creds = getStoredCreds();
+  if (!creds.token || !creds.query_id) {
+    $("settingsStatus").textContent = "Paste token + Query ID first, then click Diagnose.";
+    return;
+  }
+  $("settingsStatus").textContent = "Running diagnostic sync…";
+  try {
+    const data = await api("/api/journal/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...creds, diagnose: true }),
+    });
+    console.log("[flex-diagnose] response", data);
+    if (data.sections_found) {
+      console.table(data.sections_found.map(s => ({ tag: s.tag, count: s.count })));
+      console.log("[flex-diagnose] full sections_found (with sample attrs):", data.sections_found);
+    }
+    $("settingsStatus").textContent = "Diagnostic written to browser console (open DevTools → Console).";
+  } catch (err) {
+    $("settingsStatus").textContent = `Diagnose failed: ${err.message}`;
+  }
+}
+
 function setAutoSync(enabled) {
   localStorage.setItem("journal_auto_sync", enabled ? "1" : "0");
   if (state.autoSyncTimer) {
@@ -807,6 +831,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("settingsBackdrop").addEventListener("click", closeSettings);
   $("settingsForm").addEventListener("submit", handleSettingsSubmit);
   $("settingsClear").addEventListener("click", handleSettingsClear);
+  $("settingsDiagnose").addEventListener("click", handleSettingsDiagnose);
   $("settingsTheme").addEventListener("change", (e) => saveTheme(e.target.value));
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;

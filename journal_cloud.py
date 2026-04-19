@@ -474,8 +474,34 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
 
 # ---------- IBKR sync ----------
 
+def _enumerate_flex_sections(report: str) -> list[dict]:
+    """
+    Diagnostic helper: return a list of { tag, count, sample_attrs } for each
+    distinct element in the root <FlexStatements> tree. Used once to discover
+    what the MTM / Realized summary sections actually look like in this
+    account's flex report before writing a proper parser for them.
+    """
+    if not report.lstrip().startswith("<"):
+        return []
+    try:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(report)
+    except ET.ParseError:
+        return []
+
+    tags: dict[str, dict] = {}
+    for el in root.iter():
+        entry = tags.setdefault(el.tag, {"tag": el.tag, "count": 0, "sample_attrs": None})
+        entry["count"] += 1
+        if entry["sample_attrs"] is None and el.attrib:
+            entry["sample_attrs"] = dict(list(el.attrib.items())[:40])
+    # Return sorted by count desc; skip the root itself if it's huge
+    return sorted(tags.values(), key=lambda x: -x["count"])[:60]
+
+
 def sync_from_ibkr(bearer_token: str, user_id: str,
-                   ibkr_token: str, ibkr_query_id: str) -> dict:
+                   ibkr_token: str, ibkr_query_id: str,
+                   diagnose: bool = False) -> dict:
     if not ibkr_token or not ibkr_query_id:
         return {"ok": False, "error": "Missing IBKR credentials"}
     try:
@@ -483,7 +509,7 @@ def sync_from_ibkr(bearer_token: str, user_id: str,
         report = trade_journal.fetch_flex_report(ibkr_token, ibkr_query_id)
         rows = _parse_flex_and_normalize(report, user_id)
         result = insert_fills(bearer_token, user_id, rows)
-        return {
+        out = {
             "ok": True,
             "inserted": result["inserted"],
             "skipped": result["skipped"],
@@ -491,5 +517,8 @@ def sync_from_ibkr(bearer_token: str, user_id: str,
             "format": "xml" if report.lstrip().startswith("<") else "csv",
             "fetched_at": started.isoformat(),
         }
+        if diagnose:
+            out["sections_found"] = _enumerate_flex_sections(report)
+        return out
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
