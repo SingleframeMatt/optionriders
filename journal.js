@@ -1236,19 +1236,39 @@ async function importCsv(file) {
   }
 }
 
-function getStoredCreds() {
+// IBKR credentials are per-Supabase-user so multiple accounts on the same
+// browser don't leak into each other. Legacy unscoped keys are ignored.
+function _credKeys() {
+  const uid = _session?.user?.id;
+  if (!uid) return null;
   return {
-    token: localStorage.getItem("journal_ibkr_token") || "",
-    query_id: localStorage.getItem("journal_ibkr_query_id") || "",
+    token: `journal_ibkr_token:${uid}`,
+    queryId: `journal_ibkr_query_id:${uid}`,
+  };
+}
+
+function getStoredCreds() {
+  const k = _credKeys();
+  if (!k) return { token: "", query_id: "" };
+  return {
+    token: localStorage.getItem(k.token) || "",
+    query_id: localStorage.getItem(k.queryId) || "",
   };
 }
 
 function saveCreds(token, queryId) {
-  localStorage.setItem("journal_ibkr_token", token);
-  localStorage.setItem("journal_ibkr_query_id", queryId);
+  const k = _credKeys();
+  if (!k) return;
+  localStorage.setItem(k.token, token);
+  localStorage.setItem(k.queryId, queryId);
 }
 
 function clearCreds() {
+  const k = _credKeys();
+  if (!k) return;
+  localStorage.removeItem(k.token);
+  localStorage.removeItem(k.queryId);
+  // Also wipe legacy unscoped keys left behind by older builds.
   localStorage.removeItem("journal_ibkr_token");
   localStorage.removeItem("journal_ibkr_query_id");
 }
@@ -1401,6 +1421,12 @@ function changeMonth(delta) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // Drop legacy unscoped IBKR creds — they used to leak between users sharing
+  // a browser. Per-user scoped keys (journal_ibkr_*:{uid}) are used now.
+  try {
+    localStorage.removeItem("journal_ibkr_token");
+    localStorage.removeItem("journal_ibkr_query_id");
+  } catch (_) {}
   await initAuth();
   $("authGateSignInBtn")?.addEventListener("click", signInWithGoogle);
   $("csvFile").addEventListener("change", (e) => importCsv(e.target.files?.[0]));
