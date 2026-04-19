@@ -611,6 +611,21 @@ function clearCreds() {
   localStorage.removeItem("journal_ibkr_query_id");
 }
 
+function getStoredTheme() {
+  const t = localStorage.getItem("journal_theme");
+  return t === "light" ? "light" : "dark";
+}
+
+function applyTheme(theme) {
+  document.body.classList.toggle("is-light", theme === "light");
+}
+
+function saveTheme(theme) {
+  const t = theme === "light" ? "light" : "dark";
+  localStorage.setItem("journal_theme", t);
+  applyTheme(t);
+}
+
 async function syncIbkr({ silent = false } = {}) {
   const btn = $("syncBtn");
   const dot = $("syncDot");
@@ -673,6 +688,7 @@ function openSettings() {
   const creds = getStoredCreds();
   $("settingsToken").value = creds.token;
   $("settingsQueryId").value = creds.query_id;
+  $("settingsTheme").value = getStoredTheme();
   $("settingsStatus").textContent = "";
   $("settingsModal").hidden = false;
   document.body.style.overflow = "hidden";
@@ -692,6 +708,7 @@ function handleSettingsSubmit(e) {
     return;
   }
   saveCreds(token, queryId);
+  saveTheme($("settingsTheme").value);
   $("settingsStatus").textContent = "Saved. Click Sync IBKR to pull your trades.";
   setTimeout(closeSettings, 600);
 }
@@ -790,6 +807,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("settingsBackdrop").addEventListener("click", closeSettings);
   $("settingsForm").addEventListener("submit", handleSettingsSubmit);
   $("settingsClear").addEventListener("click", handleSettingsClear);
+  $("settingsTheme").addEventListener("change", (e) => saveTheme(e.target.value));
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!$("dayModal").hidden) closeDayModal();
