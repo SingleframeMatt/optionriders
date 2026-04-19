@@ -600,28 +600,123 @@ function openTradeDetail(trade) {
     tbody.innerHTML = `<tr><td colspan="7" class="muted">No fill detail available.</td></tr>`;
   }
 
-  // TradingView mini chart for the underlying
+  // Chart with entry/exit markers for the underlying
   const chartWrap = $("tradeDetailChartWrap");
   chartWrap.innerHTML = "";
   const underlying = (trade.ticker || trade.symbol || "").trim();
   if (underlying) {
-    const iframe = document.createElement("iframe");
-    iframe.src = `https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(underlying)}&interval=15&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=rgba(0,0,0,0)&studies=&theme=${document.body.classList.contains("is-light") ? "light" : "dark"}&style=1&timezone=Europe%2FLondon&locale=en`;
-    iframe.style.width = "100%";
-    iframe.style.height = "340px";
-    iframe.style.border = "0";
-    iframe.allow = "fullscreen";
-    chartWrap.appendChild(iframe);
+    renderTradeChart(chartWrap, underlying, trade).catch(err => {
+      console.warn("[trade-chart] fallback to iframe", err);
+      renderTradeChartFallback(chartWrap, underlying);
+    });
   }
 
   modal.hidden = false;
   document.body.style.overflow = "hidden";
 }
 
+async function renderTradeChart(container, symbol, trade) {
+  container.innerHTML = `<div class="trade-chart-loading">Loading ${symbol} chart…</div>`;
+  const date = (trade.open_datetime || trade.close_datetime || "").slice(0, 10);
+  if (!date) throw new Error("no date on trade");
+
+  const data = await api(`/api/journal/bars?symbol=${encodeURIComponent(symbol)}&date=${encodeURIComponent(date)}`);
+  if (data.error) throw new Error(data.error);
+  const bars = data.bars || [];
+  if (!bars.length) throw new Error("no bars returned");
+
+  if (!window.LightweightCharts) throw new Error("lightweight-charts not loaded");
+
+  container.innerHTML = "";
+  const isLight = document.body.classList.contains("is-light");
+  const chart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: 340,
+    layout: {
+      background: { type: "solid", color: isLight ? "#ffffff" : "#0f1220" },
+      textColor: isLight ? "#1f2937" : "#e8e8f0",
+    },
+    grid: {
+      vertLines: { color: isLight ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.04)" },
+      horzLines: { color: isLight ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.04)" },
+    },
+    rightPriceScale: { borderColor: isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)" },
+    timeScale: {
+      borderColor: isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)",
+      timeVisible: true,
+      secondsVisible: false,
+    },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    localization: { timeFormatter: (t) => {
+      const d = new Date(t * 1000);
+      return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London", hourCycle: "h23" });
+    }},
+  });
+
+  const candles = chart.addCandlestickSeries({
+    upColor: "#10b981", downColor: "#ef4444",
+    borderUpColor: "#10b981", borderDownColor: "#ef4444",
+    wickUpColor: "#10b981", wickDownColor: "#ef4444",
+  });
+  candles.setData(bars);
+
+  // Build entry/exit markers from the trade's fills
+  const markers = [];
+  (trade.fills || []).forEach(f => {
+    if (!f.datetime) return;
+    const qty = f.quantity || 0;
+    const opening = f.open_close === "O" || (f.open_close == null && qty > 0 === (trade.put_call !== "P"));
+    const isClose = f.open_close === "C";
+    const ts = Math.floor(new Date(f.datetime + (f.datetime.endsWith("Z") ? "" : "-04:00")).getTime() / 1000);
+    // ^ IBKR times are NY local; -04:00 during EDT. For EST (winter) it's -05:00
+    //   but intraday bar timestamps are also in that same wall clock, so a
+    //   consistent offset is good enough for lining up on the chart.
+    markers.push({
+      time: ts,
+      position: qty > 0 ? "belowBar" : "aboveBar",
+      color: isClose ? "#ef4444" : "#10b981",
+      shape: qty > 0 ? "arrowUp" : "arrowDown",
+      text: `${isClose ? "Exit" : "Entry"} ${Math.abs(qty)} @ ${f.trade_price ?? "?"}`,
+    });
+  });
+  markers.sort((a, b) => a.time - b.time);
+  candles.setMarkers(markers);
+
+  chart.timeScale().fitContent();
+
+  // Resize with the container
+  const resizeObserver = new ResizeObserver(entries => {
+    for (const entry of entries) {
+      chart.applyOptions({ width: entry.contentRect.width });
+    }
+  });
+  resizeObserver.observe(container);
+  container._lwChart = chart;
+  container._lwObserver = resizeObserver;
+}
+
+function renderTradeChartFallback(container, symbol) {
+  container.innerHTML = "";
+  const msg = document.createElement("div");
+  msg.className = "trade-chart-fallback-msg";
+  msg.textContent = "Intraday markers unavailable (free-tier data limit) — showing live TradingView chart.";
+  container.appendChild(msg);
+  const iframe = document.createElement("iframe");
+  iframe.src = `https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(symbol)}&interval=15&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=rgba(0,0,0,0)&studies=&theme=${document.body.classList.contains("is-light") ? "light" : "dark"}&style=1&timezone=Europe%2FLondon&locale=en`;
+  iframe.style.width = "100%";
+  iframe.style.height = "300px";
+  iframe.style.border = "0";
+  iframe.allow = "fullscreen";
+  container.appendChild(iframe);
+}
+
 function closeTradeDetail() {
   const modal = $("tradeDetailModal");
   modal.hidden = true;
-  $("tradeDetailChartWrap").innerHTML = "";
+  const wrap = $("tradeDetailChartWrap");
+  if (wrap._lwObserver) { wrap._lwObserver.disconnect(); wrap._lwObserver = null; }
+  if (wrap._lwChart) { wrap._lwChart.remove(); wrap._lwChart = null; }
+  wrap.innerHTML = "";
   // Only clear overflow lock if no other modal is open
   if ($("dayModal").hidden && $("settingsModal").hidden) {
     document.body.style.overflow = "";

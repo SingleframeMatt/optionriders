@@ -102,6 +102,13 @@ class handler(BaseHTTPRequestHandler):
                 if not date:
                     return _respond(self, 400, {"error": "missing date"})
                 _respond(self, 200, jc.day_detail(token, date))
+            elif action == "bars":
+                symbol = (_param(self.path, "symbol", "") or "").upper().strip()
+                date = _param(self.path, "date", "")
+                interval = _param(self.path, "interval", "5min") or "5min"
+                if not symbol or not date:
+                    return _respond(self, 400, {"error": "symbol and date required"})
+                _respond(self, 200, jc.intraday_bars(symbol, date, interval))
             else:
                 _respond(self, 404, {"error": f"unknown action: {action}"})
         except Exception as exc:
