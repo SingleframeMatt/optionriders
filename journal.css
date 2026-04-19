@@ -620,6 +620,115 @@ body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-ev
   min-height: 16px;
 }
 
+/* ---------- Trade detail modal ---------- */
+.trade-detail-card {
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 48px);
+}
+.trade-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding-right: 40px; /* leave room for close button */
+}
+.trade-detail-kicker {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.trade-detail-kicker .ticker-pill { font-size: 12px; padding: 3px 8px; }
+.trade-detail-instrument { color: var(--text-primary); font-weight: 600; }
+.trade-detail-head h3 {
+  margin: 0;
+  font-size: 24px;
+  color: var(--text-bright);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.trade-detail-head h3 .pos { color: var(--green); }
+.trade-detail-head h3 .neg { color: var(--red); }
+.trade-detail-side-wrap { display: flex; gap: 6px; align-items: center; }
+.side-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--cyan-dim);
+  color: var(--cyan);
+  border: 1px solid var(--border-highlight);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.side-badge.is-call { background: var(--green-dim); color: var(--green); }
+.side-badge.is-put  { background: var(--red-dim); color: var(--red); }
+.side-badge.is-open { background: var(--amber-dim); color: var(--amber); }
+
+.trade-detail-body {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 20px;
+}
+@media (max-width: 800px) {
+  .trade-detail-body { grid-template-columns: 1fr; }
+}
+
+.trade-detail-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 0;
+}
+.trade-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  font-size: 13px;
+  border-top: 1px solid var(--border-subtle);
+}
+.trade-stat-row:first-child { border-top: none; }
+.trade-stat-row > span:first-child { color: var(--text-secondary); }
+.trade-stat-row > span:last-child { color: var(--text-primary); font-family: var(--font-mono); font-weight: 500; }
+.trade-stat-row > span.pos { color: var(--green); }
+.trade-stat-row > span.neg { color: var(--red); }
+
+.trade-detail-right {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.trade-detail-chart {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  min-height: 260px;
+}
+.trade-detail-chart iframe { display: block; width: 100%; border: 0; }
+
+.trade-detail-fills-wrap { min-width: 0; }
+.trade-detail-fills-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.trade-detail-fills-table th, .trade-detail-fills-table td {
+  padding: 8px 10px;
+  font-size: 12.5px;
+}
+
 /* ---------- Light theme ----------
    Opt-in by adding `is-light` to `.journal-body`. Flips the CSS custom
    properties defined at the top of this file so every component picks up
