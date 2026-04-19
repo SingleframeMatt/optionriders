@@ -318,6 +318,83 @@ function renderRecentTrades(fills) {
   if (!closes.length) tbody.innerHTML = `<tr><td colspan="3" class="muted">No closed trades yet.</td></tr>`;
 }
 
+async function loadOpenPositions() {
+  const tbody = document.querySelector("#recentTradesTable tbody");
+  tbody.innerHTML = `<tr><td colspan="3" class="muted">Loading open positions…</td></tr>`;
+  try {
+    const data = await api("/api/journal/open-positions");
+    renderOpenPositions(data.positions || []);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3" class="muted">Error: ${err.message}</td></tr>`;
+  }
+}
+
+function renderOpenPositions(positions) {
+  const tbody = document.querySelector("#recentTradesTable tbody");
+  tbody.innerHTML = "";
+  if (!positions.length) {
+    tbody.innerHTML = `<tr><td colspan="3" class="muted">No open positions.</td></tr>`;
+    return;
+  }
+  positions.forEach(p => {
+    const tr = document.createElement("tr");
+    const dateStr = fmtDisplayDate((p.open_date || (p.open_datetime || "").slice(0, 10)));
+    const timeStr = fmtDisplayTime(p.open_datetime);
+    const qty = p.position_qty ?? "";
+    // Build a trade-like object so the existing detail modal works
+    const tradeLike = {
+      ticker: p.underlying || p.symbol,
+      symbol: p.symbol,
+      instrument: formatOpenPositionInstrument(p),
+      side: p.put_call === "C" ? "CALL" : p.put_call === "P" ? "PUT" : (qty > 0 ? "BUY" : "SELL"),
+      put_call: p.put_call,
+      asset_class: p.asset_class,
+      strike: p.strike,
+      expiry: p.expiry,
+      multiplier: p.multiplier,
+      open_datetime: p.open_datetime,
+      close_datetime: null,
+      is_open: true,
+      fill_count: p.fill_count,
+      avg_entry_price: p.avg_entry_price,
+      avg_exit_price: null,
+      qty_opened: p.position_qty > 0 ? p.position_qty : 0,
+      qty_closed: 0,
+      position_qty: p.position_qty,
+      net_pnl: p.floating_pnl,
+      gross_pnl: p.floating_pnl,
+      net_after_comm: p.floating_pnl,
+      realized_pnl: 0.0,
+      commission: 0.0,
+      net_roi: null,
+      fills: p.fills || [],
+    };
+    tr.classList.add("cal-clickable");
+    tr.style.cursor = "pointer";
+    tr.addEventListener("click", () => openTradeDetail(tradeLike));
+    tr.innerHTML = `
+      <td>
+        <div class="cell-date">${dateStr}</div>
+        <div class="cell-time">${timeStr} <span class="muted" style="font-size:10px;">(open)</span></div>
+      </td>
+      <td class="sym">${formatSymbol({ symbol: p.symbol, underlying: p.underlying, asset_class: p.asset_class, strike: p.strike, expiry: p.expiry, put_call: p.put_call })}</td>
+      <td class="num ${signClass(p.floating_pnl)}">${fmt.money(p.floating_pnl)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function formatOpenPositionInstrument(p) {
+  const isOpt = p.asset_class === "OPT" || p.asset_class === "FOP";
+  if (isOpt && p.expiry && p.strike != null) {
+    const [y, m, d] = String(p.expiry).split("-");
+    const strikeNum = Number(p.strike);
+    const strikeStr = Number.isInteger(strikeNum) ? String(strikeNum) : strikeNum.toFixed(2).replace(/\.?0+$/, "");
+    const pc = p.put_call === "P" ? "PUT" : p.put_call === "C" ? "CALL" : "";
+    return `${m}-${d}-${y} ${strikeStr} ${pc}`.trim();
+  }
+  return p.underlying || p.symbol || "";
+}
+
 function renderSymbolTable(rows) {
   const tbody = document.querySelector("#symbolTable tbody");
   tbody.innerHTML = "";
@@ -1068,10 +1145,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     t.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach(x => x.classList.remove("is-active"));
       t.classList.add("is-active");
-      // Open positions tab currently shows empty table (no open-position detection yet)
-      const tbody = document.querySelector("#recentTradesTable tbody");
       if (t.dataset.tab === "open") {
-        tbody.innerHTML = `<tr><td colspan="3" class="muted">Open-position detection coming soon.</td></tr>`;
+        loadOpenPositions();
       } else {
         refresh();
       }

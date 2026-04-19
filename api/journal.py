@@ -102,6 +102,8 @@ class handler(BaseHTTPRequestHandler):
                 if not date:
                     return _respond(self, 400, {"error": "missing date"})
                 _respond(self, 200, jc.day_detail(token, date))
+            elif action == "open-positions":
+                _respond(self, 200, jc.current_open_positions(token))
             elif action == "bars":
                 symbol = (_param(self.path, "symbol", "") or "").upper().strip()
                 date = _param(self.path, "date", "")
