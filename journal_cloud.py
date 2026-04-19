@@ -399,6 +399,80 @@ def calendar_month(bearer_token: str, year: int, month: int,
     }
 
 
+def current_open_positions(bearer_token: str) -> dict:
+    """
+    Return every position that's still open (net qty != 0) at end-of-fills,
+    globally — used by the "Open positions" tab.
+
+    For each bucket we walk fills chronologically until the current cycle
+    (last stretch from position=0 to whatever remains). The cycle's fills
+    are summed into a floating P&L estimate using per-fill mtm_pnl in base
+    currency. Excludes CASH/FX.
+    """
+    rows = fetch_all_user_fills(bearer_token)
+    from collections import defaultdict
+    buckets: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for r in rows:
+        if (r.get("asset_class") or "") == "CASH":
+            continue
+        key = ((r.get("account") or ""), (r.get("symbol") or r.get("underlying") or ""))
+        if not key[1]:
+            continue
+        buckets[key].append(r)
+
+    out: list[dict] = []
+    for (account, symbol), fills in buckets.items():
+        fills.sort(key=lambda x: (x.get("datetime") or "", x.get("id") or 0))
+        position = 0.0
+        cycle_fills: list[dict] = []
+        cycle_open_fill = None
+        for f in fills:
+            qty = f.get("quantity") or 0.0
+            if qty == 0:
+                continue
+            if position == 0:
+                cycle_fills = []
+                cycle_open_fill = f
+            position += qty
+            cycle_fills.append(f)
+            if abs(position) < 1e-9:
+                position = 0.0
+                cycle_fills = []
+                cycle_open_fill = None
+        if cycle_open_fill and abs(position) >= 1e-9:
+            mtm = 0.0
+            cost_basis = 0.0
+            for f in cycle_fills:
+                fx = f.get("fx_rate_to_base") or 1.0
+                mtm += (f.get("mtm_pnl") or 0.0) * fx
+                # Signed cost basis in base ccy: qty × price × multiplier × fx
+                qty = f.get("quantity") or 0.0
+                price = f.get("trade_price") or 0.0
+                mult = f.get("multiplier") or 1.0
+                cost_basis += qty * price * mult * fx
+            metrics = _trade_metrics(cycle_fills)
+            out.append({
+                "account": account,
+                "symbol": symbol,
+                "underlying": cycle_open_fill.get("underlying") or symbol,
+                "asset_class": cycle_open_fill.get("asset_class"),
+                "put_call": cycle_open_fill.get("put_call"),
+                "strike": cycle_open_fill.get("strike"),
+                "expiry": cycle_open_fill.get("expiry"),
+                "multiplier": cycle_open_fill.get("multiplier"),
+                "open_datetime": cycle_open_fill.get("datetime"),
+                "open_date": cycle_open_fill.get("trade_date"),
+                "fill_count": len(cycle_fills),
+                "position_qty": round(position, 4),
+                "avg_entry_price": metrics["avg_entry_price"],
+                "cost_basis_base": round(cost_basis, 2),
+                "floating_pnl": round(mtm, 2),
+                "fills": [_fill_summary(f) for f in cycle_fills],
+            })
+    out.sort(key=lambda p: p.get("open_datetime") or "", reverse=True)
+    return {"positions": out, "count": len(out)}
+
+
 def _open_positions_opened_on(rows: list[dict], date_iso: str) -> list[dict]:
     """
     Return positions that are still open AND whose current cycle started on

@@ -2925,7 +2925,9 @@ function renderTickerDetailBody(tickerData) {
           <div class="ticker-detail-panel-title">Price Structure</div>
         </div>
         <div class="chart-container ticker-detail-chart">
-          <canvas class="ticker-detail-canvas" data-ticker="${tickerData.ticker}"></canvas>
+          <iframe class="ticker-detail-tv"
+                  src="https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(tickerData.ticker)}&interval=15&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=rgba(0,0,0,0)&studies=&theme=dark&style=1&timezone=Europe%2FLondon&locale=en"
+                  frameborder="0" allowfullscreen allow="fullscreen"></iframe>
         </div>
         <div class="ticker-triggers">
           <div class="trigger trigger-bull">▲ ${escapeHtml(tickerData.bullTrigger || 'N/A')}</div>
@@ -3025,17 +3027,8 @@ async function openTickerDetailModal(ticker) {
   body.innerHTML       = renderTickerDetailBody(tickerData);
   modal.classList.add('active');
 
-  requestAnimationFrame(() => {
-    const canvas = body.querySelector('.ticker-detail-canvas');
-    const data   = CHART_DATA[tickerData.ticker];
-    const levels = getLevelsForTicker(tickerData.ticker);
-    if (canvas && data) {
-      drawCandlestickChart(canvas, data, levels, {
-        showRichHeader: true,
-        symbol: tickerData.ticker,
-      });
-    }
-  });
+  // Chart is rendered as a TradingView iframe inside renderTickerDetailBody,
+  // so no canvas-drawing step is needed here.
 }
 
 function closeTickerDetailModal() {
