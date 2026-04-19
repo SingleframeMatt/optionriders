@@ -82,6 +82,42 @@ def _coerce(row: dict) -> dict:
     return row
 
 
+# Supabase's hosted PostgREST caps responses at 1000 rows per request regardless
+# of the `limit` query param. Paginate with Range headers to pull everything.
+_PAGE_SIZE = 1000
+
+
+def _paginated_get(bearer_token: str, params: list[tuple[str, str]],
+                   cap: int | None = None, timeout: int = 30) -> list[dict]:
+    """GET /journal_fills in 1000-row pages until exhausted (or cap reached)."""
+    out: list[dict] = []
+    offset = 0
+    while True:
+        page_end = offset + _PAGE_SIZE - 1
+        headers = _rest_headers(bearer_token, {
+            "Range-Unit": "items",
+            "Range": f"{offset}-{page_end}",
+            "Prefer": "count=exact",
+        })
+        resp = requests.get(
+            f"{SUPABASE_URL}/rest/v1/journal_fills",
+            headers=headers,
+            params=params,
+            timeout=timeout,
+        )
+        # 200 (exact fit) and 206 (partial content) are both success for Range reads.
+        if resp.status_code not in (200, 206):
+            raise RuntimeError(f"_paginated_get: {resp.status_code} {resp.text[:200]}")
+        batch = resp.json()
+        out.extend(_coerce(r) for r in batch)
+        if len(batch) < _PAGE_SIZE:
+            break
+        offset += _PAGE_SIZE
+        if cap is not None and len(out) >= cap:
+            return out[:cap]
+    return out
+
+
 def fetch_user_fills(bearer_token: str, filters: dict | None = None,
                      limit: int | None = None) -> list[dict]:
     """Read user's fills via PostgREST. RLS enforces user scoping."""
@@ -97,31 +133,12 @@ def fetch_user_fills(bearer_token: str, filters: dict | None = None,
         # underlying match OR symbol match
         params.append(("or", f"(symbol.eq.{filters['symbol']},underlying.eq.{filters['symbol']})"))
     params.append(("order", "datetime.desc"))
-    if limit:
-        params.append(("limit", str(limit)))
-
-    resp = requests.get(
-        f"{SUPABASE_URL}/rest/v1/journal_fills",
-        headers=_rest_headers(bearer_token),
-        params=params,
-        timeout=15,
-    )
-    if resp.status_code != 200:
-        raise RuntimeError(f"fetch_user_fills: {resp.status_code} {resp.text[:200]}")
-    return [_coerce(r) for r in resp.json()]
+    return _paginated_get(bearer_token, params, cap=limit, timeout=15)
 
 
 def fetch_all_user_fills(bearer_token: str) -> list[dict]:
     """Whole-history fetch (for round-trip matching). No date filter."""
-    resp = requests.get(
-        f"{SUPABASE_URL}/rest/v1/journal_fills",
-        headers=_rest_headers(bearer_token),
-        params=[("order", "datetime.asc"), ("limit", "50000")],
-        timeout=30,
-    )
-    if resp.status_code != 200:
-        raise RuntimeError(f"fetch_all_user_fills: {resp.status_code} {resp.text[:200]}")
-    return [_coerce(r) for r in resp.json()]
+    return _paginated_get(bearer_token, [("order", "datetime.asc")], timeout=30)
 
 
 def insert_fills(bearer_token: str, user_id: str, rows: list[dict]) -> dict:
