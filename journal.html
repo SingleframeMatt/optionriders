@@ -135,6 +135,10 @@
           <button class="cal-nav-btn" id="calNext" type="button" aria-label="Next month">›</button>
           <button class="btn btn-ghost btn-sm" id="calThisMonth" type="button">This month</button>
         </div>
+        <div class="view-toggle" role="tablist" aria-label="View mode">
+          <button class="view-toggle-btn is-active" type="button" data-view="day" role="tab" aria-selected="true">Day</button>
+          <button class="view-toggle-btn" type="button" data-view="week" role="tab" aria-selected="false">Week</button>
+        </div>
         <div class="calendar-stats">
           <span class="cal-stat-label">Monthly stats:</span>
           <span class="cal-stat-chip pos" id="calMonthPnl">—</span>
@@ -281,6 +285,61 @@ IBKR_FLEX_QUERY_ID=123456</pre>
     </div>
   </div>
 
+  <!-- Week-detail modal -->
+  <div class="day-modal" id="weekModal" hidden>
+    <div class="day-modal-backdrop" id="weekModalBackdrop"></div>
+    <div class="day-modal-card week-modal-card" role="dialog" aria-modal="true" aria-labelledby="weekModalTitle">
+      <button class="day-modal-close" id="weekModalClose" type="button" aria-label="Close">×</button>
+      <header class="day-modal-head">
+        <div>
+          <h3 id="weekModalTitle">—</h3>
+          <span class="day-modal-subtitle">Net P&amp;L <span id="weekModalPnl">—</span></span>
+        </div>
+      </header>
+
+      <div class="week-day-strip" id="weekDayStrip"></div>
+
+      <div class="day-modal-top">
+        <canvas id="weekModalChart" height="120"></canvas>
+        <div class="day-modal-stats">
+          <div><span class="stat-label">Total Trades</span><span class="stat-value" id="weekModalTotal">—</span></div>
+          <div><span class="stat-label">Gross P&amp;L</span><span class="stat-value" id="weekModalGross">—</span></div>
+          <div><span class="stat-label">Winners / Losers</span><span class="stat-value" id="weekModalWL">—</span></div>
+          <div><span class="stat-label">Commissions</span><span class="stat-value" id="weekModalComm">—</span></div>
+          <div><span class="stat-label">Win Rate</span><span class="stat-value" id="weekModalWinRate">—</span></div>
+          <div><span class="stat-label">Volume</span><span class="stat-value" id="weekModalVolume">—</span></div>
+          <div><span class="stat-label">Profit Factor</span><span class="stat-value" id="weekModalPF">—</span></div>
+        </div>
+      </div>
+
+      <div class="zella-scale" id="weekZellaScale">
+        <div class="zella-scale-label">Zella Scale</div>
+        <div class="zella-scale-bar">
+          <span class="zella-scale-loss" id="weekMaxLoss">—</span>
+          <div class="zella-scale-track"><div class="zella-scale-fill" id="weekScaleFill"></div></div>
+          <span class="zella-scale-profit" id="weekMaxProfit">—</span>
+        </div>
+      </div>
+
+      <div class="table-wrap day-modal-table-wrap">
+        <table class="journal-table" id="weekModalTable">
+          <thead>
+            <tr>
+              <th>Day</th>
+              <th>Open time</th>
+              <th>Ticker</th>
+              <th>Side</th>
+              <th>Instrument</th>
+              <th class="num">Net P&amp;L</th>
+              <th class="num">Net ROI</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- Trade detail modal -->
   <div class="day-modal" id="tradeDetailModal" hidden>
     <div class="day-modal-backdrop" id="tradeDetailBackdrop"></div>
@@ -319,6 +378,19 @@ IBKR_FLEX_QUERY_ID=123456</pre>
 
         <div class="trade-detail-right">
           <div class="trade-detail-chart" id="tradeDetailChartWrap"></div>
+          <div class="trade-detail-notes-wrap">
+            <div class="trade-detail-notes-head">
+              <span>Notes</span>
+              <span class="trade-detail-notes-status" id="tradeDetailNotesStatus"></span>
+            </div>
+            <textarea
+              id="tradeDetailNotes"
+              class="trade-detail-notes"
+              rows="3"
+              placeholder="Journal this trade — what was the setup, what did you miss, what would you repeat?"
+              disabled
+            ></textarea>
+          </div>
           <div class="trade-detail-fills-wrap">
             <div class="trade-detail-fills-head">Executions</div>
             <table class="journal-table trade-detail-fills-table">

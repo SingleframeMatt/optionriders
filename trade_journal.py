@@ -134,6 +134,12 @@ _EXPECTED_COLUMNS = {
     "user_id": "TEXT",
 }
 
+_NOTES_EXPECTED_COLUMNS = {
+    "user_id": "TEXT",
+    "close_datetime": "TEXT",
+    "updated_at": "TEXT",
+}
+
 
 def _migrate(conn: sqlite3.Connection) -> None:
     """Idempotently add any columns missing from older DBs."""
@@ -148,6 +154,18 @@ def _migrate(conn: sqlite3.Connection) -> None:
     local = os.environ.get("LOCAL_DEV_USER_ID", "local")
     conn.execute("UPDATE fills SET user_id = ? WHERE user_id IS NULL", [local])
     conn.execute("CREATE INDEX IF NOT EXISTS idx_fills_user ON fills(user_id)")
+
+    notes_cols = {row["name"] for row in conn.execute("PRAGMA table_info(notes)")}
+    for col, ctype in _NOTES_EXPECTED_COLUMNS.items():
+        if col not in notes_cols:
+            try:
+                conn.execute(f"ALTER TABLE notes ADD COLUMN {col} {ctype}")
+            except sqlite3.OperationalError:
+                pass
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_trade "
+        "ON notes(user_id, symbol, close_datetime)"
+    )
 
 
 def _to_float(value: Any) -> float | None:
@@ -829,6 +847,7 @@ def day_detail(date_iso: str, user_id: str | None = None) -> dict[str, Any]:
         trades_out.append({
             "time": time_str,
             "ticker": t["underlying"] or t["symbol"],
+            "symbol": t["symbol"],
             "side": side,
             "instrument": instrument,
             "asset_class": meta.get("asset_class"),
@@ -839,6 +858,9 @@ def day_detail(date_iso: str, user_id: str | None = None) -> dict[str, Any]:
             "realized_pnl": t["realized_pnl"],
             "commission": t["commission"],
             "net_roi": round(roi, 2) if roi is not None else None,
+            "open_datetime": t["open_datetime"],
+            "close_datetime": t["close_datetime"],
+            "put_call": meta.get("put_call"),
         })
 
     return {
@@ -858,6 +880,194 @@ def day_detail(date_iso: str, user_id: str | None = None) -> dict[str, Any]:
         "intraday": intraday,
         "trades": trades_out,
     }
+
+
+def week_detail(start_iso: str, user_id: str | None = None) -> dict[str, Any]:
+    """
+    Aggregate a single Sun–Sat week. Returns per-day rollups, weekly totals,
+    and the full trade list (same shape day_detail emits), for the Week view.
+    """
+    init_db()
+    from datetime import timedelta
+
+    start_dt = datetime.fromisoformat(start_iso).date()
+    days_iso = [(start_dt + timedelta(days=i)).isoformat() for i in range(7)]
+    end_iso = days_iso[-1]
+
+    user_clause = " AND user_id = ?" if user_id else ""
+    user_params = [user_id] if user_id else []
+    with _connect() as conn:
+        all_rows = [dict(r) for r in conn.execute(
+            f"SELECT * FROM fills WHERE 1=1{user_clause}", user_params
+        ).fetchall()]
+        week_rows = [dict(r) for r in conn.execute(
+            f"SELECT * FROM fills WHERE trade_date >= ? AND trade_date <= ? "
+            f"AND asset_class != 'CASH'{user_clause} ORDER BY datetime ASC",
+            [start_iso, end_iso, *user_params],
+        ).fetchall()]
+
+    all_trades = _build_trades(all_rows)
+    week_trades = [t for t in all_trades if t["close_date"] in days_iso]
+
+    per_day: dict[str, dict[str, Any]] = {d: {"pnl": 0.0, "trades": 0, "wins": 0} for d in days_iso}
+    for t in week_trades:
+        d = t["close_date"]
+        b = per_day.get(d)
+        if not b:
+            continue
+        b["pnl"] += t["gross_pnl"]
+        b["trades"] += 1
+        if t["is_win"]:
+            b["wins"] += 1
+
+    day_summaries = []
+    weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    for d in days_iso:
+        dt = datetime.fromisoformat(d).date()
+        b = per_day[d]
+        win_rate = (b["wins"] / b["trades"] * 100) if b["trades"] else 0.0
+        day_summaries.append({
+            "date": d,
+            "day": dt.day,
+            "weekday": weekday_names[dt.weekday()],
+            "pnl": round(b["pnl"], 2),
+            "trades": b["trades"],
+            "win_rate": round(win_rate, 2),
+        })
+
+    pnls = [t["gross_pnl"] for t in week_trades]
+    wins = [p for p in pnls if p > 0]
+    losses = [p for p in pnls if p < 0]
+    gross_profit = sum(wins)
+    gross_loss = sum(losses)
+    commissions = sum(t["commission"] for t in week_trades)
+    volume = sum(abs(r["quantity"] or 0.0) for r in week_rows)
+    max_profit = max(pnls) if pnls else 0.0
+    max_loss = min(pnls) if pnls else 0.0
+
+    # Reuse day_detail's per-trade shaping for consistency
+    by_symbol_map: dict[str, dict[str, Any]] = {}
+    for r in week_rows:
+        by_symbol_map.setdefault(r["symbol"], r)
+
+    trades_out: list[dict[str, Any]] = []
+    for t in sorted(week_trades, key=lambda x: x["close_datetime"] or ""):
+        meta = by_symbol_map.get(t["symbol"], {})
+        is_opt = meta.get("asset_class") in ("OPT", "FOP")
+        side = (meta.get("put_call") or "").upper() if is_opt else ""
+        if is_opt and side == "C":
+            side = "CALL"
+        elif is_opt and side == "P":
+            side = "PUT"
+        if not is_opt:
+            side = (meta.get("buy_sell") or "").upper()
+        strike = meta.get("strike")
+        expiry = meta.get("expiry")
+        if is_opt and expiry and strike is not None:
+            y, m, d = expiry.split("-")
+            strike_s = str(int(strike)) if float(strike).is_integer() else f"{strike:.2f}".rstrip("0").rstrip(".")
+            pc = "PUT" if meta.get("put_call") == "P" else "CALL" if meta.get("put_call") == "C" else ""
+            instrument = f"{m}-{d}-{y} {strike_s} {pc}".strip()
+        else:
+            instrument = t["underlying"] or t["symbol"]
+
+        roi = None
+        basis = meta.get("cost_basis")
+        if not basis:
+            qty = abs(meta.get("quantity") or 0.0)
+            mult = meta.get("multiplier") or 1.0
+            price = meta.get("trade_price") or 0.0
+            basis = qty * mult * price if price else None
+        if basis:
+            roi = t["net_pnl"] / abs(basis) * 100.0
+
+        open_iso = t["open_datetime"] or t["close_datetime"] or ""
+        try:
+            time_str = datetime.fromisoformat(open_iso).strftime("%H:%M:%S") if open_iso else ""
+        except ValueError:
+            time_str = open_iso[11:19] if open_iso else ""
+
+        trades_out.append({
+            "time": time_str,
+            "trade_date": t["close_date"],
+            "ticker": t["underlying"] or t["symbol"],
+            "symbol": t["symbol"],
+            "side": side,
+            "instrument": instrument,
+            "asset_class": meta.get("asset_class"),
+            "fill_count": t["fill_count"],
+            "net_pnl": t["gross_pnl"],
+            "gross_pnl": t["gross_pnl"],
+            "net_after_comm": t["net_pnl"],
+            "realized_pnl": t["realized_pnl"],
+            "commission": t["commission"],
+            "net_roi": round(roi, 2) if roi is not None else None,
+            "open_datetime": t["open_datetime"],
+            "close_datetime": t["close_datetime"],
+            "put_call": meta.get("put_call"),
+        })
+
+    return {
+        "start": start_iso,
+        "end": end_iso,
+        "days": day_summaries,
+        "total_trades": len(week_trades),
+        "gross_pnl": round(sum(pnls), 2),
+        "net_pnl": round(sum(pnls), 2),
+        "commissions": round(commissions, 2),
+        "wins": len(wins),
+        "losses": len(losses),
+        "win_rate": round(len(wins) / len(week_trades) * 100, 2) if week_trades else 0.0,
+        "profit_factor": round(gross_profit / abs(gross_loss), 3) if gross_loss else 0.0,
+        "volume": round(volume, 2),
+        "max_profit": round(max_profit, 2),
+        "max_loss": round(max_loss, 2),
+        "trades": trades_out,
+    }
+
+
+def get_trade_note(user_id: str, symbol: str, close_datetime: str) -> dict[str, Any]:
+    init_db()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT body, updated_at FROM notes "
+            "WHERE user_id = ? AND symbol = ? AND close_datetime = ? LIMIT 1",
+            [user_id, symbol, close_datetime],
+        ).fetchone()
+    return {
+        "symbol": symbol,
+        "close_datetime": close_datetime,
+        "body": (row["body"] if row else "") or "",
+        "updated_at": (row["updated_at"] if row else None),
+    }
+
+
+def set_trade_note(user_id: str, symbol: str, close_datetime: str, body: str,
+                   trade_date: str | None = None) -> dict[str, Any]:
+    init_db()
+    now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    body = body or ""
+    with _connect() as conn:
+        existing = conn.execute(
+            "SELECT id FROM notes WHERE user_id = ? AND symbol = ? AND close_datetime = ? LIMIT 1",
+            [user_id, symbol, close_datetime],
+        ).fetchone()
+        if existing:
+            if body.strip():
+                conn.execute(
+                    "UPDATE notes SET body = ?, updated_at = ? WHERE id = ?",
+                    [body, now_iso, existing["id"]],
+                )
+            else:
+                conn.execute("DELETE FROM notes WHERE id = ?", [existing["id"]])
+        elif body.strip():
+            conn.execute(
+                "INSERT INTO notes (user_id, symbol, close_datetime, trade_date, body, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [user_id, symbol, close_datetime, trade_date, body, now_iso, now_iso],
+            )
+        conn.commit()
+    return {"ok": True, "body": body, "updated_at": now_iso if body.strip() else None}
 
 
 def equity_curve(filters: dict[str, Any] | None = None) -> list[dict[str, Any]]:

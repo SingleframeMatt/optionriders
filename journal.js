@@ -55,6 +55,9 @@ const state = {
   autoSyncTimer: null,
   fxRate: 1.0,            // base → display
   baseAlreadyApplied: false,
+  viewMode: localStorage.getItem("journal_view_mode") || "day",  // "day" | "week"
+  noteSaveTimer: null,
+  activeNoteKey: null,
 };
 
 const currencySymbol = { USD: "$", GBP: "£", EUR: "€" };
@@ -471,11 +474,29 @@ function renderCalendar(data) {
   spacer.className = "cal-weekday cal-week-spacer";
   grid.appendChild(spacer);
 
+  // Pre-compute each calendar-row's Sunday ISO date so week cards are clickable.
+  // Row 0's Sunday = (first of month) - lead_blank days.
+  const weekStartsAt = [];
+  const firstOfMonth = new Date(data.year, data.month - 1, 1);
+  for (let wi = 0; wi < (data.weeks || []).length; wi++) {
+    const sunday = new Date(firstOfMonth);
+    sunday.setDate(firstOfMonth.getDate() - data.lead_blank + wi * 7);
+    const y = sunday.getFullYear();
+    const m = String(sunday.getMonth() + 1).padStart(2, "0");
+    const d = String(sunday.getDate()).padStart(2, "0");
+    weekStartsAt.push(`${y}-${m}-${d}`);
+  }
+
   let weekIndex = 0;
   const appendWeekCard = () => {
     const w = data.weeks[weekIndex] || { pnl: 0, active_days: 0 };
+    const startIso = weekStartsAt[weekIndex];
     const card = document.createElement("div");
     card.className = "week-card " + (w.active_days ? signClass(w.pnl) : "empty");
+    if (startIso) {
+      card.classList.add("clickable");
+      card.addEventListener("click", () => openWeekModal(startIso));
+    }
     card.innerHTML = `
       <div class="week-title">Week ${weekIndex + 1}</div>
       <div class="week-pnl">${w.active_days ? fmt.money(w.pnl, { compact: true }) : fmt.money(0, { compact: true })}</div>
@@ -507,7 +528,13 @@ function renderCalendar(data) {
     if (d.trades > 0) {
       cell.classList.add(d.pnl > 0 ? "cal-pos" : d.pnl < 0 ? "cal-neg" : "cal-neutral");
       cell.classList.add("cal-clickable");
-      cell.addEventListener("click", () => openDayModal(d.date));
+      cell.addEventListener("click", () => {
+        if (state.viewMode === "week") {
+          openWeekModal(weekStartFor(d.date));
+        } else {
+          openDayModal(d.date);
+        }
+      });
     }
     const pnlLine = d.trades > 0
       ? `<div class="cal-cell-pnl ${signClass(d.pnl)}">${fmt.money(d.pnl, { compact: true })}</div>
@@ -574,6 +601,186 @@ async function openDayModal(dateIso) {
 function closeDayModal() {
   $("dayModal").hidden = true;
   document.body.style.overflow = "";
+}
+
+/* ---------- week-detail modal ---------- */
+
+function weekStartFor(dateIso) {
+  // Sun-anchored week start (matches backend/calendar)
+  const d = new Date(dateIso + "T00:00:00");
+  const daysBack = d.getDay(); // Sun=0..Sat=6
+  d.setDate(d.getDate() - daysBack);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+async function openWeekModal(startIso) {
+  const modal = $("weekModal");
+  const body = document.querySelector("#weekModalTable tbody");
+  body.innerHTML = `<tr><td colspan="7" class="muted">Loading…</td></tr>`;
+  modal.hidden = false;
+  document.body.style.overflow = "hidden";
+
+  try {
+    const w = await api(`/api/journal/week?start=${encodeURIComponent(startIso)}`);
+    const startObj = new Date(startIso + "T00:00:00");
+    const endObj = new Date(w.end + "T00:00:00");
+    const sameMonth = startObj.getMonth() === endObj.getMonth();
+    const startLabel = startObj.toLocaleDateString(undefined,
+      { month: "short", day: "2-digit" });
+    const endLabel = endObj.toLocaleDateString(undefined,
+      sameMonth ? { day: "2-digit", year: "numeric" }
+                : { month: "short", day: "2-digit", year: "numeric" });
+    $("weekModalTitle").textContent = `${startLabel} – ${endLabel}`;
+
+    const pnlEl = $("weekModalPnl");
+    pnlEl.textContent = fmt.money(w.net_pnl);
+    pnlEl.className = signClass(w.net_pnl);
+
+    $("weekModalTotal").textContent = w.total_trades;
+    const gross = $("weekModalGross");
+    gross.textContent = fmt.money(w.gross_pnl);
+    gross.className = "stat-value " + signClass(w.gross_pnl);
+    $("weekModalWL").textContent = `${w.wins} / ${w.losses}`;
+    $("weekModalComm").textContent = fmt.money(w.commissions, { sign: false });
+    $("weekModalWinRate").textContent = fmt.pct(w.win_rate);
+    $("weekModalVolume").textContent = fmt.num(w.volume, 0);
+    $("weekModalPF").textContent = w.profit_factor ? Number(w.profit_factor).toFixed(2) : "—";
+
+    renderWeekDayStrip(w.days);
+    drawWeekBars(w.days);
+    renderZellaScale(w);
+    renderWeekTrades(w.days, w.trades);
+  } catch (err) {
+    body.innerHTML = `<tr><td colspan="7" class="muted">Error: ${err.message}</td></tr>`;
+  }
+}
+
+function closeWeekModal() {
+  $("weekModal").hidden = true;
+  // Only release scroll lock if no other modal is on top
+  if ($("tradeDetailModal").hidden && $("dayModal").hidden && $("settingsModal").hidden) {
+    document.body.style.overflow = "";
+  }
+}
+
+function renderWeekDayStrip(days) {
+  const strip = $("weekDayStrip");
+  strip.innerHTML = "";
+  days.forEach(d => {
+    const card = document.createElement("div");
+    const cls = d.trades > 0 ? (d.pnl > 0 ? "pos" : d.pnl < 0 ? "neg" : "") : "empty";
+    card.className = `week-day-card ${cls}`;
+    card.innerHTML = `
+      <div class="wd-label">${d.weekday} ${d.day}</div>
+      <div class="wd-pnl ${d.trades ? signClass(d.pnl) : "muted"}">${d.trades ? fmt.money(d.pnl, { compact: true }) : "—"}</div>
+      <div class="wd-sub">${d.trades ? `${d.trades} trade${d.trades === 1 ? "" : "s"}` : ""}</div>`;
+    if (d.trades > 0) {
+      card.style.cursor = "pointer";
+      card.addEventListener("click", () => {
+        closeWeekModal();
+        openDayModal(d.date);
+      });
+    }
+    strip.appendChild(card);
+  });
+}
+
+function drawWeekBars(days) {
+  const canvas = $("weekModalChart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 480;
+  const h = canvas.clientHeight || 120;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const styles = getComputedStyle(document.body);
+  const axisColor = styles.getPropertyValue("--chart-axis").trim() || "rgba(255,255,255,0.45)";
+  const zeroColor = styles.getPropertyValue("--chart-zero").trim() || "rgba(255,255,255,0.22)";
+  const greenColor = styles.getPropertyValue("--green").trim() || "#10b981";
+  const redColor = styles.getPropertyValue("--red").trim() || "#ef4444";
+
+  const pad = { top: 10, right: 10, bottom: 22, left: 30 };
+  const innerW = w - pad.left - pad.right;
+  const innerH = h - pad.top - pad.bottom;
+
+  const max = Math.max(1, ...days.map(d => Math.abs(d.pnl)));
+  const zeroY = pad.top + innerH / 2;
+
+  ctx.strokeStyle = zeroColor;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad.left, zeroY);
+  ctx.lineTo(pad.left + innerW, zeroY);
+  ctx.stroke();
+
+  const barW = innerW / days.length * 0.55;
+  const slotW = innerW / days.length;
+  ctx.fillStyle = axisColor;
+  ctx.font = "11px Inter, system-ui, sans-serif";
+  ctx.textAlign = "center";
+
+  days.forEach((d, i) => {
+    const cx = pad.left + slotW * (i + 0.5);
+    const yScale = (Math.abs(d.pnl) / max) * (innerH / 2 - 2);
+    if (d.pnl >= 0) {
+      ctx.fillStyle = greenColor;
+      ctx.fillRect(cx - barW / 2, zeroY - yScale, barW, yScale);
+    } else {
+      ctx.fillStyle = redColor;
+      ctx.fillRect(cx - barW / 2, zeroY, barW, yScale);
+    }
+    ctx.fillStyle = axisColor;
+    ctx.fillText(d.weekday, cx, h - 6);
+  });
+}
+
+function renderZellaScale(w) {
+  $("weekMaxLoss").textContent = w.max_loss ? fmt.money(w.max_loss) : fmt.money(0);
+  $("weekMaxProfit").textContent = w.max_profit ? fmt.money(w.max_profit) : fmt.money(0);
+  const range = Math.max(1, Math.abs(w.max_profit) + Math.abs(w.max_loss));
+  const balancePoint = (Math.abs(w.max_loss) + w.net_pnl) / range * 100;
+  const clamped = Math.max(0, Math.min(100, balancePoint));
+  $("weekScaleFill").style.left = `${clamped}%`;
+}
+
+function renderWeekTrades(days, trades) {
+  const tbody = document.querySelector("#weekModalTable tbody");
+  tbody.innerHTML = "";
+  if (!trades.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="muted">No closed trades this week.</td></tr>`;
+    return;
+  }
+  const weekdayByDate = new Map(days.map(d => [d.date, `${d.weekday} ${d.day}`]));
+  trades.forEach(t => {
+    const tr = document.createElement("tr");
+    const sideClass = t.side === "C" || t.side === "CALL" || t.side === "BUY" ? "side-call" :
+                      t.side === "P" || t.side === "PUT" || t.side === "SELL" ? "side-put" : "";
+    const sideLabel = t.side === "C" ? "CALL" : t.side === "P" ? "PUT" : t.side;
+    const roi = t.net_roi != null ? (t.net_roi >= 0 ? `${t.net_roi.toFixed(2)}%` : `(${Math.abs(t.net_roi).toFixed(2)}%)`) : "—";
+    const dayLabel = weekdayByDate.get(t.trade_date) || "";
+    tr.classList.add("cal-clickable");
+    tr.style.cursor = "pointer";
+    tr.addEventListener("click", () => {
+      closeWeekModal();
+      openTradeDetail(t);
+    });
+    tr.innerHTML = `
+      <td class="week-cell-day">${dayLabel}</td>
+      <td>${t.time || ""}</td>
+      <td><span class="ticker-pill">${t.ticker || ""}</span></td>
+      <td class="${sideClass}">${sideLabel || ""}</td>
+      <td>${t.instrument || ""}</td>
+      <td class="num ${signClass(t.net_pnl)}">${fmt.money(t.net_pnl)}</td>
+      <td class="num ${signClass(t.net_roi)}">${roi}</td>`;
+    tbody.appendChild(tr);
+  });
 }
 
 function renderDayTrades(trades) {
@@ -688,8 +895,76 @@ function openTradeDetail(trade) {
     });
   }
 
+  // Notes: load existing note for this trade
+  loadTradeNote(trade);
+
   modal.hidden = false;
   document.body.style.overflow = "hidden";
+}
+
+/* ---------- trade notes ---------- */
+
+function tradeNoteKey(trade) {
+  const symbol = trade.symbol || trade.ticker;
+  const closeDt = trade.close_datetime;
+  if (!symbol || !closeDt) return null;
+  return { symbol, close_datetime: closeDt, trade_date: (closeDt || "").slice(0, 10) };
+}
+
+async function loadTradeNote(trade) {
+  const textarea = $("tradeDetailNotes");
+  const status = $("tradeDetailNotesStatus");
+  const key = tradeNoteKey(trade);
+  state.activeNoteKey = key;
+  if (state.noteSaveTimer) { clearTimeout(state.noteSaveTimer); state.noteSaveTimer = null; }
+
+  if (!key) {
+    textarea.value = "";
+    textarea.disabled = true;
+    status.textContent = trade.is_open ? "Notes available once the trade closes" : "Note unavailable";
+    return;
+  }
+
+  textarea.value = "";
+  textarea.disabled = true;
+  status.textContent = "Loading…";
+  try {
+    const qs = `symbol=${encodeURIComponent(key.symbol)}&close_datetime=${encodeURIComponent(key.close_datetime)}`;
+    const n = await api(`/api/journal/trade-note?${qs}`);
+    // Guard against stale responses if the user clicked a different trade
+    if (state.activeNoteKey !== key) return;
+    textarea.value = n.body || "";
+    textarea.disabled = false;
+    status.textContent = n.updated_at ? `Saved · ${new Date(n.updated_at).toLocaleString()}` : "";
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+    textarea.disabled = false;
+  }
+}
+
+function scheduleNoteSave() {
+  if (state.noteSaveTimer) clearTimeout(state.noteSaveTimer);
+  $("tradeDetailNotesStatus").textContent = "Saving…";
+  state.noteSaveTimer = setTimeout(saveTradeNote, 600);
+}
+
+async function saveTradeNote() {
+  const key = state.activeNoteKey;
+  if (!key) return;
+  const body = $("tradeDetailNotes").value;
+  const status = $("tradeDetailNotesStatus");
+  try {
+    const r = await api("/api/journal/trade-note", {
+      method: "POST",
+      body: JSON.stringify({ ...key, body }),
+    });
+    if (state.activeNoteKey !== key) return;
+    status.textContent = r.updated_at
+      ? `Saved · ${new Date(r.updated_at).toLocaleString()}`
+      : body.trim() ? "Saved" : "";
+  } catch (err) {
+    status.textContent = `Error: ${err.message}`;
+  }
 }
 
 async function renderTradeChart(container, symbol, trade) {
@@ -795,7 +1070,7 @@ function closeTradeDetail() {
   if (wrap._lwChart) { wrap._lwChart.remove(); wrap._lwChart = null; }
   wrap.innerHTML = "";
   // Only clear overflow lock if no other modal is open
-  if ($("dayModal").hidden && $("settingsModal").hidden) {
+  if ($("dayModal").hidden && $("weekModal").hidden && $("settingsModal").hidden) {
     document.body.style.overflow = "";
   }
 }
@@ -1154,8 +1429,27 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   $("dayModalClose").addEventListener("click", closeDayModal);
   $("dayModalBackdrop").addEventListener("click", closeDayModal);
+  $("weekModalClose").addEventListener("click", closeWeekModal);
+  $("weekModalBackdrop").addEventListener("click", closeWeekModal);
   $("tradeDetailClose").addEventListener("click", closeTradeDetail);
   $("tradeDetailBackdrop").addEventListener("click", closeTradeDetail);
+  $("tradeDetailNotes").addEventListener("input", scheduleNoteSave);
+  $("tradeDetailNotes").addEventListener("blur", () => {
+    if (state.noteSaveTimer) { clearTimeout(state.noteSaveTimer); state.noteSaveTimer = null; saveTradeNote(); }
+  });
+  document.querySelectorAll(".view-toggle-btn").forEach(btn => {
+    if (btn.dataset.view === state.viewMode) btn.classList.add("is-active");
+    else btn.classList.remove("is-active");
+    btn.setAttribute("aria-selected", btn.dataset.view === state.viewMode ? "true" : "false");
+    btn.addEventListener("click", () => {
+      state.viewMode = btn.dataset.view;
+      localStorage.setItem("journal_view_mode", state.viewMode);
+      document.querySelectorAll(".view-toggle-btn").forEach(b => {
+        b.classList.toggle("is-active", b.dataset.view === state.viewMode);
+        b.setAttribute("aria-selected", b.dataset.view === state.viewMode ? "true" : "false");
+      });
+    });
+  });
   $("settingsBtn").addEventListener("click", openSettings);
   $("settingsClose").addEventListener("click", closeSettings);
   $("settingsCancel").addEventListener("click", closeSettings);
@@ -1166,6 +1460,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (!$("tradeDetailModal").hidden) closeTradeDetail();
+    else if (!$("weekModal").hidden) closeWeekModal();
     else if (!$("dayModal").hidden) closeDayModal();
     else if (!$("settingsModal").hidden) closeSettings();
   });

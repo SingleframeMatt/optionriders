@@ -395,6 +395,21 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 year = int(params.get("year", [str(now.year)])[0])
                 month = int(params.get("month", [str(now.month)])[0])
                 self._json(trade_journal.calendar_month(year, month, filters))
+            elif path == "/api/journal/week":
+                params = parse_qs(urlparse(self.path).query)
+                start = (params.get("start", [""])[0] or "").strip()
+                if not start:
+                    self._json({"error": "missing start"}, status=400)
+                else:
+                    self._json(trade_journal.week_detail(start, user_id=user_id))
+            elif path == "/api/journal/trade-note":
+                params = parse_qs(urlparse(self.path).query)
+                symbol = (params.get("symbol", [""])[0] or "").strip()
+                close_dt = (params.get("close_datetime", [""])[0] or "").strip()
+                if not symbol or not close_dt:
+                    self._json({"error": "missing symbol or close_datetime"}, status=400)
+                else:
+                    self._json(trade_journal.get_trade_note(user_id, symbol, close_dt))
             else:
                 self._json({"error": "not found"}, status=404)
         except Exception as exc:
@@ -432,6 +447,21 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 ))
             elif path == "/api/journal/clear":
                 self._json(trade_journal.clear_all(user_id=user_id))
+            elif path == "/api/journal/trade-note":
+                try:
+                    payload = json.loads(body or b"{}")
+                except json.JSONDecodeError:
+                    payload = {}
+                symbol = (payload.get("symbol") or "").strip()
+                close_dt = (payload.get("close_datetime") or "").strip()
+                body_text = payload.get("body") or ""
+                trade_date = (payload.get("trade_date") or None)
+                if not symbol or not close_dt:
+                    self._json({"error": "missing symbol or close_datetime"}, status=400)
+                else:
+                    self._json(trade_journal.set_trade_note(
+                        user_id, symbol, close_dt, body_text, trade_date=trade_date,
+                    ))
             else:
                 self._json({"error": "not found"}, status=404)
         except Exception as exc:

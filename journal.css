@@ -756,6 +756,166 @@ body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-ev
   font-size: 12.5px;
 }
 
+/* ---------- Day/Week view toggle ---------- */
+.view-toggle {
+  display: inline-flex;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 2px;
+}
+.view-toggle-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.view-toggle-btn:hover { color: var(--text-primary); }
+.view-toggle-btn.is-active {
+  background: var(--cyan-dim);
+  color: var(--cyan);
+}
+
+/* ---------- Week modal ---------- */
+.week-modal-card { max-width: 1100px; }
+.week-day-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+.week-day-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 8px;
+  background: var(--bg-surface);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 78px;
+  justify-content: center;
+}
+.week-day-card.pos { border-color: var(--green); background: var(--green-dim); }
+.week-day-card.neg { border-color: var(--red); background: var(--red-dim); }
+.week-day-card.empty { opacity: 0.55; }
+.week-day-card .wd-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.week-day-card .wd-pnl { font-size: 15px; font-weight: 700; }
+.week-day-card .wd-sub { font-size: 11px; color: var(--text-muted); }
+
+.zella-scale {
+  padding: 8px 0 6px;
+  margin-bottom: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+.zella-scale-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.zella-scale-bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.zella-scale-loss   { color: var(--red); }
+.zella-scale-profit { color: var(--green); text-align: right; }
+.zella-scale-track {
+  height: 6px;
+  background: linear-gradient(to right, var(--red) 0%, rgba(150,150,150,0.35) 50%, var(--green) 100%);
+  border-radius: 999px;
+  position: relative;
+}
+.zella-scale-fill {
+  position: absolute;
+  top: -3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-bright);
+  border: 2px solid var(--bg-card);
+  transform: translateX(-50%);
+  left: 50%;
+}
+
+.week-cell-day {
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.week-card.clickable { cursor: pointer; }
+.week-card.clickable:hover {
+  filter: brightness(1.08);
+  border-color: var(--border-highlight);
+}
+
+/* ---------- Trade-detail notes ---------- */
+.trade-detail-notes-wrap {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.trade-detail-notes-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.trade-detail-notes-status {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.trade-detail-notes {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.trade-detail-notes:focus {
+  outline: none;
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px var(--cyan-dim);
+}
+.trade-detail-notes:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ---------- Light theme ----------
    Opt-in by adding `is-light` to `.journal-body`. Flips the CSS custom
    properties defined at the top of this file so every component picks up

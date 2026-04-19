@@ -102,6 +102,18 @@ class handler(BaseHTTPRequestHandler):
                 if not date:
                     return _respond(self, 400, {"error": "missing date"})
                 _respond(self, 200, jc.day_detail(token, date))
+            elif action == "week":
+                start = _param(self.path, "start")
+                if not start:
+                    return _respond(self, 400, {"error": "missing start"})
+                _respond(self, 200, jc.week_detail(token, start))
+            elif action == "trade-note":
+                symbol = _param(self.path, "symbol")
+                close_dt = _param(self.path, "close_datetime")
+                if not symbol or not close_dt:
+                    return _respond(self, 400, {"error": "missing symbol or close_datetime"})
+                user_id = jc.verify_user(token)
+                _respond(self, 200, jc.get_trade_note(token, user_id, symbol, close_dt))
             elif action == "open-positions":
                 _respond(self, 200, jc.current_open_positions(token))
             elif action == "bars":
@@ -161,6 +173,20 @@ class handler(BaseHTTPRequestHandler):
             elif action == "clear":
                 n = jc.delete_all_user_fills(token, user_id)
                 _respond(self, 200, {"ok": True, "deleted": n})
+            elif action == "trade-note":
+                try:
+                    payload = json.loads(body or b"{}")
+                except json.JSONDecodeError:
+                    payload = {}
+                symbol = (payload.get("symbol") or "").strip()
+                close_dt = (payload.get("close_datetime") or "").strip()
+                body_text = payload.get("body") or ""
+                trade_date = payload.get("trade_date") or None
+                if not symbol or not close_dt:
+                    return _respond(self, 400, {"error": "missing symbol or close_datetime"})
+                _respond(self, 200, jc.set_trade_note(
+                    token, user_id, symbol, close_dt, body_text, trade_date=trade_date,
+                ))
             else:
                 _respond(self, 404, {"error": f"unknown action: {action}"})
         except Exception as exc:
