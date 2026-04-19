@@ -712,8 +712,25 @@ body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-ev
   border-radius: var(--radius-sm);
   overflow: hidden;
   min-height: 260px;
+  position: relative;
 }
 .trade-detail-chart iframe { display: block; width: 100%; border: 0; }
+.trade-chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 340px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.trade-chart-fallback-msg {
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--amber-dim);
+  border-bottom: 1px solid var(--border-subtle);
+}
 
 .trade-detail-fills-wrap { min-width: 0; }
 .trade-detail-fills-head {

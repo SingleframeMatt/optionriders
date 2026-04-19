@@ -689,6 +689,49 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
 
 # ---------- IBKR sync ----------
 
+def intraday_bars(symbol: str, date_iso: str, interval: str = "5min") -> dict:
+    """
+    Return intraday OHLC bars for one underlying on one date, formatted for
+    Lightweight Charts (time = UNIX seconds). Filters Alpha Vantage's full
+    month window down to just the requested date.
+
+    Alpha Vantage timestamps are Eastern (ET) wall-clock, so we attach the
+    NY tzinfo before converting to UTC epoch.
+    """
+    try:
+        import alpha_vantage as av
+        # Use outputsize=full so dates 1-2 weeks back are included
+        data = av.fetch_intraday(symbol, interval=interval, outputsize="full")
+    except Exception as exc:
+        return {"symbol": symbol, "date": date_iso, "bars": [], "error": str(exc)}
+
+    bars_in = data.get("bars") or []
+    bars_out: list[dict] = []
+    for b in bars_in:
+        ts = b.get("time") or ""
+        if not ts.startswith(date_iso):
+            continue
+        try:
+            dt = datetime.fromisoformat(ts).replace(tzinfo=_IBKR_TZ)
+        except ValueError:
+            continue
+        bars_out.append({
+            "time": int(dt.timestamp()),
+            "open": b.get("open"),
+            "high": b.get("high"),
+            "low":  b.get("low"),
+            "close": b.get("close"),
+            "volume": b.get("volume"),
+        })
+    bars_out.sort(key=lambda x: x["time"])
+    return {
+        "symbol": symbol,
+        "date": date_iso,
+        "interval": interval,
+        "bars": bars_out,
+    }
+
+
 def _enumerate_flex_sections(report: str) -> list[dict]:
     """
     Diagnostic helper: return a list of {tag, count, sample_attrs, sample_xml}

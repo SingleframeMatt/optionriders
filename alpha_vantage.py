@@ -462,23 +462,32 @@ def fetch_adx(symbol: str, interval: str = "daily", time_period: int = 14) -> di
     return result
 
 
-def fetch_intraday(symbol: str, interval: str = "5min") -> dict:
+def fetch_intraday(symbol: str, interval: str = "5min", outputsize: str = "compact",
+                   month: str | None = None) -> dict:
     """
     TIME_SERIES_INTRADAY — recent intraday OHLCV bars.
-    1 API call. Cached 5 min.
+    1 API call. Cached 5 min (shorter key includes outputsize + month so full
+    and per-month queries don't collide).
+
+    Pass month="YYYY-MM" to pull historical bars for a specific month on
+    premium plans. Free tier ignores the param and returns the latest window
+    (~1 month on outputsize=full).
     """
-    key = f"intraday:{symbol}:{interval}"
+    key = f"intraday:{symbol}:{interval}:{outputsize}:{month or ''}"
     cached = _cache_get(key, INTRADAY_CACHE_TTL)
     if cached:
         return cached
 
-    data = _fetch({
+    params = {
         "function":      "TIME_SERIES_INTRADAY",
         "symbol":        symbol,
         "interval":      interval,
-        "outputsize":    "compact",   # ~100 bars
+        "outputsize":    outputsize,
         "extended_hours":"false",
-    })
+    }
+    if month:
+        params["month"] = month
+    data = _fetch(params)
 
     series_key = f"Time Series ({interval})"
     series     = data.get(series_key, {})
