@@ -301,25 +301,22 @@
 .cal-stat-chip.neutral { background: rgba(255,255,255,0.05); color: var(--text-secondary); }
 .cal-stat-sub { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); }
 
-.calendar-layout {
+.calendar-grid {
   display: grid;
-  grid-template-columns: 1fr 120px;
-  gap: 16px;
-  align-items: start;
+  /* 7 day columns + a fixed-width week-summary column. Each calendar row
+     contains the 7 day cells followed by that row's week card, so they line
+     up vertically without any separate sidebar. */
+  grid-template-columns: repeat(7, minmax(0, 1fr)) 140px;
+  gap: 6px;
+  align-items: stretch;
 }
 @media (max-width: 900px) {
-  .calendar-layout { grid-template-columns: 1fr; }
+  .calendar-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .calendar-grid .week-card,
+  .calendar-grid .cal-weekday.cal-week-spacer { display: none; }
 }
 
-.calendar-grid-wrap { min-width: 0; }
-
-.calendar-weekdays {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-  margin-bottom: 6px;
-}
-.calendar-weekdays span {
+.cal-weekday {
   text-align: center;
   padding: 6px 0;
   font-size: 10px;
@@ -328,21 +325,15 @@
   color: var(--text-secondary);
   font-weight: 500;
 }
-
-.calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-}
+.cal-weekday.cal-week-spacer { padding: 0; }
 .cal-cell {
-  aspect-ratio: 1 / 1;
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   padding: 6px 8px;
   display: flex; flex-direction: column;
   gap: 2px;
-  min-height: 60px;
+  min-height: 84px;
   transition: transform .1s, border-color .1s;
   overflow: hidden;
 }
@@ -375,17 +366,14 @@
 .cal-neg .cal-cell-day { color: var(--red); font-weight: 600; }
 .cal-neutral { background: var(--bg-surface); }
 
-/* ── Weekly sidebar ── */
-.calendar-weekly {
-  display: flex; flex-direction: column; gap: 8px;
-}
+/* ── Week summary card (sits in column 8 of the calendar grid) ── */
 .week-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
-  min-height: 68px;
   display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  min-height: 84px;
 }
 .week-card.pos { background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); }
 .week-card.neg { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }

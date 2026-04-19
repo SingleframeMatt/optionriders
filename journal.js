@@ -382,10 +382,46 @@ function renderCalendar(data) {
   const grid = $("calendarGrid");
   grid.innerHTML = "";
 
-  for (let i = 0; i < data.lead_blank; i++) {
+  // Row 1: weekday headers (cols 1-7) + a blank cell in col 8 above the week
+  // summary column so everything lines up.
+  ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].forEach(label => {
+    const el = document.createElement("div");
+    el.className = "cal-weekday";
+    el.textContent = label;
+    grid.appendChild(el);
+  });
+  const spacer = document.createElement("div");
+  spacer.className = "cal-weekday cal-week-spacer";
+  grid.appendChild(spacer);
+
+  let weekIndex = 0;
+  const appendWeekCard = () => {
+    const w = data.weeks[weekIndex] || { pnl: 0, active_days: 0 };
+    const card = document.createElement("div");
+    card.className = "week-card " + (w.active_days ? signClass(w.pnl) : "empty");
+    card.innerHTML = `
+      <div class="week-title">Week ${weekIndex + 1}</div>
+      <div class="week-pnl">${w.active_days ? fmt.money(w.pnl, { compact: true }) : fmt.money(0, { compact: true })}</div>
+      <div class="week-sub">${w.active_days} day${w.active_days === 1 ? "" : "s"}</div>`;
+    grid.appendChild(card);
+    weekIndex++;
+  };
+
+  const appendBlank = () => {
     const pad = document.createElement("div");
     pad.className = "cal-cell cal-cell-blank";
     grid.appendChild(pad);
+  };
+
+  let dayColIndex = 0;
+  const maybeCloseRow = () => {
+    if (dayColIndex === 7) { appendWeekCard(); dayColIndex = 0; }
+  };
+
+  for (let i = 0; i < data.lead_blank; i++) {
+    appendBlank();
+    dayColIndex++;
+    maybeCloseRow();
   }
 
   data.days.forEach(d => {
@@ -403,29 +439,23 @@ function renderCalendar(data) {
       : "";
     cell.innerHTML = `<div class="cal-cell-day">${d.day}</div>${pnlLine}`;
     grid.appendChild(cell);
+    dayColIndex++;
+    maybeCloseRow();
   });
 
-  // Trailing blanks to complete final row (looks cleaner)
-  const total = data.lead_blank + data.days.length;
-  const trailing = (7 - (total % 7)) % 7;
-  for (let i = 0; i < trailing; i++) {
-    const pad = document.createElement("div");
-    pad.className = "cal-cell cal-cell-blank";
-    grid.appendChild(pad);
+  // Trailing blanks to complete the final row, then its week card.
+  if (dayColIndex > 0) {
+    while (dayColIndex < 7) { appendBlank(); dayColIndex++; }
+    appendWeekCard();
+    dayColIndex = 0;
   }
 
-  // Weekly sidebar
-  const weekly = $("calendarWeekly");
-  weekly.innerHTML = "";
-  data.weeks.forEach((w, idx) => {
-    const card = document.createElement("div");
-    card.className = "week-card " + (w.active_days ? signClass(w.pnl) : "empty");
-    card.innerHTML = `
-      <div class="week-title">Week ${idx + 1}</div>
-      <div class="week-pnl">${w.active_days ? fmt.money(w.pnl, { compact: true }) : fmt.money(0, { compact: true })}</div>
-      <div class="week-sub">${w.active_days} day${w.active_days === 1 ? "" : "s"}</div>`;
-    weekly.appendChild(card);
-  });
+  // If the month has a 6th week that's entirely padding, still render it so
+  // the week-card column runs the full month height.
+  while (weekIndex < data.weeks.length) {
+    for (let i = 0; i < 7; i++) appendBlank();
+    appendWeekCard();
+  }
 }
 
 /* ---------- day-detail modal ---------- */
