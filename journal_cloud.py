@@ -461,6 +461,71 @@ def _open_positions_opened_on(rows: list[dict], date_iso: str) -> list[dict]:
     return out
 
 
+def _fills_for_trade(rows: list[dict], account: str, symbol: str,
+                     open_iso: str | None, close_iso: str | None) -> list[dict]:
+    """Return the individual IBKR fills that make up a single trade cycle."""
+    if not symbol:
+        return []
+    out = []
+    for r in rows:
+        if (r.get("account") or "") != (account or ""):
+            continue
+        row_sym = r.get("symbol") or r.get("underlying") or ""
+        if row_sym != symbol:
+            continue
+        dt = r.get("datetime") or ""
+        if open_iso and dt and dt < open_iso:
+            continue
+        if close_iso and dt and dt > close_iso:
+            continue
+        out.append(r)
+    return out
+
+
+def _fill_summary(fill: dict) -> dict:
+    """Trim an IBKR fill down to the fields the trade-detail UI needs."""
+    return {
+        "datetime": fill.get("datetime"),
+        "quantity": fill.get("quantity"),
+        "trade_price": fill.get("trade_price"),
+        "proceeds": fill.get("proceeds"),
+        "commission": fill.get("commission"),
+        "realized_pnl": fill.get("realized_pnl"),
+        "mtm_pnl": fill.get("mtm_pnl"),
+        "buy_sell": fill.get("buy_sell"),
+        "open_close": fill.get("open_close"),
+    }
+
+
+def _trade_metrics(fills: list[dict]) -> dict:
+    """Average entry / exit price, gross quantity, qty still held (signed)."""
+    open_qty = 0.0
+    open_notional = 0.0
+    close_qty = 0.0
+    close_notional = 0.0
+    net_qty = 0.0
+    for f in fills:
+        q = f.get("quantity") or 0.0
+        p = f.get("trade_price") or 0.0
+        net_qty += q
+        # Opens add to position magnitude (same sign as current direction)
+        if q > 0:
+            open_qty += q
+            open_notional += q * p
+        else:
+            close_qty += abs(q)
+            close_notional += abs(q) * p
+    avg_entry = (open_notional / open_qty) if open_qty else None
+    avg_exit = (close_notional / close_qty) if close_qty else None
+    return {
+        "avg_entry_price": round(avg_entry, 4) if avg_entry is not None else None,
+        "avg_exit_price": round(avg_exit, 4) if avg_exit is not None else None,
+        "qty_opened": round(open_qty, 4),
+        "qty_closed": round(close_qty, 4),
+        "net_qty": round(net_qty, 4),
+    }
+
+
 def day_detail(bearer_token: str, date_iso: str) -> dict:
     rows = fetch_all_user_fills(bearer_token)
     trades = trade_journal._build_trades(rows)
@@ -517,12 +582,23 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
             basis = qty * mult * price if price else None
         if basis:
             roi = t["gross_pnl"] / abs(basis) * 100.0
+        trade_fills = _fills_for_trade(
+            rows, t.get("account") or "", t["symbol"],
+            t.get("open_datetime"), t.get("close_datetime"),
+        )
+        tmetrics = _trade_metrics(trade_fills)
         trades_out.append({
             "time": time_str,
             "ticker": t["underlying"] or t["symbol"],
+            "symbol": t["symbol"],
             "side": side,
             "instrument": instrument,
             "asset_class": meta.get("asset_class"),
+            "strike": meta.get("strike"),
+            "expiry": meta.get("expiry"),
+            "put_call": meta.get("put_call"),
+            "multiplier": meta.get("multiplier"),
+            "currency": meta.get("currency"),
             "fill_count": t["fill_count"],
             "net_pnl": t["gross_pnl"],
             "gross_pnl": t["gross_pnl"],
@@ -531,6 +607,13 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
             "commission": t["commission"],
             "net_roi": round(roi, 2) if roi is not None else None,
             "is_open": False,
+            "open_datetime": t.get("open_datetime"),
+            "close_datetime": t.get("close_datetime"),
+            "avg_entry_price": tmetrics["avg_entry_price"],
+            "avg_exit_price": tmetrics["avg_exit_price"],
+            "qty_opened": tmetrics["qty_opened"],
+            "qty_closed": tmetrics["qty_closed"],
+            "fills": [_fill_summary(f) for f in trade_fills],
         })
 
     for op in open_positions:
@@ -549,12 +632,23 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
             instrument = f"{m}-{d}-{y} {strike_s} {side}".strip()
         else:
             instrument = op["underlying"] or op["symbol"]
+        open_fills = _fills_for_trade(
+            rows, op.get("account") or "", op["symbol"],
+            op.get("open_datetime"), None,
+        )
+        omet = _trade_metrics(open_fills)
         trades_out.append({
             "time": time_str,
             "ticker": op["underlying"] or op["symbol"],
+            "symbol": op["symbol"],
             "side": side,
             "instrument": instrument,
             "asset_class": op.get("asset_class"),
+            "strike": meta.get("strike"),
+            "expiry": meta.get("expiry"),
+            "put_call": meta.get("put_call"),
+            "multiplier": meta.get("multiplier"),
+            "currency": meta.get("currency"),
             "fill_count": op["fill_count"],
             "net_pnl": op["floating_pnl"],
             "gross_pnl": op["floating_pnl"],
@@ -564,6 +658,13 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
             "net_roi": None,
             "is_open": True,
             "position_qty": op["position_qty"],
+            "open_datetime": op.get("open_datetime"),
+            "close_datetime": None,
+            "avg_entry_price": omet["avg_entry_price"],
+            "avg_exit_price": omet["avg_exit_price"],
+            "qty_opened": omet["qty_opened"],
+            "qty_closed": omet["qty_closed"],
+            "fills": [_fill_summary(f) for f in open_fills],
         })
 
     return {

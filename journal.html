@@ -280,6 +280,66 @@ IBKR_FLEX_QUERY_ID=123456</pre>
     </div>
   </div>
 
+  <!-- Trade detail modal -->
+  <div class="day-modal" id="tradeDetailModal" hidden>
+    <div class="day-modal-backdrop" id="tradeDetailBackdrop"></div>
+    <div class="day-modal-card trade-detail-card" role="dialog" aria-modal="true" aria-labelledby="tradeDetailTitle">
+      <button class="day-modal-close" id="tradeDetailClose" type="button" aria-label="Close">×</button>
+      <header class="trade-detail-head">
+        <div>
+          <div class="trade-detail-kicker">
+            <span class="ticker-pill" id="tradeDetailTicker">—</span>
+            <span id="tradeDetailInstrument" class="trade-detail-instrument">—</span>
+            <span id="tradeDetailDate" class="muted"></span>
+          </div>
+          <h3 id="tradeDetailTitle">Net P&amp;L <span id="tradeDetailPnl">—</span></h3>
+        </div>
+        <div class="trade-detail-side-wrap">
+          <span id="tradeDetailSideBadge" class="side-badge">—</span>
+          <span id="tradeDetailOpenBadge" class="side-badge" hidden>OPEN</span>
+        </div>
+      </header>
+
+      <div class="trade-detail-body">
+        <aside class="trade-detail-stats">
+          <div class="trade-stat-row"><span>Side</span><span id="tdSide">—</span></div>
+          <div class="trade-stat-row"><span>Entry time</span><span id="tdEntry">—</span></div>
+          <div class="trade-stat-row"><span>Exit time</span><span id="tdExit">—</span></div>
+          <div class="trade-stat-row"><span>Qty opened</span><span id="tdQtyOpen">—</span></div>
+          <div class="trade-stat-row"><span>Qty closed</span><span id="tdQtyClose">—</span></div>
+          <div class="trade-stat-row"><span>Avg entry</span><span id="tdAvgEntry">—</span></div>
+          <div class="trade-stat-row"><span>Avg exit</span><span id="tdAvgExit">—</span></div>
+          <div class="trade-stat-row"><span>Gross P&amp;L</span><span id="tdGross">—</span></div>
+          <div class="trade-stat-row"><span>Commissions</span><span id="tdComm">—</span></div>
+          <div class="trade-stat-row"><span>Net P&amp;L</span><span id="tdNet">—</span></div>
+          <div class="trade-stat-row"><span>Net ROI</span><span id="tdRoi">—</span></div>
+          <div class="trade-stat-row"><span>Fills</span><span id="tdFillCount">—</span></div>
+        </aside>
+
+        <div class="trade-detail-right">
+          <div class="trade-detail-chart" id="tradeDetailChartWrap"></div>
+          <div class="trade-detail-fills-wrap">
+            <div class="trade-detail-fills-head">Executions</div>
+            <table class="journal-table trade-detail-fills-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Side</th>
+                  <th class="num">Qty</th>
+                  <th class="num">Price</th>
+                  <th class="num">Proceeds</th>
+                  <th class="num">Comm</th>
+                  <th class="num">Realized</th>
+                </tr>
+              </thead>
+              <tbody id="tradeDetailFillsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="journal.js"></script>
 </body>
 </html>

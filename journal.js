@@ -514,6 +514,9 @@ function renderDayTrades(trades) {
     const roi = t.net_roi != null ? (t.net_roi >= 0 ? `${t.net_roi.toFixed(2)}%` : `(${Math.abs(t.net_roi).toFixed(2)}%)`) : "—";
     const openTag = t.is_open ? `<span class="muted" style="font-size:11px;margin-left:6px;">(open)</span>` : "";
     const timeCell = `${t.time || ""}${openTag}`;
+    tr.classList.add("cal-clickable");
+    tr.style.cursor = "pointer";
+    tr.addEventListener("click", () => openTradeDetail(t));
     tr.innerHTML = `
       <td>${timeCell}</td>
       <td><span class="ticker-pill">${t.ticker || ""}</span></td>
@@ -523,6 +526,106 @@ function renderDayTrades(trades) {
       <td class="num ${signClass(t.net_roi)}">${roi}</td>`;
     tbody.appendChild(tr);
   });
+}
+
+/* ---------- trade-detail modal ---------- */
+
+function openTradeDetail(trade) {
+  const modal = $("tradeDetailModal");
+  const isOpt = trade.asset_class === "OPT" || trade.asset_class === "FOP";
+
+  $("tradeDetailTicker").textContent = trade.ticker || "";
+  $("tradeDetailInstrument").textContent = trade.instrument || trade.symbol || "";
+  $("tradeDetailDate").textContent = trade.close_datetime
+    ? new Date(trade.close_datetime.slice(0, 10) + "T00:00:00").toLocaleDateString(undefined, {
+        weekday: "short", year: "numeric", month: "short", day: "2-digit",
+      })
+    : trade.open_datetime
+      ? new Date(trade.open_datetime.slice(0, 10) + "T00:00:00").toLocaleDateString(undefined, {
+          weekday: "short", year: "numeric", month: "short", day: "2-digit",
+        })
+      : "";
+
+  const pnlEl = $("tradeDetailPnl");
+  pnlEl.textContent = fmt.money(trade.net_pnl);
+  pnlEl.className = signClass(trade.net_pnl);
+
+  const sideBadge = $("tradeDetailSideBadge");
+  sideBadge.textContent = isOpt ? (trade.put_call === "C" ? "CALL" : trade.put_call === "P" ? "PUT" : trade.side) : trade.side;
+  sideBadge.className = "side-badge " + (trade.put_call === "C" ? "is-call" : trade.put_call === "P" ? "is-put" : "");
+
+  const openBadge = $("tradeDetailOpenBadge");
+  openBadge.hidden = !trade.is_open;
+
+  // Stat rows
+  $("tdSide").textContent = sideBadge.textContent;
+  $("tdEntry").textContent = fmtDisplayTime(trade.open_datetime);
+  $("tdExit").textContent = trade.is_open ? "—" : fmtDisplayTime(trade.close_datetime);
+  $("tdQtyOpen").textContent = trade.qty_opened != null ? fmt.num(trade.qty_opened, 0) : "—";
+  $("tdQtyClose").textContent = trade.qty_closed != null ? fmt.num(trade.qty_closed, 0) : "—";
+  $("tdAvgEntry").textContent = trade.avg_entry_price != null ? fmt.money(trade.avg_entry_price, { compact: false, sign: false }) : "—";
+  $("tdAvgExit").textContent = trade.avg_exit_price != null ? fmt.money(trade.avg_exit_price, { compact: false, sign: false }) : "—";
+  const gross = $("tdGross");
+  gross.textContent = fmt.money(trade.gross_pnl);
+  gross.className = signClass(trade.gross_pnl);
+  $("tdComm").textContent = fmt.money(trade.commission, { sign: false });
+  const net = $("tdNet");
+  net.textContent = fmt.money(trade.net_pnl);
+  net.className = signClass(trade.net_pnl);
+  const roi = $("tdRoi");
+  roi.textContent = trade.net_roi != null
+    ? (trade.net_roi >= 0 ? `${trade.net_roi.toFixed(2)}%` : `(${Math.abs(trade.net_roi).toFixed(2)}%)`)
+    : "—";
+  roi.className = signClass(trade.net_roi);
+  $("tdFillCount").textContent = trade.fill_count ?? (trade.fills ? trade.fills.length : "—");
+
+  // Fills table
+  const tbody = $("tradeDetailFillsBody");
+  tbody.innerHTML = "";
+  (trade.fills || []).forEach(f => {
+    const tr = document.createElement("tr");
+    const sideLabel = f.buy_sell || (f.quantity > 0 ? "BUY" : "SELL");
+    const sideCls = sideLabel === "BUY" ? "side-call" : "side-put";
+    tr.innerHTML = `
+      <td>${fmtDisplayTime(f.datetime)}</td>
+      <td class="${sideCls}">${sideLabel}</td>
+      <td class="num">${fmt.num(f.quantity, 0)}</td>
+      <td class="num">${f.trade_price != null ? fmt.num(f.trade_price, 2) : "—"}</td>
+      <td class="num">${f.proceeds != null ? fmt.num(f.proceeds, 2) : "—"}</td>
+      <td class="num">${fmt.num(f.commission || 0, 2)}</td>
+      <td class="num ${signClass(f.realized_pnl)}">${f.realized_pnl != null ? fmt.num(f.realized_pnl, 2) : "—"}</td>`;
+    tbody.appendChild(tr);
+  });
+  if (!(trade.fills || []).length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="muted">No fill detail available.</td></tr>`;
+  }
+
+  // TradingView mini chart for the underlying
+  const chartWrap = $("tradeDetailChartWrap");
+  chartWrap.innerHTML = "";
+  const underlying = (trade.ticker || trade.symbol || "").trim();
+  if (underlying) {
+    const iframe = document.createElement("iframe");
+    iframe.src = `https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(underlying)}&interval=15&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=rgba(0,0,0,0)&studies=&theme=${document.body.classList.contains("is-light") ? "light" : "dark"}&style=1&timezone=Europe%2FLondon&locale=en`;
+    iframe.style.width = "100%";
+    iframe.style.height = "340px";
+    iframe.style.border = "0";
+    iframe.allow = "fullscreen";
+    chartWrap.appendChild(iframe);
+  }
+
+  modal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeTradeDetail() {
+  const modal = $("tradeDetailModal");
+  modal.hidden = true;
+  $("tradeDetailChartWrap").innerHTML = "";
+  // Only clear overflow lock if no other modal is open
+  if ($("dayModal").hidden && $("settingsModal").hidden) {
+    document.body.style.overflow = "";
+  }
 }
 
 function drawIntraday(points) {
@@ -881,6 +984,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   $("dayModalClose").addEventListener("click", closeDayModal);
   $("dayModalBackdrop").addEventListener("click", closeDayModal);
+  $("tradeDetailClose").addEventListener("click", closeTradeDetail);
+  $("tradeDetailBackdrop").addEventListener("click", closeTradeDetail);
   $("settingsBtn").addEventListener("click", openSettings);
   $("settingsClose").addEventListener("click", closeSettings);
   $("settingsCancel").addEventListener("click", closeSettings);
@@ -890,7 +995,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("settingsTheme").addEventListener("change", (e) => saveTheme(e.target.value));
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    if (!$("dayModal").hidden) closeDayModal();
+    if (!$("tradeDetailModal").hidden) closeTradeDetail();
+    else if (!$("dayModal").hidden) closeDayModal();
     else if (!$("settingsModal").hidden) closeSettings();
   });
   window.addEventListener("resize", () => drawEquity(state.lastEquity));
