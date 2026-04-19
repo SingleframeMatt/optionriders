@@ -157,9 +157,44 @@ def fetch_user_fills(bearer_token: str, filters: dict | None = None,
     return _paginated_get(bearer_token, params, cap=limit, timeout=15)
 
 
+# Warm-instance cache for fetch_all_user_fills. Vercel recycles between invocations
+# so this is best-effort, but when warm it coalesces the four journal-page endpoints
+# (stats/fills/equity/calendar) fired in parallel on every refresh. Keyed by bearer
+# token — tokens rotate ~hourly so natural expiry is built in.
+_FILLS_CACHE: dict[str, tuple[float, list[dict]]] = {}
+_FILLS_CACHE_TTL = 60.0  # seconds
+
+
 def fetch_all_user_fills(bearer_token: str) -> list[dict]:
     """Whole-history fetch (for round-trip matching). No date filter."""
-    return _paginated_get(bearer_token, [("order", "datetime.asc")], timeout=30)
+    import time
+    now = time.time()
+    cached = _FILLS_CACHE.get(bearer_token)
+    if cached and cached[0] > now:
+        return cached[1]
+    rows = _paginated_get(bearer_token, [("order", "datetime.asc")], timeout=30)
+    _FILLS_CACHE[bearer_token] = (now + _FILLS_CACHE_TTL, rows)
+    # Evict expired entries so the cache doesn't grow unbounded across rotations.
+    for k in list(_FILLS_CACHE.keys()):
+        if _FILLS_CACHE[k][0] <= now:
+            _FILLS_CACHE.pop(k, None)
+    return rows
+
+
+def fetch_fills_window(bearer_token: str, from_iso: str,
+                       to_iso: str | None = None) -> list[dict]:
+    """
+    Pull only fills in [from_iso, to_iso]. Used by day/week/calendar endpoints
+    so we don't drag the user's entire history over the wire on every page
+    refresh. The caller is responsible for picking a lookback generous enough
+    to include the opening fills of any round-trip that closes inside the
+    window — 180 days covers nearly all options and most stock swings.
+    """
+    params: list[tuple[str, str]] = [("trade_date", f"gte.{from_iso}")]
+    if to_iso:
+        params.append(("trade_date", f"lte.{to_iso}"))
+    params.append(("order", "datetime.asc"))
+    return _paginated_get(bearer_token, params, timeout=20)
 
 
 def insert_fills(bearer_token: str, user_id: str, rows: list[dict]) -> dict:
@@ -337,12 +372,14 @@ def equity_curve(bearer_token: str, filters: dict | None = None) -> list[dict]:
 def calendar_month(bearer_token: str, year: int, month: int,
                    filters: dict | None = None) -> dict:
     import calendar as cal
-    rows = fetch_all_user_fills(bearer_token)
-    trades = trade_journal._build_trades(rows)
+    from datetime import date, timedelta
 
     first_day = datetime(year, month, 1).date().isoformat()
     last_day_num = cal.monthrange(year, month)[1]
     last_day = datetime(year, month, last_day_num).date().isoformat()
+    cutoff = (date(year, month, 1) - timedelta(days=180)).isoformat()
+    rows = fetch_fills_window(bearer_token, cutoff, last_day)
+    trades = trade_journal._build_trades(rows)
 
     per_day: dict[str, dict] = {}
     for t in trades:
@@ -601,7 +638,14 @@ def _trade_metrics(fills: list[dict]) -> dict:
 
 
 def day_detail(bearer_token: str, date_iso: str) -> dict:
-    rows = fetch_all_user_fills(bearer_token)
+    # Windowed fetch: 180 days before the target date covers the opening fill
+    # of any round-trip that closes on date_iso. _open_positions_opened_on
+    # only surfaces positions whose cycle's first fill lands on date_iso, so
+    # the window is sufficient for that path too.
+    from datetime import date as _date, timedelta
+    target = _date.fromisoformat(date_iso)
+    cutoff = (target - timedelta(days=180)).isoformat()
+    rows = fetch_fills_window(bearer_token, cutoff, date_iso)
     trades = trade_journal._build_trades(rows)
     day_trades = [t for t in trades if t["close_date"] == date_iso]
     day_rows = [r for r in rows if r.get("trade_date") == date_iso and r.get("asset_class") != "CASH"]
@@ -769,7 +813,10 @@ def week_detail(bearer_token: str, start_iso: str) -> dict:
     days_iso = [(start_dt + timedelta(days=i)).isoformat() for i in range(7)]
     end_iso = days_iso[-1]
 
-    rows = fetch_all_user_fills(bearer_token)
+    # Window = 180 days before the week start through the week end (same
+    # rationale as day_detail — enough to see opens that closed this week).
+    cutoff = (start_dt - timedelta(days=180)).isoformat()
+    rows = fetch_fills_window(bearer_token, cutoff, end_iso)
     trades = trade_journal._build_trades(rows)
     week_trades = [t for t in trades if t["close_date"] in days_iso]
     week_rows = [r for r in rows if r.get("trade_date") in days_iso and r.get("asset_class") != "CASH"]
