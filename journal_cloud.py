@@ -150,8 +150,12 @@ def insert_fills(bearer_token: str, user_id: str, rows: list[dict]) -> dict:
         for r in chunk:
             all_keys.update(r.keys())
         chunk = [{k: r.get(k) for k in all_keys} for r in chunk]
+        # Upsert on the (user_id, trade_id, datetime, symbol, quantity, trade_price)
+        # unique constraint — without on_conflict PostgREST tries the PK (id) and
+        # returns 409 when the natural key collides.
         resp = requests.post(
-            f"{SUPABASE_URL}/rest/v1/journal_fills",
+            f"{SUPABASE_URL}/rest/v1/journal_fills"
+            "?on_conflict=user_id,trade_id,datetime,symbol,quantity,trade_price",
             headers=_rest_headers(bearer_token, {
                 "Prefer": "return=representation,resolution=merge-duplicates",
             }),
