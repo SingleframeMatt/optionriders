@@ -1,5 +1,15 @@
 /* Option Riders — Trade Journal styles (dark theme, TradeZella structure) */
 
+/* style.css locks the dashboard body to height:100vh + overflow:hidden so the
+   dashboard's own .main scroll container owns the viewport. Journal pages
+   don't have that container — they're a normal scrolling document — so undo
+   those rules when the body has the journal-body class. */
+body.journal-body {
+  overflow: auto;
+  height: auto;
+  width: auto;
+}
+
 .journal-body {
   /* Scoped overrides — most values inherit dark-theme tokens from style.css */
   --bg-deep:         #070a12;
