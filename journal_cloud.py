@@ -17,6 +17,27 @@ from datetime import datetime, timezone
 from typing import Any
 
 import requests
+from zoneinfo import ZoneInfo
+
+# IBKR Flex reports timestamps in the account's execution-venue local time,
+# which for US brokerage accounts is America/New_York. We display in UK time
+# (same as Lisbon) — matches TradeZella's display and the user's locale.
+_IBKR_TZ = ZoneInfo("America/New_York")
+_DISPLAY_TZ = ZoneInfo("Europe/London")
+
+
+def _fmt_display_time(iso_str: str | None) -> str:
+    """Convert an IBKR-local ISO timestamp to HH:MM:SS in Europe/London."""
+    if not iso_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(iso_str)
+    except ValueError:
+        # Fallback: return raw HH:MM:SS slice if we can't parse
+        return iso_str[11:19]
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_IBKR_TZ)
+    return dt.astimezone(_DISPLAY_TZ).strftime("%H:%M:%S")
 
 import trade_journal  # pure-Python analytics helpers
 
@@ -378,11 +399,74 @@ def calendar_month(bearer_token: str, year: int, month: int,
     }
 
 
+def _open_positions_opened_on(rows: list[dict], date_iso: str) -> list[dict]:
+    """
+    Return positions that are still open AND whose current cycle started on
+    `date_iso`. Used to list in-progress trades alongside closed ones in the
+    day detail view (TradeZella-style — "(open)" rows).
+
+    A cycle is a stretch of fills starting from position=0 going non-zero. If
+    the most recent cycle for a (account, symbol) bucket never returns to zero
+    by the end of available fills, it's an "open" position. If its first fill
+    lands on date_iso, we surface it for that day.
+    """
+    from collections import defaultdict
+    buckets: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for r in rows:
+        if (r.get("asset_class") or "") == "CASH":
+            continue
+        key = ((r.get("account") or ""), (r.get("symbol") or r.get("underlying") or ""))
+        if not key[1]:
+            continue
+        buckets[key].append(r)
+
+    out: list[dict] = []
+    for (account, symbol), fills in buckets.items():
+        fills.sort(key=lambda x: (x.get("datetime") or "", x.get("id") or 0))
+        position = 0.0
+        cycle_fills: list[dict] = []
+        cycle_open_fill = None
+        for f in fills:
+            qty = f.get("quantity") or 0.0
+            if qty == 0:
+                continue
+            if position == 0:
+                cycle_fills = []
+                cycle_open_fill = f
+            position += qty
+            cycle_fills.append(f)
+            if abs(position) < 1e-9:
+                position = 0.0
+                cycle_fills = []
+                cycle_open_fill = None
+        # After all fills: if position still non-zero, the last cycle is open.
+        if cycle_open_fill and abs(position) >= 1e-9:
+            open_date = cycle_open_fill.get("trade_date")
+            if open_date == date_iso:
+                mtm = 0.0
+                for f in cycle_fills:
+                    fx = f.get("fx_rate_to_base") or 1.0
+                    mtm += (f.get("mtm_pnl") or 0.0) * fx
+                out.append({
+                    "account": account,
+                    "symbol": symbol,
+                    "underlying": cycle_open_fill.get("underlying") or symbol,
+                    "asset_class": cycle_open_fill.get("asset_class"),
+                    "open_datetime": cycle_open_fill.get("datetime"),
+                    "open_date": open_date,
+                    "fill_count": len(cycle_fills),
+                    "position_qty": round(position, 4),
+                    "floating_pnl": round(mtm, 2),
+                })
+    return out
+
+
 def day_detail(bearer_token: str, date_iso: str) -> dict:
     rows = fetch_all_user_fills(bearer_token)
     trades = trade_journal._build_trades(rows)
     day_trades = [t for t in trades if t["close_date"] == date_iso]
     day_rows = [r for r in rows if r.get("trade_date") == date_iso and r.get("asset_class") != "CASH"]
+    open_positions = _open_positions_opened_on(rows, date_iso)
 
     pnls = [t["gross_pnl"] for t in day_trades]
     wins = [p for p in pnls if p > 0]
@@ -405,12 +489,7 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
     trades_out = []
     for t in day_trades:
         open_iso = t["open_datetime"] or t["close_datetime"] or ""
-        time_str = ""
-        if open_iso:
-            try:
-                time_str = datetime.fromisoformat(open_iso).strftime("%H:%M:%S")
-            except ValueError:
-                time_str = open_iso[11:19]
+        time_str = _fmt_display_time(open_iso)
         meta = meta_by_symbol.get(t["symbol"], {})
         is_opt = meta.get("asset_class") in ("OPT", "FOP")
         side = (meta.get("put_call") or "").upper() if is_opt else ""
@@ -451,11 +530,46 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
             "realized_pnl": t["realized_pnl"],
             "commission": t["commission"],
             "net_roi": round(roi, 2) if roi is not None else None,
+            "is_open": False,
+        })
+
+    for op in open_positions:
+        open_iso = op.get("open_datetime") or ""
+        time_str = _fmt_display_time(open_iso)
+        meta = meta_by_symbol.get(op["symbol"], {})
+        is_opt = op.get("asset_class") in ("OPT", "FOP")
+        side = "CALL" if meta.get("put_call") == "C" else "PUT" if meta.get("put_call") == "P" else ""
+        if not is_opt:
+            side = (meta.get("buy_sell") or "").upper()
+        strike = meta.get("strike")
+        expiry = meta.get("expiry")
+        if is_opt and expiry and strike is not None:
+            y, m, d = str(expiry).split("-")
+            strike_s = str(int(strike)) if float(strike).is_integer() else f"{strike:.2f}".rstrip("0").rstrip(".")
+            instrument = f"{m}-{d}-{y} {strike_s} {side}".strip()
+        else:
+            instrument = op["underlying"] or op["symbol"]
+        trades_out.append({
+            "time": time_str,
+            "ticker": op["underlying"] or op["symbol"],
+            "side": side,
+            "instrument": instrument,
+            "asset_class": op.get("asset_class"),
+            "fill_count": op["fill_count"],
+            "net_pnl": op["floating_pnl"],
+            "gross_pnl": op["floating_pnl"],
+            "net_after_comm": op["floating_pnl"],
+            "realized_pnl": 0.0,
+            "commission": 0.0,
+            "net_roi": None,
+            "is_open": True,
+            "position_qty": op["position_qty"],
         })
 
     return {
         "date": date_iso,
-        "total_trades": len(day_trades),
+        "total_trades": len(day_trades) + len(open_positions),
+        "open_count": len(open_positions),
         "fill_count": len(day_rows),
         "close_count": len(day_trades),
         "gross_pnl": round(sum(pnls), 2),

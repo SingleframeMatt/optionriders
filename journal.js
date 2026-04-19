@@ -105,6 +105,54 @@ function themeColor(name, fallback = "") {
   return val || fallback;
 }
 
+// IBKR Flex timestamps are wall-clock America/New_York. We display in
+// Europe/London (same as Lisbon) to match the user's locale and TradeZella.
+const _IBKR_TZ = "America/New_York";
+const _DISPLAY_TZ = "Europe/London";
+
+function _nyWallClockToUtcMillis(Y, M, D, h, m, s) {
+  // Build a Date from the NY wall clock, correcting for EDT/EST offset.
+  // Start by treating the components as UTC, then find what NY thinks about
+  // that moment, and adjust so the NY wall clock lines up with what we want.
+  const naiveUtc = Date.UTC(Y, M - 1, D, h, m, s);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: _IBKR_TZ, hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(new Date(naiveUtc));
+  const lookup = Object.fromEntries(parts.filter(p => p.type !== "literal").map(p => [p.type, p.value]));
+  const nyUtc = Date.UTC(+lookup.year, +lookup.month - 1, +lookup.day,
+                         +lookup.hour, +lookup.minute, +lookup.second);
+  // naiveUtc was the wall clock as-if-UTC; nyUtc is that same moment rendered
+  // in NY. The offset between them is NY's UTC offset at this moment.
+  const offsetMs = naiveUtc - nyUtc;
+  return naiveUtc + offsetMs;
+}
+
+function fmtDisplayTime(iso, withSeconds = true) {
+  if (!iso || iso.length < 19) return "";
+  try {
+    const [datePart, timePart] = iso.split("T");
+    const [Y, M, D] = datePart.split("-").map(Number);
+    const [h, m, s] = timePart.slice(0, 8).split(":").map(Number);
+    const utcMs = _nyWallClockToUtcMillis(Y, M, D, h, m, s);
+    return new Date(utcMs).toLocaleTimeString("en-GB", {
+      hour: "2-digit", minute: "2-digit",
+      second: withSeconds ? "2-digit" : undefined,
+      timeZone: _DISPLAY_TZ, hourCycle: "h23",
+    });
+  } catch (_) {
+    return iso.slice(11, withSeconds ? 19 : 16);
+  }
+}
+
+function fmtDisplayDate(iso) {
+  // trade_date is a plain date (no TZ semantics) — just reformat MM/DD/YY.
+  if (!iso) return "";
+  const [Y, M, D] = iso.split("-");
+  return Y ? `${M}/${D}/${Y.slice(2)}` : iso;
+}
+
 const fmt = {
   money(v, { sign = true, compact = false } = {}) {
     if (v == null || Number.isNaN(v)) return "—";
@@ -256,10 +304,8 @@ function renderRecentTrades(fills) {
   const closes = fills.filter(f => (f.realized_pnl || 0) !== 0);
   closes.slice(0, 40).forEach(r => {
     const tr = document.createElement("tr");
-    const date = (r.trade_date || r.datetime || "").slice(0, 10);
-    const [y, m, d] = date.split("-");
-    const dateStr = y ? `${m}/${d}/${y.slice(2)}` : date;
-    const timeStr = r.datetime ? r.datetime.slice(11, 19) : "";
+    const dateStr = fmtDisplayDate((r.trade_date || r.datetime || "").slice(0, 10));
+    const timeStr = fmtDisplayTime(r.datetime);
     tr.innerHTML = `
       <td>
         <div class="cell-date">${dateStr}</div>
@@ -304,7 +350,9 @@ function renderFills(rows) {
   tbody.innerHTML = "";
   rows.forEach(r => {
     const tr = document.createElement("tr");
-    const dt = r.datetime ? r.datetime.replace("T", " ").slice(0, 16) : (r.trade_date || "");
+    const dt = r.datetime
+      ? `${fmtDisplayDate(r.datetime.slice(0, 10))} ${fmtDisplayTime(r.datetime, false)}`
+      : (r.trade_date ? fmtDisplayDate(r.trade_date) : "");
     tr.innerHTML = `
       <td>${dt}</td>
       <td class="sym">${formatSymbol(r)}</td>
@@ -434,8 +482,10 @@ function renderDayTrades(trades) {
                       t.side === "P" || t.side === "PUT" || t.side === "SELL" ? "side-put" : "";
     const sideLabel = t.side === "C" ? "CALL" : t.side === "P" ? "PUT" : t.side;
     const roi = t.net_roi != null ? (t.net_roi >= 0 ? `${t.net_roi.toFixed(2)}%` : `(${Math.abs(t.net_roi).toFixed(2)}%)`) : "—";
+    const openTag = t.is_open ? `<span class="muted" style="font-size:11px;margin-left:6px;">(open)</span>` : "";
+    const timeCell = `${t.time || ""}${openTag}`;
     tr.innerHTML = `
-      <td>${t.time || ""}</td>
+      <td>${timeCell}</td>
       <td><span class="ticker-pill">${t.ticker || ""}</span></td>
       <td class="${sideClass}">${sideLabel || ""}</td>
       <td>${t.instrument || ""}</td>
