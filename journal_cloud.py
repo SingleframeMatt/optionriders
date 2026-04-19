@@ -476,10 +476,10 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
 
 def _enumerate_flex_sections(report: str) -> list[dict]:
     """
-    Diagnostic helper: return a list of { tag, count, sample_attrs } for each
-    distinct element in the root <FlexStatements> tree. Used once to discover
-    what the MTM / Realized summary sections actually look like in this
-    account's flex report before writing a proper parser for them.
+    Diagnostic helper: return a list of {tag, count, sample_attrs, sample_xml}
+    for each distinct element in the root <FlexStatements> tree. Used once to
+    discover what MTM / Realized summary rows look like in the user's account
+    before writing a parser for them.
     """
     if not report.lstrip().startswith("<"):
         return []
@@ -491,11 +491,27 @@ def _enumerate_flex_sections(report: str) -> list[dict]:
 
     tags: dict[str, dict] = {}
     for el in root.iter():
-        entry = tags.setdefault(el.tag, {"tag": el.tag, "count": 0, "sample_attrs": None})
+        entry = tags.setdefault(el.tag, {
+            "tag": el.tag,
+            "count": 0,
+            "attr_count": 0,
+            "sample_attrs": {},
+            "sample_xml": "",
+        })
         entry["count"] += 1
-        if entry["sample_attrs"] is None and el.attrib:
-            entry["sample_attrs"] = dict(list(el.attrib.items())[:40])
-    # Return sorted by count desc; skip the root itself if it's huge
+        # Capture the first element with any attributes so the frontend can see
+        # field names. Fall back to first element overall if nothing has attrs.
+        if not entry["sample_attrs"]:
+            if el.attrib:
+                entry["attr_count"] = len(el.attrib)
+                entry["sample_attrs"] = dict(list(el.attrib.items())[:60])
+            if not entry["sample_xml"]:
+                try:
+                    xml_str = ET.tostring(el, encoding="unicode")
+                    # Truncate huge elements but keep enough for attribute discovery
+                    entry["sample_xml"] = xml_str[:1500]
+                except Exception:
+                    entry["sample_xml"] = ""
     return sorted(tags.values(), key=lambda x: -x["count"])[:60]
 
 
