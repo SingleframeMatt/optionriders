@@ -205,14 +205,10 @@ function formatSymbol(r) {
 }
 
 function buildQuery() {
-  const qs = new URLSearchParams();
-  const f = $("filterFrom").value;
-  const t = $("filterTo").value;
-  const a = $("filterAsset").value;
-  if (f) qs.set("from", f);
-  if (t) qs.set("to", t);
-  if (a) qs.set("asset_class", a);
-  return qs.toString();
+  // Header filters (currency / asset / date range) were removed from the UI.
+  // compute_stats / equity / fills still accept these params on the server,
+  // so if we reintroduce filters elsewhere, set them here.
+  return "";
 }
 
 async function api(path, opts = {}) {
@@ -1448,15 +1444,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     state.calMonth = n.getMonth() + 1;
     refresh();
   });
-  $("filterCurrency").value = state.currency;
-  $("filterCurrency").addEventListener("change", (e) => {
-    state.currency = e.target.value;
-    localStorage.setItem("journal_currency", state.currency);
-    refresh();
-  });
-  ["filterFrom", "filterTo", "filterAsset"].forEach(id => {
-    $(id).addEventListener("change", refresh);
-  });
+  // Header filter controls were removed; state.currency stays at its stored
+  // default (GBP) and is used by fmt.money for display conversion only.
   document.querySelectorAll(".tab").forEach(t => {
     t.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach(x => x.classList.remove("is-active"));
