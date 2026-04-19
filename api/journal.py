@@ -131,12 +131,13 @@ class handler(BaseHTTPRequestHandler):
                         payload = {}
                 ibkr_token = (payload.get("token") or "").strip()
                 ibkr_qid = (payload.get("query_id") or "").strip()
+                diagnose = bool(payload.get("diagnose"))
                 if not ibkr_token or not ibkr_qid:
                     return _respond(self, 400, {
                         "ok": False,
                         "error": "Open Settings and paste your IBKR Flex token and query ID.",
                     })
-                _respond(self, 200, jc.sync_from_ibkr(token, user_id, ibkr_token, ibkr_qid))
+                _respond(self, 200, jc.sync_from_ibkr(token, user_id, ibkr_token, ibkr_qid, diagnose=diagnose))
             elif action == "import-flex":
                 text = body.decode("utf-8", errors="replace")
                 if text.lstrip().startswith("{") and not text.lstrip().startswith("<"):
