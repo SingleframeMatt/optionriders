@@ -197,24 +197,40 @@ def fetch_fills_window(bearer_token: str, from_iso: str,
     return _paginated_get(bearer_token, params, timeout=20)
 
 
+def _latest_fill_datetime(bearer_token: str, user_id: str) -> str | None:
+    """Cheapest possible 'where did we leave off' probe — one row, one column."""
+    resp = requests.get(
+        f"{SUPABASE_URL}/rest/v1/journal_fills",
+        headers=_rest_headers(bearer_token),
+        params=[
+            ("user_id", f"eq.{user_id}"),
+            ("select", "datetime"),
+            ("order", "datetime.desc"),
+            ("limit", "1"),
+        ],
+        timeout=10,
+    )
+    if resp.status_code != 200:
+        return None
+    rows = resp.json() or []
+    return (rows[0].get("datetime") if rows else None)
+
+
 def insert_fills(bearer_token: str, user_id: str, rows: list[dict]) -> dict:
     """
-    Bulk insert with upsert semantics. Returns {inserted, skipped, updated}.
-
-    PostgREST upsert via ON CONFLICT requires the Prefer header. We also
-    request the inserted rows back in compact form so we can count.
+    Bulk upsert. Uses return=minimal so we don't pay the egress of receiving
+    every inserted row back. Returns {inserted, skipped, updated}; 'inserted'
+    here means "sent to the server" since minimal doesn't tell us which were
+    new vs merged — the caller filters duplicates beforehand anyway.
     """
     if not rows:
         return {"inserted": 0, "skipped": 0, "updated": 0}
 
-    # Tag every row with the authenticated user_id (RLS also checks this).
     for r in rows:
         r["user_id"] = user_id
 
-    # Chunk large uploads (Supabase has request size limits)
     CHUNK = 500
-    inserted = 0
-    updated = 0
+    posted = 0
     for i in range(0, len(rows), CHUNK):
         chunk = rows[i:i + CHUNK]
         # PostgREST (PGRST102) requires every row in a bulk insert to have the
@@ -223,24 +239,20 @@ def insert_fills(bearer_token: str, user_id: str, rows: list[dict]) -> dict:
         for r in chunk:
             all_keys.update(r.keys())
         chunk = [{k: r.get(k) for k in all_keys} for r in chunk]
-        # Upsert on the (user_id, trade_id, datetime, symbol, quantity, trade_price)
-        # unique constraint — without on_conflict PostgREST tries the PK (id) and
-        # returns 409 when the natural key collides.
         resp = requests.post(
             f"{SUPABASE_URL}/rest/v1/journal_fills"
             "?on_conflict=user_id,trade_id,datetime,symbol,quantity,trade_price",
             headers=_rest_headers(bearer_token, {
-                "Prefer": "return=representation,resolution=merge-duplicates",
+                "Prefer": "return=minimal,resolution=merge-duplicates",
             }),
             data=json.dumps(chunk),
             timeout=60,
         )
-        if resp.status_code not in (200, 201):
+        if resp.status_code not in (200, 201, 204):
             raise RuntimeError(f"insert_fills: {resp.status_code} {resp.text[:300]}")
-        returned = resp.json()
-        inserted += len(returned)
+        posted += len(chunk)
 
-    return {"inserted": inserted, "skipped": max(0, len(rows) - inserted), "updated": updated}
+    return {"inserted": posted, "skipped": 0, "updated": 0}
 
 
 def delete_all_user_fills(bearer_token: str, user_id: str) -> int:
@@ -1118,14 +1130,25 @@ def sync_from_ibkr(bearer_token: str, user_id: str,
         started = datetime.now(timezone.utc)
         report = trade_journal.fetch_flex_report(ibkr_token, ibkr_query_id)
         rows = _parse_flex_and_normalize(report, user_id)
+        total_parsed = len(rows)
+
+        # Incremental: ask Supabase for the user's most recent fill and drop
+        # anything at or before it. Saves the Supabase POST + its response
+        # round-trip on the overlapping rows the Flex query re-sends every
+        # time (IBKR has no native "since" filter on saved queries).
+        cutoff = _latest_fill_datetime(bearer_token, user_id)
+        if cutoff:
+            rows = [r for r in rows if (r.get("datetime") or "") > cutoff]
+
         result = insert_fills(bearer_token, user_id, rows)
         out = {
             "ok": True,
             "inserted": result["inserted"],
-            "skipped": result["skipped"],
+            "skipped": total_parsed - result["inserted"],
             "updated": result["updated"],
             "format": "xml" if report.lstrip().startswith("<") else "csv",
             "fetched_at": started.isoformat(),
+            "since": cutoff,
         }
         if diagnose:
             out["sections_found"] = _enumerate_flex_sections(report)
