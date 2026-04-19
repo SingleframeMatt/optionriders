@@ -1364,7 +1364,8 @@ function handleSettingsClear() {
 }
 
 function setAutoSync(enabled) {
-  localStorage.setItem("journal_auto_sync", enabled ? "1" : "0");
+  // Intentionally not persisted — auto-sync must be opted into each session
+  // to avoid idle tabs racking up Supabase egress.
   if (state.autoSyncTimer) {
     clearInterval(state.autoSyncTimer);
     state.autoSyncTimer = null;
@@ -1406,10 +1407,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("refreshBtn").addEventListener("click", refresh);
   $("clearBtn").addEventListener("click", clearAll);
   $("syncBtn").addEventListener("click", () => syncIbkr());
-  const autoOn = localStorage.getItem("journal_auto_sync") === "1";
-  $("autoSyncToggle").checked = autoOn;
+  // Auto-sync is deliberately off on every page load — it triggers a fresh
+  // IBKR round-trip + Supabase writes every 15 min, which is the biggest
+  // driver of usage for an idle tab left open. User must opt in each session.
+  $("autoSyncToggle").checked = false;
   $("autoSyncToggle").addEventListener("change", (e) => setAutoSync(e.target.checked));
-  if (autoOn) setAutoSync(true);
+  try { localStorage.removeItem("journal_auto_sync"); } catch (_) {}
   loadLastSync();
   $("calPrev").addEventListener("click", () => changeMonth(-1));
   $("calNext").addEventListener("click", () => changeMonth(1));
