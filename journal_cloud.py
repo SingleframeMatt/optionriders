@@ -621,7 +621,20 @@ def _fill_summary(fill: dict) -> dict:
 
 
 def _trade_metrics(fills: list[dict]) -> dict:
-    """Average entry / exit price, gross quantity, qty still held (signed)."""
+    """Average entry / exit price, gross quantity, qty still held (signed).
+
+    Buckets each fill as opening or closing using IBKR's `open_close` flag when
+    present, falling back to "same sign as the first fill in the cycle" so short
+    entries (sell-to-open then buy-to-close) compute correctly.
+    """
+    # Find the sign of the first non-zero fill — that's the cycle's entry side.
+    entry_sign = 0
+    for f in fills:
+        q = f.get("quantity") or 0.0
+        if q != 0:
+            entry_sign = 1 if q > 0 else -1
+            break
+
     open_qty = 0.0
     open_notional = 0.0
     close_qty = 0.0
@@ -631,13 +644,18 @@ def _trade_metrics(fills: list[dict]) -> dict:
         q = f.get("quantity") or 0.0
         p = f.get("trade_price") or 0.0
         net_qty += q
-        # Opens add to position magnitude (same sign as current direction)
-        if q > 0:
-            open_qty += q
-            open_notional += q * p
+        oc = f.get("open_close")
+        if oc in ("O", "C"):
+            is_open = oc == "O"
         else:
-            close_qty += abs(q)
-            close_notional += abs(q) * p
+            is_open = entry_sign == 0 or ((q > 0) == (entry_sign > 0))
+        aq = abs(q)
+        if is_open:
+            open_qty += aq
+            open_notional += aq * p
+        else:
+            close_qty += aq
+            close_notional += aq * p
     avg_entry = (open_notional / open_qty) if open_qty else None
     avg_exit = (close_notional / close_qty) if close_qty else None
     return {
