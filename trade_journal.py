@@ -191,7 +191,7 @@ def _parse_datetime(value: str) -> str | None:
             return datetime.strptime(s, fmt).isoformat()
         except ValueError:
             continue
-    return s  # store raw, still better than dropping
+    return None
 
 
 def _parse_date(value: str) -> str | None:
@@ -203,7 +203,7 @@ def _parse_date(value: str) -> str | None:
             return datetime.strptime(s, fmt).date().isoformat()
         except ValueError:
             continue
-    return s
+    return None
 
 
 def _normalize_row(row: dict[str, str]) -> dict[str, Any]:
@@ -272,8 +272,15 @@ def _iter_csv_rows(text: str) -> Iterable[dict[str, str]]:
 
     # Simple single-header CSV
     headers = first
+    header_set = {h.strip().lower() for h in headers if h}
     for row in rows[1:]:
         if not row or len(row) == 1 and not row[0].strip():
+            continue
+        # Skip duplicated header rows (some brokers / concatenated exports
+        # repeat the header mid-file; without this guard the literal column
+        # names ("Expiry", "Symbol", ...) flow through as fill values).
+        non_empty = [c.strip().lower() for c in row if c and c.strip()]
+        if non_empty and header_set and set(non_empty).issubset(header_set):
             continue
         yield dict(zip(headers, row))
 
