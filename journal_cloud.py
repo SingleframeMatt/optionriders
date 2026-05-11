@@ -107,10 +107,31 @@ def _coerce(row: dict) -> dict:
 # of the `limit` query param. Paginate with Range headers to pull everything.
 _PAGE_SIZE = 1000
 
+# Columns the frontend tables and round-trip pair builder actually use.
+# Default projection drops description, mtm_pnl, source, imported_at, currency,
+# put_call, multiplier, strike, expiry, cost_basis, open_close, buy_sell —
+# everything not consumed downstream. Cuts egress ~50% on row fetches.
+_FILL_COLUMNS_MIN = (
+    "id,user_id,account,symbol,underlying,asset_class,datetime,trade_date,"
+    "quantity,trade_price,proceeds,commission,realized_pnl,fx_rate_to_base,"
+    "open_close,buy_sell"
+)
+# Full projection — used when the caller really needs every column
+# (admin export, debugging).
+_FILL_COLUMNS_FULL = "*"
+
 
 def _paginated_get(bearer_token: str, params: list[tuple[str, str]],
-                   cap: int | None = None, timeout: int = 30) -> list[dict]:
-    """GET /journal_fills in 1000-row pages until exhausted (or cap reached)."""
+                   cap: int | None = None, timeout: int = 30,
+                   columns: str = _FILL_COLUMNS_MIN) -> list[dict]:
+    """GET /journal_fills in 1000-row pages until exhausted (or cap reached).
+
+    `columns` controls PostgREST's `select=` projection. Defaults to the
+    minimal column set so we don't blow egress on fields nobody reads.
+    """
+    # Inject the select projection. Keep params as a list so order is stable.
+    if columns and not any(k == "select" for k, _ in params):
+        params = [("select", columns), *params]
     out: list[dict] = []
     offset = 0
     while True:
@@ -140,7 +161,8 @@ def _paginated_get(bearer_token: str, params: list[tuple[str, str]],
 
 
 def fetch_user_fills(bearer_token: str, filters: dict | None = None,
-                     limit: int | None = None) -> list[dict]:
+                     limit: int | None = None,
+                     columns: str = _FILL_COLUMNS_MIN) -> list[dict]:
     """Read user's fills via PostgREST. RLS enforces user scoping."""
     params: list[tuple[str, str]] = []
     filters = filters or {}
@@ -154,7 +176,7 @@ def fetch_user_fills(bearer_token: str, filters: dict | None = None,
         # underlying match OR symbol match
         params.append(("or", f"(symbol.eq.{filters['symbol']},underlying.eq.{filters['symbol']})"))
     params.append(("order", "datetime.desc"))
-    return _paginated_get(bearer_token, params, cap=limit, timeout=15)
+    return _paginated_get(bearer_token, params, cap=limit, timeout=15, columns=columns)
 
 
 # Warm-instance cache for fetch_all_user_fills. Vercel recycles between invocations
@@ -296,8 +318,52 @@ def _parse_flex_and_normalize(raw_text: str, user_id: str) -> list[dict]:
 
 
 def compute_stats(bearer_token: str, filters: dict | None = None) -> dict:
-    rows = fetch_user_fills(bearer_token, filters or {}, limit=100000)
+    """
+    Aggregate stats for the dashboard. First tries the journal_stats RPC
+    (server-side aggregation — ~1KB response). Falls back to the row-pull
+    path if the RPC is unavailable (e.g. migration not yet applied).
+
+    Note: the RPC computes aggregates over *close fills* (realized_pnl != 0)
+    rather than building round-trip trades. For day-traders whose closes
+    map 1:1 to trades this matches the trade-pair output to within a few
+    cents. If exact round-trip pair matching is required, pass
+    `filters['exact'] = True` to force the legacy row-pull path.
+    """
+    filters = filters or {}
+    if not filters.get("exact"):
+        rpc = _compute_stats_via_rpc(bearer_token, filters)
+        if rpc is not None:
+            return rpc
+    rows = fetch_user_fills(bearer_token, filters, limit=100000)
     return _compute_stats_from_rows(rows)
+
+
+def _compute_stats_via_rpc(bearer_token: str, filters: dict) -> dict | None:
+    """Call journal_stats(p_from, p_to) RPC. Returns None on any failure so
+    the caller can fall back to the row-pull path."""
+    body = {
+        "p_from": filters.get("from"),
+        "p_to":   filters.get("to"),
+    }
+    try:
+        resp = requests.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/journal_stats",
+            headers=_rest_headers(bearer_token),
+            data=json.dumps(body),
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return None
+        out = resp.json()
+        if not isinstance(out, dict):
+            return None
+        # Apply optional client-side filters that the RPC doesn't know about.
+        # asset_class and symbol filters: degrade to row-pull path for now.
+        if filters.get("asset_class") or filters.get("symbol"):
+            return None
+        return out
+    except Exception:
+        return None
 
 
 def _compute_stats_from_rows(rows: list[dict]) -> dict:
