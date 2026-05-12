@@ -733,6 +733,24 @@ def _trade_metrics(fills: list[dict]) -> dict:
     }
 
 
+def _slice_pnl_for_day(trade_fills: list[dict], date_iso: str) -> tuple[float, float]:
+    """
+    Return (realized_pnl, commission) for the portion of a position cycle's
+    fills that occurred on `date_iso`. Multi-day positions otherwise roll the
+    entire cycle's P/L onto the close date, which over-reports the daily
+    number. Values are in account-base currency.
+    """
+    realized = 0.0
+    commission = 0.0
+    for f in trade_fills:
+        if (f.get("trade_date") or "") != date_iso:
+            continue
+        fx = f.get("fx_rate_to_base") or 1.0
+        realized   += (f.get("realized_pnl") or 0.0) * fx
+        commission += (f.get("commission")   or 0.0) * fx
+    return round(realized, 2), round(commission, 2)
+
+
 def day_detail(bearer_token: str, date_iso: str) -> dict:
     # Windowed fetch: 180 days before the target date covers the opening fill
     # of any round-trip that closes on date_iso. _open_positions_opened_on
@@ -746,6 +764,20 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
     day_trades = [t for t in trades if t["close_date"] == date_iso]
     day_rows = [r for r in rows if r.get("trade_date") == date_iso and r.get("asset_class") != "CASH"]
     open_positions = _open_positions_opened_on(rows, date_iso)
+
+    # Restrict each trade's reported P/L to the slice that landed on date_iso.
+    # Position cycles that span multiple days (e.g. a stock partially closed
+    # over a week) otherwise dump the entire cycle's realized P/L onto the
+    # close date, over-reporting the day. Matches IBKR's per-day attribution.
+    for t in day_trades:
+        fills = _fills_for_trade(rows, t.get("account") or "", t["symbol"],
+                                 t.get("open_datetime"), t.get("close_datetime"))
+        day_pnl, day_comm = _slice_pnl_for_day(fills, date_iso)
+        t["gross_pnl"] = day_pnl
+        t["realized_pnl"] = day_pnl
+        t["commission"] = day_comm
+        t["net_pnl"] = round(day_pnl + day_comm, 2)
+        t["is_win"] = day_pnl > 0
 
     pnls = [t["gross_pnl"] for t in day_trades]
     wins = [p for p in pnls if p > 0]
@@ -917,15 +949,34 @@ def week_detail(bearer_token: str, start_iso: str) -> dict:
     week_trades = [t for t in trades if t["close_date"] in days_iso]
     week_rows = [r for r in rows if r.get("trade_date") in days_iso and r.get("asset_class") != "CASH"]
 
+    # Slice each trade's P/L to only the portion of its cycle that landed
+    # inside this week (and on its respective day for the per-day breakdown).
+    # Matches IBKR's per-day attribution — multi-day partial closes are no
+    # longer rolled forward onto the close_date.
     per_day = {d: {"pnl": 0.0, "trades": 0, "wins": 0} for d in days_iso}
     for t in week_trades:
-        b = per_day.get(t["close_date"])
-        if not b:
-            continue
-        b["pnl"] += t["gross_pnl"]
-        b["trades"] += 1
-        if t["is_win"]:
-            b["wins"] += 1
+        fills = _fills_for_trade(rows, t.get("account") or "", t["symbol"],
+                                 t.get("open_datetime"), t.get("close_datetime"))
+        week_pnl_total = 0.0
+        week_comm_total = 0.0
+        for d in days_iso:
+            d_pnl, d_comm = _slice_pnl_for_day(fills, d)
+            if d_pnl == 0 and d_comm == 0:
+                continue
+            b = per_day[d]
+            b["pnl"] += d_pnl
+            b["trades"] += 1
+            if d_pnl > 0:
+                b["wins"] += 1
+            week_pnl_total += d_pnl
+            week_comm_total += d_comm
+        # Override the cycle totals so downstream aggregates and the trade
+        # list show only this week's slice.
+        t["gross_pnl"] = round(week_pnl_total, 2)
+        t["realized_pnl"] = round(week_pnl_total, 2)
+        t["commission"] = round(week_comm_total, 2)
+        t["net_pnl"] = round(week_pnl_total + week_comm_total, 2)
+        t["is_win"] = week_pnl_total > 0
 
     weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     day_summaries = []
