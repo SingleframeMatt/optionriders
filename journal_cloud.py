@@ -459,16 +459,46 @@ def calendar_month(bearer_token: str, year: int, month: int,
     rows = fetch_fills_window(bearer_token, cutoff, last_day)
     trades = trade_journal._build_trades(rows)
 
+    # Attribute each trade's realized P/L to the day the fill actually
+    # occurred — not the day the position cycle ended. For multi-day
+    # positions (e.g. a stock partial-closed over several days), the
+    # legacy logic dumped the whole cycle's P/L onto close_date which
+    # over-reported that day. Mirrors the fix applied in day_detail.
     per_day: dict[str, dict] = {}
     for t in trades:
-        d = t["close_date"] or ""
-        if not d or not (first_day <= d <= last_day):
+        close_d = t["close_date"] or ""
+        # Only consider cycles whose close lands in our month window —
+        # this keeps us from re-attributing P/L from cycles that closed
+        # in some prior month but had a partial close in this month.
+        # (For those rare cross-month positions, the prior-month partial
+        # close still won't appear here, matching how IBKR groups by
+        # statement period anyway.)
+        if not close_d or not (first_day <= close_d <= last_day):
             continue
-        bucket = per_day.setdefault(d, {"pnl": 0.0, "trades": 0, "wins": 0})
-        bucket["pnl"] += t["gross_pnl"]
-        bucket["trades"] += 1
-        if t["is_win"]:
-            bucket["wins"] += 1
+        fills = _fills_for_trade(rows, t.get("account") or "", t["symbol"],
+                                 t.get("open_datetime"), t.get("close_datetime"))
+        for f in fills:
+            fd = f.get("trade_date") or ""
+            if not fd or not (first_day <= fd <= last_day):
+                continue
+            fx = f.get("fx_rate_to_base") or 1.0
+            fill_pnl = (f.get("realized_pnl") or 0.0) * fx
+            if fill_pnl == 0:
+                continue
+            bucket = per_day.setdefault(fd, {"pnl": 0.0, "trades": 0, "wins": 0,
+                                             "_trade_keys": set()})
+            bucket["pnl"] += fill_pnl
+            # Count this trade once per day (a cycle with three closes on
+            # the same day still counts as 1 trade for that day).
+            tk = (t.get("account") or "", t["symbol"], t.get("close_datetime") or "")
+            if tk not in bucket["_trade_keys"]:
+                bucket["_trade_keys"].add(tk)
+                bucket["trades"] += 1
+                if fill_pnl > 0:
+                    bucket["wins"] += 1
+    # Drop the helper set before serialising.
+    for b in per_day.values():
+        b.pop("_trade_keys", None)
 
     days = []
     for day in range(1, last_day_num + 1):
