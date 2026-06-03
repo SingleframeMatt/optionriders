@@ -579,6 +579,30 @@ def _build_trades(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
                     "net_pnl": round(realized + commission, 2),
                     "is_win": realized > 0,
                 })
+        # Residual partial-close: position never returned to zero within this
+        # window (e.g. user holds 100 NVDA from last month and sold 4 today).
+        # Emit a synthetic trade carrying the accumulated FIFO realized P/L so
+        # day_detail / calendar_month / stats attribute it correctly. Tagged
+        # is_open=True so callers can distinguish from fully-closed cycles.
+        if (abs(position) >= 1e-9 and realized != 0.0
+                and open_fill is not None and last_fill is not None):
+            trades.append({
+                "account": account,
+                "symbol": symbol,
+                "underlying": open_fill.get("underlying") or symbol,
+                "asset_class": open_fill.get("asset_class"),
+                "open_date": open_fill.get("trade_date"),
+                "open_datetime": open_fill.get("datetime"),
+                "close_date": last_fill.get("trade_date"),
+                "close_datetime": last_fill.get("datetime"),
+                "fill_count": fill_count,
+                "gross_pnl": round(realized, 2),
+                "realized_pnl": round(realized, 2),
+                "commission": round(commission, 2),
+                "net_pnl": round(realized + commission, 2),
+                "is_win": realized > 0,
+                "is_open": True,
+            })
     return trades
 
 
