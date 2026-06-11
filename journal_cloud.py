@@ -109,12 +109,13 @@ _PAGE_SIZE = 1000
 
 # Columns the frontend tables and round-trip pair builder actually use.
 # Default projection drops description, mtm_pnl, source, imported_at, currency,
-# put_call, multiplier, strike, expiry, cost_basis, open_close, buy_sell —
-# everything not consumed downstream. Cuts egress ~50% on row fetches.
+# cost_basis — everything not consumed downstream. Option metadata
+# (put_call, strike, expiry, multiplier) is included so the trade-detail
+# modal can show "06-22-2026 207.5 CALL" instead of just the underlying.
 _FILL_COLUMNS_MIN = (
     "id,user_id,account,symbol,underlying,asset_class,datetime,trade_date,"
     "quantity,trade_price,proceeds,commission,realized_pnl,fx_rate_to_base,"
-    "open_close,buy_sell"
+    "open_close,buy_sell,put_call,strike,expiry,multiplier"
 )
 # Full projection — used when the caller really needs every column
 # (admin export, debugging).
