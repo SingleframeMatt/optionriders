@@ -837,6 +837,34 @@ function openTradeDetail(trade) {
   const openBadge = $("tradeDetailOpenBadge");
   openBadge.hidden = !trade.is_open;
 
+  // Option metadata rows — visible only for options
+  const rightRow = $("tdRightRow");
+  const strikeRow = $("tdStrikeRow");
+  const expiryRow = $("tdExpiryRow");
+  if (isOpt) {
+    const pc = trade.put_call === "C" ? "CALL" : trade.put_call === "P" ? "PUT" : "—";
+    $("tdRight").textContent = pc;
+    if (trade.strike != null) {
+      const sn = Number(trade.strike);
+      $("tdStrike").textContent = "$" + (Number.isInteger(sn) ? String(sn) : sn.toFixed(2).replace(/\.?0+$/, ""));
+    } else {
+      $("tdStrike").textContent = "—";
+    }
+    if (trade.expiry) {
+      const [y, m, d] = String(trade.expiry).split("-");
+      $("tdExpiry").textContent = `${m}-${d}-${y}`;
+    } else {
+      $("tdExpiry").textContent = "—";
+    }
+    rightRow.hidden = false;
+    strikeRow.hidden = false;
+    expiryRow.hidden = false;
+  } else {
+    rightRow.hidden = true;
+    strikeRow.hidden = true;
+    expiryRow.hidden = true;
+  }
+
   // Stat rows
   $("tdSide").textContent = sideBadge.textContent;
   $("tdEntry").textContent = fmtDisplayTime(trade.open_datetime);
