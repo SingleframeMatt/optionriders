@@ -672,7 +672,9 @@ def fetch_top_trade_today(force_refresh: bool = False) -> dict:
     fallback_picks = [pick for pick in picks if pick["confidence"] < confidence_floor]
     picks = (preferred_picks + fallback_picks)[:4]
 
-    if not picks and candidate_symbols:
+    # During pre-market, don't pad the board — a dead tape should show an honest
+    # short/empty list, not "least-bad" filler that skipped the gap gate.
+    if not picks and candidate_symbols and not is_premarket:
         fallback_symbol = next((symbol for symbol in PRIMARY_UNIVERSE if symbol in ticker_lookup), None)
         if fallback_symbol:
             item = ticker_lookup[fallback_symbol]
@@ -704,7 +706,7 @@ def fetch_top_trade_today(force_refresh: bool = False) -> dict:
                 "earningsDate": item.get("earningsDate"),
             }]
 
-    if 0 < len(picks) < 4:
+    if 0 < len(picks) < 4 and not is_premarket:
         existing = {pick["ticker"] for pick in picks}
         for symbol in candidate_symbols:
             if len(picks) >= 4:
