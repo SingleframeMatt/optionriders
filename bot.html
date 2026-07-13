@@ -170,6 +170,36 @@
     font-size: .7rem; color: #444; text-align: right; margin-top: 8px;
     font-family: 'JetBrains Mono', monospace;
   }
+
+  .history-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px 18px; margin-top: 16px;
+  }
+  .history-title {
+    font-size: .68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .1em; color: #555; margin-bottom: 12px;
+  }
+  .history-empty {
+    color: #444; font-size: .85rem; text-align: center; padding: 18px 0; font-style: italic;
+  }
+  .history-table { width: 100%; border-collapse: collapse; }
+  .history-table th,
+  .history-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .78rem;
+    text-align: left;
+  }
+  .history-table th {
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    font-size: .63rem;
+  }
+  .pnl-positive { color: var(--green); }
+  .pnl-negative { color: var(--red); }
+  .pnl-flat { color: #999; }
 </style>
 </head>
 <body>
@@ -239,6 +269,25 @@
     </div>
   </div>
 
+  <div class="bot-metrics">
+    <div class="metric-card">
+      <div class="metric-label">Realized PnL</div>
+      <div class="metric-value" id="metricPnl">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Closed Trades</div>
+      <div class="metric-value cyan" id="metricTrades">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Win Rate</div>
+      <div class="metric-value amber" id="metricWinRate">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Execution Mode</div>
+      <div class="metric-value" id="metricMode" style="font-size:.95rem">—</div>
+    </div>
+  </div>
+
   <!-- Key Levels -->
   <div class="levels-card">
     <div class="levels-title">Key Levels</div>
@@ -303,6 +352,25 @@
     </table>
   </div>
 
+  <div class="history-card">
+    <div class="history-title">Closed Trades & Realized PnL</div>
+    <div id="historyEmpty" class="history-empty">No closed trades recorded yet</div>
+    <table class="history-table" id="historyTable" style="display:none">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Side</th>
+          <th>Entry</th>
+          <th>Exit</th>
+          <th>PnL</th>
+          <th>Reason</th>
+          <th>Mode</th>
+        </tr>
+      </thead>
+      <tbody id="historyBody"></tbody>
+    </table>
+  </div>
+
   <div class="last-update" id="lastUpdate"></div>
 
 </main>
@@ -351,6 +419,15 @@ function renderState(s) {
   document.getElementById('metricEma').textContent    = s.ema         != null ? '$' + fmt(s.ema)         : '—';
   document.getElementById('metricCandle').textContent = s.last_candle_time || '—';
 
+  const perf = s.performance || {};
+  const realizedPnl = Number(perf.realized_pnl || 0);
+  const pnlEl = document.getElementById('metricPnl');
+  pnlEl.textContent = `${realizedPnl >= 0 ? '+' : ''}$${fmt(Math.abs(realizedPnl))}`.replace('$+', '+$');
+  pnlEl.className = `metric-value ${realizedPnl > 0 ? 'green' : realizedPnl < 0 ? 'red' : ''}`.trim();
+  document.getElementById('metricTrades').textContent = String(perf.total_trades ?? '0');
+  document.getElementById('metricWinRate').textContent = `${Number(perf.win_rate || 0).toFixed(1)}%`;
+  document.getElementById('metricMode').textContent = String(s.execution_mode || 'paper').toUpperCase();
+
   // Levels
   const lvl = s.levels || {};
   document.getElementById('levelPDH').textContent = lvl.PDH != null ? '$' + fmt(lvl.PDH) : '—';
@@ -396,6 +473,33 @@ function renderState(s) {
         <td>${entry.msg}</td>
       </tr>`
     ).join('');
+  }
+
+  const history = s.trade_history || [];
+  if (history.length === 0) {
+    document.getElementById('historyEmpty').style.display = 'block';
+    document.getElementById('historyTable').style.display = 'none';
+  } else {
+    document.getElementById('historyEmpty').style.display = 'none';
+    document.getElementById('historyTable').style.display = 'table';
+    document.getElementById('historyBody').innerHTML = history.map((trade) => {
+      const pnl = Number(trade.pnl || 0);
+      const pnlClass = pnl > 0 ? 'pnl-positive' : pnl < 0 ? 'pnl-negative' : 'pnl-flat';
+      const time = trade.exit_time
+        ? new Date(trade.exit_time).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : '—';
+      return `
+        <tr>
+          <td>${time}</td>
+          <td>${String(trade.direction || '—').toUpperCase()}</td>
+          <td>$${fmt(trade.entry)}</td>
+          <td>$${fmt(trade.exit)}</td>
+          <td class="${pnlClass}">${pnl >= 0 ? '+' : ''}${fmt(pnl)}</td>
+          <td>${trade.reason || '—'}</td>
+          <td>${String(trade.execution_mode || 'paper').toUpperCase()}</td>
+        </tr>
+      `;
+    }).join('');
   }
 
   document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();

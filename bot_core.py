@@ -4,11 +4,13 @@ bot_core.py — BTC/USDT retest bot engine for Option Riders
 Runs as a background thread inside server.py
 """
 
+import json
 import os
 import time
 import threading
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +25,7 @@ REJECTION_WICK_RATIO = 1.5
 TIME_STOP_MINUTES    = 25
 POLL_SECONDS         = 15
 MAX_LOG_ENTRIES      = 50
+LEDGER_PATH          = Path(__file__).parent / "data" / "bot_trade_ledger.json"
 
 
 # ── INDICATORS ────────────────────────────────────────────────────────────────
@@ -124,6 +127,7 @@ class BotCore:
         self._lock    = threading.Lock()
         self._running = False
         self._thread  = None
+        self._closed_trades = self._load_closed_trades()
         self._state   = {
             "status":          "stopped",   # stopped | scanning | in_trade | error
             "position":        None,
@@ -136,6 +140,9 @@ class BotCore:
             "started_at":      None,
             "error":           None,
             "testnet":         True,
+            "execution_mode":  "paper",
+            "performance":     self._build_performance(),
+            "trade_history":   list(self._closed_trades[-12:][::-1]),
         }
 
     # ── PUBLIC API ────────────────────────────────────────────────────────────
@@ -168,6 +175,64 @@ class BotCore:
                 s["position"]["entry_time"] = s["position"]["entry_time"].isoformat()
             return s
 
+    def _load_closed_trades(self):
+        try:
+            if not LEDGER_PATH.exists():
+                return []
+            payload = json.loads(LEDGER_PATH.read_text(encoding="utf-8"))
+            closed = payload.get("closed_trades", [])
+            return closed if isinstance(closed, list) else []
+        except Exception:
+            return []
+
+    def _persist_closed_trades(self):
+        LEDGER_PATH.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "closed_trades": self._closed_trades,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        LEDGER_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    def _build_performance(self):
+        trades = list(self._closed_trades)
+        realized = round(sum(float(trade.get("pnl", 0.0)) for trade in trades), 2)
+        wins = sum(1 for trade in trades if float(trade.get("pnl", 0.0)) > 0)
+        losses = sum(1 for trade in trades if float(trade.get("pnl", 0.0)) < 0)
+        total = len(trades)
+        win_rate = round((wins / total) * 100, 1) if total else 0.0
+        last_pnl = round(float(trades[-1].get("pnl", 0.0)), 2) if trades else 0.0
+        return {
+            "realized_pnl": realized,
+            "total_trades": total,
+            "wins": wins,
+            "losses": losses,
+            "win_rate": win_rate,
+            "last_pnl": last_pnl,
+        }
+
+    def _refresh_history_state(self):
+        self._state["performance"] = self._build_performance()
+        self._state["trade_history"] = list(self._closed_trades[-12:][::-1])
+
+    def _record_closed_trade(self, position, exit_price, reason, pnl):
+        record = {
+            "id": position.get("id"),
+            "direction": position.get("direction"),
+            "level_name": position.get("level_name"),
+            "entry": round(float(position.get("entry", 0.0)), 2),
+            "exit": round(float(exit_price), 2),
+            "qty": round(float(position.get("qty", 0.0)), 6),
+            "entry_time": position.get("entry_time").isoformat() if hasattr(position.get("entry_time"), "isoformat") else position.get("entry_time"),
+            "exit_time": datetime.now(timezone.utc).isoformat(),
+            "pnl": round(float(pnl), 2),
+            "reason": reason,
+            "execution_mode": self._state.get("execution_mode", "paper"),
+        }
+        self._closed_trades.append(record)
+        self._closed_trades = self._closed_trades[-250:]
+        self._persist_closed_trades()
+        self._refresh_history_state()
+
     # ── INTERNAL LOOP ─────────────────────────────────────────────────────────
     def _update(self, **kwargs):
         with self._lock:
@@ -195,6 +260,7 @@ class BotCore:
             api_key    = os.environ.get("BINANCE_API_KEY", "")
             api_secret = os.environ.get("BINANCE_API_SECRET", "")
             testnet    = os.environ.get("BINANCE_TESTNET", "true").lower() != "false"
+            execution_mode = os.environ.get("BOT_EXECUTION_MODE", "paper").strip().lower() or "paper"
 
             if testnet:
                 client = Client(api_key, api_secret, testnet=True)
@@ -202,8 +268,12 @@ class BotCore:
             else:
                 client = Client(api_key, api_secret)
 
-            self._update(testnet=testnet)
-            self._add_log(f"Bot connected ({'TESTNET' if testnet else 'LIVE'})", "info")
+            self._update(testnet=testnet, execution_mode=execution_mode)
+            self._refresh_history_state()
+            self._add_log(
+                f"Bot connected ({'TESTNET' if testnet else 'LIVE'}) | mode {execution_mode.upper()}",
+                "info",
+            )
 
             position         = None
             last_candle_time = None
@@ -245,6 +315,7 @@ class BotCore:
                                 f"EXIT {position['direction'].upper()} @ {price:.2f} | {reason} | PnL {pnl:+.2f} USDT",
                                 "exit",
                             )
+                            self._record_closed_trade(position, price, reason, pnl)
                             position = None
                             self._update(status="scanning", position=None)
 
@@ -261,6 +332,7 @@ class BotCore:
                                 tp  = entry + risk * RR_RATIO if direction == "long" else entry - risk * RR_RATIO
 
                                 position = {
+                                    "id":         f"trade-{int(candle_time.timestamp())}",
                                     "direction":   direction,
                                     "entry":       round(entry, 2),
                                     "stop_level":  round(stop, 2),

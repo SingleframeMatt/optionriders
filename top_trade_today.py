@@ -20,10 +20,14 @@ from zoneinfo import ZoneInfo
 
 from barchart_proxy import fetch_options_activity
 from market_data import fetch_market_data
+from premarket import fetch_premarket
 from top_watch import fetch_top_watch
 
 
 CACHE_TTL_SECONDS = 300
+# Minimum current-session pre-market gap (vs prior close) for a name to survive
+# the pre-market scan. Below this it chops after the open — no move, no trade.
+PREMARKET_GAP_MIN = 0.5
 NY_TZ = ZoneInfo("America/New_York")
 PRIMARY_UNIVERSE = ["SPY", "QQQ", "NVDA", "TSLA", "AMD", "SMCI", "META", "AAPL", "MSFT", "AMZN"]
 CALENDAR_SOURCES = [
@@ -337,6 +341,9 @@ def _build_setup_type(direction: str, item: dict, tf: Dict[str, TimeframeSnapsho
 
 def _summarize_why(symbol: str, direction: str, item: dict, top_watch_item: Optional[dict], unusual_bias: Optional[str], macro_events: Dict[str, List[dict]], tf: Dict[str, TimeframeSnapshot]) -> str:
     parts = []
+    gap_pct = float(item.get("_gapPct") or 0.0)
+    if abs(gap_pct) >= PREMARKET_GAP_MIN:
+        parts.append(f"{gap_pct:+.1f}% pre-market gap")
     rel = item.get("relStrength")
     if rel is not None:
         label = "relative strength" if rel > 0 else "relative weakness"
@@ -430,7 +437,7 @@ def _build_candidate_universe(market_payload: dict, flow_payload: dict, top_watc
     return ordered
 
 
-def _score_candidate(symbol: str, item: dict, atm_spread_row: Optional[dict], top_watch_item: Optional[dict], unusual_rows: List[dict], tf: Dict[str, TimeframeSnapshot], session: dict) -> Optional[dict]:
+def _score_candidate(symbol: str, item: dict, atm_spread_row: Optional[dict], top_watch_item: Optional[dict], unusual_rows: List[dict], tf: Dict[str, TimeframeSnapshot], session: dict, pm: Optional[dict], is_premarket: bool) -> Optional[dict]:
     price = float(item.get("price") or 0.0)
     if price <= 0:
         return None
@@ -487,6 +494,35 @@ def _score_candidate(symbol: str, item: dict, atm_spread_row: Optional[dict], to
         call_score -= 3.0
         put_score -= 3.0
 
+    # ── Current-session pre-market gap filter ──────────────────────────────
+    # Only gates during the actual pre-market window and only when the feed is
+    # fresh (bars stamped today). Yahoo zeroes 1-min pre-market volume, so the
+    # confirmation is gap magnitude + presence of today's pre-market bars, not
+    # reported volume.
+    gap_pct = float((pm or {}).get("gapPct") or 0.0)
+    abs_gap = abs(gap_pct)
+    has_pm = bool((pm or {}).get("hasPremarket"))
+    pm_stale = bool((pm or {}).get("stale"))
+
+    if is_premarket and pm and not pm_stale:
+        # Gap direction pushes the call/put lean.
+        if gap_pct > 0:
+            call_score += min(abs_gap, 4.0) * 4.0
+            put_score -= min(abs_gap, 4.0) * 2.0
+        elif gap_pct < 0:
+            put_score += min(abs_gap, 4.0) * 4.0
+            call_score -= min(abs_gap, 4.0) * 2.0
+
+        # STRONG FILTER: no real pre-market move this morning = bury it.
+        if abs_gap < PREMARKET_GAP_MIN or not has_pm:
+            call_score -= 40.0
+            put_score -= 40.0
+
+        # MSFT weak-gap chop trap: never surface MSFT on a sub-0.5% pre-market
+        # gap — it chops and dies after the open drive.
+        if symbol == "MSFT" and abs_gap < PREMARKET_GAP_MIN:
+            return None
+
     direction = "Call" if call_score >= put_score else "Put"
     best_score = max(call_score, put_score)
     if best_score < 26:
@@ -540,6 +576,8 @@ def fetch_top_trade_today(force_refresh: bool = False) -> dict:
             unusual_by_symbol.setdefault(symbol, []).append(row)
 
     intraday = _download_multiframe(candidate_symbols)
+    is_premarket = _market_session_label(now) == "Pre-market"
+    premarket_snaps = fetch_premarket(candidate_symbols, now)
     picks = []
 
     for symbol in candidate_symbols:
@@ -562,7 +600,10 @@ def fetch_top_trade_today(force_refresh: bool = False) -> dict:
         atm_row = atm_lookup.get(symbol)
         top_watch_item = top_watch_lookup.get(symbol)
         tf = _build_timeframe_snapshots(symbol, intraday)
-        scored = _score_candidate(symbol, item, atm_row, top_watch_item, unusual_by_symbol.get(symbol, []), tf, session)
+        pm_snap = premarket_snaps.get(symbol)
+        pm_dict = pm_snap.as_dict() if pm_snap is not None else None
+        item["_gapPct"] = float((pm_dict or {}).get("gapPct") or 0.0)
+        scored = _score_candidate(symbol, item, atm_row, top_watch_item, unusual_by_symbol.get(symbol, []), tf, session, pm_dict, is_premarket)
         if not scored:
             continue
 
@@ -596,7 +637,10 @@ def fetch_top_trade_today(force_refresh: bool = False) -> dict:
                 "support": support[:2],
                 "resistance": resistance[:2],
                 "trigger": trigger_level,
+                "premarketHigh": (pm_dict or {}).get("pmh"),
+                "premarketLow": (pm_dict or {}).get("pml"),
             },
+            "premarket": pm_dict or {},
             "triggerToEnter": bull_trigger if direction == "Call" else bear_trigger,
             "stopInvalidation": f"Back through {stop_level}" if stop_level is not None else "Failed break back inside range",
             "profitTargets": targets,
