@@ -1,0 +1,1498 @@
+// This Pine Script™ source code is subject to the terms of the Mozilla Public License 2.0
+// https://mozilla.org/MPL/2.0/
+// © OptionRiders Supply & Demand Pro V36
+
+//@version=6
+indicator("OptionRiders Supply & Demand Pro V36", overlay=true, max_boxes_count=500, max_labels_count=500, max_lines_count=500)
+
+// Guarantee enough history for drawing objects whose x1 may reference bars
+// up to 1800 back (key level lines starting from their source candle).
+max_bars_back(high,  2000)
+max_bars_back(low,   2000)
+max_bars_back(close, 2000)
+max_bars_back(open,  2000)
+max_bars_back(time,  2000)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  INPUTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── 1. Smart Money ────────────────────────────────────────────────────────────
+G4          = "🧠 Smart Money"
+showBOS     = input.bool(true,  "Show BOS / CHoCH",                        group=G4)
+showChoch   = input.bool(false, "  └ Show Reversal Labels",                 group=G4, tooltip="Show or hide the 'Reversal' label when a Change of Character (CHoCH) is detected. Turn off to reduce chart noise.")
+chochMinATR = input.float(1.0,  "  └ Min Reversal Move (× ATR)",            group=G4, minval=0.1, maxval=5.0, step=0.1, tooltip="The CHoCH break must exceed this multiple of ATR to show a Reversal label. Higher = fewer, more significant reversals only. Default 1.0 means the break must be at least 1× ATR.")
+showFVG     = input.bool(true, "Show Fair Value Gaps",        group=G4)
+maxFVG      = input.int(8,     "Max FVGs",                   minval=3, maxval=20, group=G4)
+showLiquid  = input.bool(true, "Show Liquidity Levels",      group=G4)
+eqlTol      = input.float(0.02, "Equal Level Tolerance (%)",  minval=0.01, maxval=1.0, step=0.01, group=G4)
+eqlLookback = input.int(6,     "Equal Level Lookback",        minval=5, maxval=100, group=G4)
+
+// ── 2. Entry Signals ──────────────────────────────────────────────────────────
+GS          = "🎯 Entry Signals"
+showSignals = input.bool(true,  "Show Entry Signals",         group=GS)
+showLongSig = input.bool(false, "  └ Show Long Signals",      group=GS)
+showShortSig= input.bool(false, "  └ Show Short Signals",     group=GS)
+sigMinConf  = input.int(4,      "Min Confluence Score (maåx 7)", minval=1, maxval=7, group=GS, tooltip="How many confluence factors must agree before a Break & Retest signal fires. Note: HTF is not scored for BnR (max achievable is 6). Default 4 is recommended.")
+sigUseTrend = input.bool(true,  "Factor 1 — Trend Aligned",   group=GS, tooltip="Long only fires when market structure is bullish (BOS up). Short only when bearish (BOS down).")
+sigUseVWAP  = input.bool(true,  "Factor 2 — VWAP Side",       group=GS, tooltip="Long requires close > VWAP. Short requires close < VWAP.")
+sigUseKZ    = input.bool(false, "Factor 3 — Session Killzone", group=GS, tooltip="Signal only valid during the London or New York killzone window.")
+sigUseMajor = input.bool(true,  "Factor 4 — At Key Level",    group=GS, tooltip="The zone overlaps a key price level (PDH, PDL, TWH, PWH, etc.).")
+sigUseHTF   = input.bool(true,  "Factor 5 — HTF Zone",        group=GS, tooltip="Zone was detected on the higher timeframe (if MTF is enabled).")
+sigUseSt    = input.bool(true,  "Factor 6 — Structural Zone", group=GS, tooltip="Zone formed at a BOS or CHoCH swing point.")
+sigUseClose = input.bool(true,  "Factor 7 — Confirmation Close", group=GS, tooltip="Long requires the signal bar to close bullish (green). Short requires a bearish (red) close. Filters out wicks with no follow-through.")
+
+// ── 3. EMA Clouds ─────────────────────────────────────────────────────────────
+GC          = "☁ EMA Clouds"
+showClouds  = input.bool(true,  "Show EMA Clouds",            group=GC)
+showCloudFill = input.bool(true, "  └ Show Cloud Fill",       group=GC, tooltip="Uncheck to hide the coloured cloud fill while keeping the EMA lines visible.")
+c1Short     = input.int(5,     "Cloud 1 - Short EMA",         minval=1, maxval=200, group=GC)
+c1Long      = input.int(12,    "Cloud 1 - Long EMA",          minval=1, maxval=200, group=GC)
+c1Bull      = input.color(color.new(#4CAF50, 85), "Cloud 1 - Bullish Cloud", group=GC)
+c1Bear      = input.color(color.new(#FF5252, 85), "Cloud 1 - Bearish Cloud", group=GC)
+c1Width     = input.int(1,     "Cloud 1 - Line Width",        minval=1, maxval=4, group=GC)
+c2Short     = input.int(34,    "Cloud 2 - Short EMA",         minval=1, maxval=200, group=GC)
+c2Long      = input.int(50,    "Cloud 2 - Long EMA",          minval=1, maxval=200, group=GC)
+c2Bull      = input.color(color.new(#4CAF50, 88), "Cloud 2 - Bullish Cloud", group=GC)
+c2Bear      = input.color(color.new(#FF5252, 88), "Cloud 2 - Bearish Cloud", group=GC)
+c2Width     = input.int(1,     "Cloud 2 - Line Width",        minval=1, maxval=4, group=GC)
+
+// ── 4. Core Detection ─────────────────────────────────────────────────────────
+G1          = "⚙ Core Detection"
+swingLen    = input.int(10,    "Swing Length",              minval=3,  maxval=50,  group=G1)
+atrLen      = input.int(14,    "ATR Period",                minval=5,  maxval=50,  group=G1)
+atrMult     = input.float(0.8, "Zone Width (ATR×)",         minval=0.2, maxval=3.0, step=0.1, group=G1)
+bodyMult    = input.float(2.0, "Impulse Body Multiplier",   minval=1.0, maxval=5.0, step=0.1, group=G1)
+useSwing    = input.bool(true, "Swing Detection",           group=G1)
+useCandle   = input.bool(true, "Candle Structure Detection", group=G1)
+
+// ── 5. Zone Management ────────────────────────────────────────────────────────
+G2          = "📦 Zone Management"
+maxZones    = input.int(6,     "Max Zones Per Side",         minval=3,  maxval=40,  group=G2)
+maxTouches  = input.int(3,     "Remove After N Touches",     minval=1,  maxval=10,  group=G2)
+removeBreak = input.bool(true, "Remove Broken Zones",        group=G2)
+
+// ── 6. Volume ─────────────────────────────────────────────────────────────────
+G3          = "📊 Volume"
+useVol      = input.bool(true, "Volume Confirmation",        group=G3)
+volLen      = input.int(20,    "Volume MA Length",            minval=5,  maxval=100, group=G3)
+volThresh   = input.float(1.2, "Volume Threshold (×MA)",     minval=0.5, maxval=3.0, step=0.1, group=G3)
+
+// ── 7. Sessions ───────────────────────────────────────────────────────────────
+G5          = "🕐 Sessions"
+showSess    = input.bool(false, "Show Session Killzones",     group=G5)
+sessLondonS = input.session("0200-0500", "London Killzone",  group=G5)
+sessNYS     = input.session("0800-1100", "New York Killzone", group=G5)
+
+// ── 8. Multi-Timeframe ────────────────────────────────────────────────────────
+G6          = "📐 Multi-Timeframe"
+useMTF      = input.bool(false, "Higher TF Zones",           group=G6)
+htfRes      = input.timeframe("60", "Higher Timeframe",      group=G6)
+htfSwLen    = input.int(10,    "HTF Swing Length",            minval=3, maxval=50, group=G6)
+
+// ── 9. Key Levels ─────────────────────────────────────────────────────────────
+G9          = "📏 Key Levels"
+showLevels  = input.bool(true,  "Show Key Levels",           group=G9)
+showYD      = input.bool(true,  "PDH / PDL / PDC",           group=G9)
+lvlColYD    = input.color(color.new(#FFFFFF, 20), "  └ PDH/PDL Color", group=G9)
+lvlWidYD    = input.float(1.0,  "  └ PDH/PDL Width",         minval=0.5, maxval=10, step=0.5, group=G9)
+lvlColPDC   = input.color(color.new(#2196F3, 60), "  └ PDC Color",    group=G9)
+lvlWidPDC   = input.float(1.0,  "  └ PDC Width",             minval=0.5, maxval=10, step=0.5, group=G9)
+showTW      = input.bool(true,  "TWH / TWL",                 group=G9)
+lvlColTW    = input.color(color.new(#FFFFFF, 20), "  └ TWH/TWL Color",     group=G9)
+lvlWidTW    = input.float(1.0,  "  └ TWH/TWL Width",         minval=0.5, maxval=10, step=0.5, group=G9)
+showPW      = input.bool(true,  "PWH / PWL",                 group=G9)
+lvlColPW    = input.color(color.new(#FFFFFF, 20), "  └ PWH/PWL Color",     group=G9)
+lvlWidPW    = input.float(1.0,  "  └ PWH/PWL Width",         minval=0.5, maxval=10, step=0.5, group=G9)
+showPM      = input.bool(true,  "MoH / MoL (Prev Month)",    group=G9)
+lvlColPM    = input.color(color.new(#FFFFFF, 20), "  └ MoH/MoL Color",     group=G9)
+lvlWidPM    = input.float(2.0,  "  └ MoH/MoL Width",         minval=0.5, maxval=10, step=0.5, group=G9)
+showON      = input.bool(true,  "PMH / PML (Pre-Market)",    group=G9, tooltip="Pre-market/Overnight high & low (1800-0930 ET). Great for ES/NQ.")
+lvlColON    = input.color(color.new(#FFFFFF, 20), "  └ PMH/PML Color",     group=G9)
+lvlWidON    = input.float(1.0,  "  └ PMH/PML Width",         minval=0.5, maxval=10, step=0.5, group=G9)
+lvlStyle    = input.string("Solid", "Level Line Style", options=["Solid", "Dotted", "Dashed"], group=G9)
+lvlLen      = input.int(200,   "Level Line Length (bars)",   minval=10, maxval=490, group=G9, tooltip="How far left the key level lines extend from current bar. Lines always extend to the right edge.")
+lvlBlockH   = input.float(0.2, "S/R Block Thickness (×ATR)", minval=0.01, maxval=1.0, step=0.01, group=G9, tooltip="Height of the coloured support/resistance block under each key level, as a multiple of ATR. Lower = thinner. Set to 0.01 for a hairline.")
+
+// ── 9b. Day-of-Week Levels ────────────────────────────────────────────────────
+GDOW        = "📅 Day-of-Week Levels"
+showDOW     = input.bool(true,  "Show Day H/L Levels (Mon–Fri)",  group=GDOW, tooltip="Draw the High and Low of each weekday for the current week and/or previous week.")
+showDOWTW   = input.bool(true,  "  └ This Week Days",             group=GDOW)
+showDOWPW   = input.bool(true,  "  └ Previous Week Days",         group=GDOW)
+lvlColDOWTW = input.color(color.new(#B0BEC5, 55), "  └ This Week Color",      group=GDOW)
+lvlWidDOWTW = input.float(1.0,  "  └ This Week Width",            minval=0.5, maxval=10, step=0.5, group=GDOW)
+lvlColDOWPW = input.color(color.new(#90A4AE, 60), "  └ Prev Week Color",      group=GDOW)
+lvlWidDOWPW = input.float(1.0,  "  └ Prev Week Width",            minval=0.5, maxval=10, step=0.5, group=GDOW)
+dowConfTol  = input.float(1.5, "  └ Confluence Tolerance (×ATR)", minval=0.5, maxval=5.0, step=0.5, group=GDOW, tooltip="A prev-week daily low is only drawn if it landed within this many ATRs of the same day's low in at least one of the prior 3 weeks. Filters out one-off levels so only repeated, proven lows show.")
+
+// ── 10. VWAP ──────────────────────────────────────────────────────────────────
+G10         = "📈 VWAP"
+showVWAP    = input.bool(true,  "Show Anchored VWAP",        group=G10)
+vwapCol     = input.color(color.new(#FFFFFF, 20), "  └ VWAP Color",   group=G10)
+vwapAnchor  = input.string("Session", "Anchor To", options=["Session", "Week", "Month"], group=G10)
+showVBands  = input.bool(false, "Deviation Bands",           group=G10)
+vwapBandMult = input.float(1.0, "Band Width (σ×)",           minval=0.5, maxval=3.0, step=0.25, group=G10)
+
+// ── 11. Daily SMAs ────────────────────────────────────────────────────────────
+GD          = "📊 Daily SMAs"
+showDSMA    = input.bool(true,  "Show Daily SMAs",             group=GD)
+dsmaLen1    = input.int(10,    "SMA Length 1",                 minval=1, maxval=500, group=GD)
+dsmaCol1    = input.color(color.new(#FFFFFF, 0),  "  └ Color",  group=GD)
+dsmaLen2    = input.int(20,    "SMA Length 2",                 minval=1, maxval=500, group=GD)
+dsmaCol2    = input.color(color.new(#FFFFFF, 0),  "  └ Color",  group=GD)
+dsmaLen3    = input.int(50,    "SMA Length 3",                 minval=1, maxval=500, group=GD)
+dsmaCol3    = input.color(color.new(#FFFFFF, 0),  "  └ Color",  group=GD)
+dsmaLen4    = input.int(100,   "SMA Length 4",                 minval=1, maxval=500, group=GD)
+dsmaCol4    = input.color(color.new(#FFFFFF, 0),  "  └ Color",  group=GD)
+dsmaLen5    = input.int(200,   "SMA Length 5",                 minval=1, maxval=500, group=GD)
+dsmaCol5    = input.color(color.new(#FFFFFF, 0),  "  └ Color",  group=GD)
+
+// ── 12. ORB ───────────────────────────────────────────────────────────────────
+GORB        = "📐 ORB"
+showORB     = input.bool(true,  "Show Opening Range (ORB)",           group=GORB, tooltip="Draws the high and low of the opening range from the RTH open (9:30 ET).")
+orbMins     = input.int(15,     "ORB Length (minutes)",               minval=5, maxval=60, group=GORB, tooltip="How many minutes from 9:30 ET define the Opening Range. 15 is the most common.")
+showORBFill = input.bool(true,  "  └ Show Filled Block",              group=GORB, tooltip="Fills the opening range with a solid colour block. Use the colour picker to set hue and transparency.")
+orbFillCol  = input.color(color.new(#64B5F6, 80), "  └ Fill Color",   group=GORB)
+showORBLines = input.bool(false, "  └ Show ORB Lines",                group=GORB, tooltip="Draw dotted high/low lines at the ORB edges. Off by default — the filled block is usually enough.")
+orbLineCol   = input.color(color.new(#64B5F6, 20), "     └ Line Color", group=GORB)
+orbNoBreakMins = input.int(45,  "  └ No-Break Warning (mins)",        minval=15, maxval=120, step=15, group=GORB, tooltip="If price hasn't broken above ORB High or below ORB Low after this many minutes, a ⚠ Chop Warning label is drawn. Classic sign of a range-bound day — consider staying out.")
+
+// ── 12b. ES/NQ Pre-Open Chop Warning ──────────────────────────────────────────
+GCW          = "⚠ ES/NQ Chop Warning"
+showChopWarn = input.bool(true,   "Show Gap + Flat Overnight Warning",  group=GCW, tooltip="For ES/NQ only. When the RTH gap is small AND the overnight range was narrow, it's a classic low-expansion setup — expect chop, avoid or reduce size.")
+chopGapMax   = input.float(25.0,  "  └ Max Gap Size (points)",          minval=1, maxval=200, step=1, group=GCW, tooltip="Absolute RTH-open vs prev-RTH-close distance. If smaller than this, the gap is considered 'small'. 25 pts is typical for ES.")
+chopOvnMax   = input.float(30.0,  "  └ Max Overnight Range (points)",   minval=1, maxval=300, step=1, group=GCW, tooltip="Overnight high-low (1800-0930 ET). Below this = 'flat'. 30 pts is typical for ES.")
+
+// ── 13. Visuals ───────────────────────────────────────────────────────────────
+G7          = "🎨 Visuals"
+showLabels  = input.bool(true,  "Zone Strength Labels",      group=G7)
+showMid     = input.bool(false, "Zone Midlines",             group=G7)
+minTF       = input.int(2,      "Min Timeframe (minutes)",   minval=1, maxval=60, group=G7)
+filterTrend = input.bool(false, "Hide Counter-Trend Zones",  group=G7, tooltip="When enabled, demand zones are hidden during a bearish trend and supply zones are hidden during a bullish trend. Keeps the chart clean and focused on high-probability setups.")
+
+// ── 14. Alerts ────────────────────────────────────────────────────────────────
+G8          = "🔔 Alerts"
+alertSup    = input.bool(true, "Supply Entry Alert",          group=G8)
+alertDem    = input.bool(true, "Demand Entry Alert",          group=G8)
+alertBrk    = input.bool(true, "Zone Break Alert",            group=G8)
+
+// ── 15. Dashboard ─────────────────────────────────────────────────────────────
+GDB         = "📊 Dashboard"
+showDash    = input.bool(true,  "Show Bias Dashboard",        group=GDB)
+adxLen      = input.int(14,    "  └ ADX Length",              minval=5, maxval=50, group=GDB, tooltip="Period for the ADX trend-strength calculation shown in the CHOP column of the dashboard.")
+adxThresh   = input.int(20,    "  └ ADX Chop Threshold",      minval=10, maxval=35, group=GDB, tooltip="ADX below this = CHOP (red, avoid trading). 20–25 = weak trend (yellow, caution). Above 25 = trending (green, go).")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  CORE
+// ══════════════════════════════════════════════════════════════════════════════
+
+atr        = ta.atr(atrLen)
+volMA      = ta.sma(volume, volLen)
+volOk      = not useVol or (volume > volMA * volThresh)
+chartMins  = timeframe.in_seconds() / 60
+tfAllowed  = chartMins >= minTF
+safeLeft(int b) => math.max(b, bar_index - 1800)  // stays within Pine's 2000-bar history buffer
+rsi14      = ta.rsi(close, 14)
+ema20      = ta.ema(close, 20)
+[_, _, adxVal] = ta.dmi(adxLen, adxLen)  // ADX trend-strength for chop filter
+
+inLondon   = not na(time(timeframe.period, sessLondonS))
+inNY       = not na(time(timeframe.period, sessNYS))
+inKillzone = inLondon or inNY
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  MARKET STRUCTURE — BOS / CHoCH
+// ══════════════════════════════════════════════════════════════════════════════
+
+var float msHH = na, var float msHL = na, var float msLH = na, var float msLL = na
+var int msTrend = 0
+
+swHi = ta.pivothigh(high, swingLen, swingLen)
+swLo = ta.pivotlow(low, swingLen, swingLen)
+
+// Auto-scale zone swing length to 5-min equivalent on lower timeframes
+zSL  = chartMins < 5 ? math.ceil(swingLen * 5 / chartMins) : swingLen
+zSwHi = ta.pivothigh(high, zSL, zSL)
+zSwLo = ta.pivotlow(low,  zSL, zSL)
+
+var bool bosUp = false, var bool bosDn = false, var bool choch = false
+bosUp := false, bosDn := false, choch := false
+var int bosUpCnt = 0, var int bosDnCnt = 0
+
+if not na(swHi)
+    lvl = high[swingLen]
+    if msTrend == 1 and not na(msHH) and lvl > msHH
+        bosUp := true
+    if msTrend == -1 and not na(msLH) and lvl > msLH and (lvl - msLH) >= atr * chochMinATR
+        choch := true
+        msTrend := 1
+        bosUpCnt := 0
+    if msTrend == 1
+        msHH := lvl
+    else if msTrend == -1
+        msLH := lvl
+    if msTrend == 0
+        msHH := lvl, msLH := lvl, msTrend := 1
+
+if not na(swLo)
+    lvl = low[swingLen]
+    if msTrend == -1 and not na(msLL) and lvl < msLL
+        bosDn := true
+    if msTrend == 1 and not na(msHL) and lvl < msHL and (msHL - lvl) >= atr * chochMinATR
+        choch := true
+        msTrend := -1
+        bosDnCnt := 0
+    if msTrend == -1
+        msLL := lvl
+    else if msTrend == 1
+        msHL := lvl
+    if msTrend == 0
+        msLL := lvl, msHL := lvl, msTrend := -1
+
+if bosUp
+    bosUpCnt += 1
+    bosDnCnt := 0
+if bosDn
+    bosDnCnt += 1
+    bosUpCnt := 0
+if showBOS and bosUp and bosUpCnt >= 2
+    label.new(bar_index - swingLen, high[swingLen], "Trend ↑", style=label.style_none, textcolor=color.new(#4CAF50, 30), size=size.tiny)
+if showBOS and bosDn and bosDnCnt >= 2
+    label.new(bar_index - swingLen, low[swingLen], "Trend ↓", style=label.style_none, textcolor=color.new(#FF5252, 30), size=size.tiny)
+if showBOS and showChoch and choch
+    label.new(bar_index - swingLen, msTrend == 1 ? high[swingLen] : low[swingLen], "Reversal", style=label.style_none, textcolor=msTrend == 1 ? color.new(#4CAF50, 20) : color.new(#FF5252, 20), size=size.tiny)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  ZONE STORAGE & HELPERS
+// ══════════════════════════════════════════════════════════════════════════════
+
+var float[] supT = array.new_float(), var float[] supB = array.new_float()
+var int[]   supI = array.new_int(),   var int[]   supN = array.new_int()
+var float[] supV = array.new_float(), var float[] supM = array.new_float()
+var bool[]  supH = array.new_bool(),  var bool[]  supK = array.new_bool()
+var bool[]  supS = array.new_bool(),  var int[]   supBrkCnt = array.new_int()
+var box[]   supBx = array.new_box(),  var label[] supLb = array.new_label(), var line[] supMl = array.new_line()
+
+var float[] demT = array.new_float(), var float[] demB = array.new_float()
+var int[]   demI = array.new_int(),   var int[]   demN = array.new_int()
+var float[] demV = array.new_float(), var float[] demM = array.new_float()
+var bool[]  demH = array.new_bool(),  var bool[]  demK = array.new_bool()
+var bool[]  demS = array.new_bool(),  var int[]   demBrkCnt = array.new_int()
+var box[]   demBx = array.new_box(),  var label[] demLb = array.new_label(), var line[] demMl = array.new_line()
+
+var float[] brkLong    = array.new_float(), var int[] brkLongBar  = array.new_int()
+var float[] brkShort   = array.new_float(), var int[] brkShortBar = array.new_int()
+
+var int kl_pdhCnt = 0, var bool kl_pdhBrk = false
+var int kl_pdlCnt = 0, var bool kl_pdlBrk = false
+var int kl_pdcUpCnt = 0, var bool kl_pdcUpBrk = false
+var int kl_pdcDnCnt = 0, var bool kl_pdcDnBrk = false
+var int kl_pwhCnt = 0, var bool kl_pwhBrk = false
+var int kl_pwlCnt = 0, var bool kl_pwlBrk = false
+var int kl_orbHCnt = 0, var bool kl_orbHBrk = false
+var int kl_orbLCnt = 0, var bool kl_orbLBrk = false
+var int kl_onHCnt = 0, var bool kl_onHBrk = false
+var int kl_onLCnt = 0, var bool kl_onLBrk = false
+
+calcScore(int _bar, int _touches, float _vr, float _ms, bool _isKZ, bool _isStruct) =>
+    age   = math.max(0.0, 100.0 * (1.0 - (bar_index - _bar) / 500.0))
+    touch = math.max(0.0, 100.0 * (1.0 - _touches / 5.0))
+    fresh = age * 0.6 + touch * 0.4
+    base  = fresh * 0.4 + math.min(100.0, _vr * 50.0) * 0.3 + math.min(100.0, _ms * 25.0) * 0.3
+    bonus = (_isKZ ? 10.0 : 0.0) + (_isStruct ? 15.0 : 0.0)
+    math.round(math.max(0, math.min(100, base + bonus)))
+
+gradeText(float s) => s >= 80 ? "●●●●●" : s >= 65 ? "●●●●○" : s >= 50 ? "●●●○○" : s >= 35 ? "●●○○○" : "●○○○○"
+
+gradeTip(float s, bool _maj, bool _htf, bool _st, bool _kz, string _side) =>
+    rank = s >= 80 ? "Excellent" : s >= 65 ? "Strong" : s >= 50 ? "Good" : s >= 35 ? "Moderate" : "Weak"
+    info = _side + " Zone • " + rank + " (" + str.tostring(s) + "/100)"
+    if _maj
+        info += "\n⚠ At Key Level — High Priority"
+    if _htf
+        info += "\n↑ Higher Timeframe Zone"
+    if _st
+        info += "\n◆ Structural (Trend/Reversal)"
+    if _kz
+        info += "\n⏰ Formed in Killzone"
+    info
+
+// ── Zone colors: SHADED boxes, no dotted borders ────────────────────────────
+// Hierarchy: MAJOR (key level) > HTF > Structural > Killzone > Plain intraday
+supFill(bool maj, bool h, bool st, bool kz) =>
+    maj ? color.new(#FF5252, 65) : h  ? color.new(#FF9800, 75) : st ? color.new(#FF5252, 82) : kz ? color.new(#FF5252, 88) : color.new(#FF5252, 93)
+demFill(bool maj, bool h, bool st, bool kz) =>
+    maj ? color.new(#4CAF50, 65) : h  ? color.new(#2196F3, 75) : st ? color.new(#4CAF50, 82) : kz ? color.new(#4CAF50, 88) : color.new(#4CAF50, 93)
+// All zone borders are fully transparent — shaded fills only, no outlines
+supBrd(bool maj, bool h, bool st, bool kz) =>
+    color.new(#000000, 100)
+demBrd(bool maj, bool h, bool st, bool kz) =>
+    color.new(#000000, 100)
+
+overlap(float t1, float b1, float t2, float b2) =>
+    ot = math.min(t1, t2), ob = math.max(b1, b2)
+    ot > ob ? (ot - ob) / math.min(t1 - b1, t2 - b2) : 0.0
+
+addSup(float _t, float _b, int _bar, float _vr, float _ms, bool _htf, bool _kz, bool _st) =>
+    skip = false
+    newMid = (_t + _b) / 2
+    if array.size(supT) > 0
+        for i = array.size(supT) - 1 to 0
+            exMid = (array.get(supT, i) + array.get(supB, i)) / 2
+            if overlap(_t, _b, array.get(supT, i), array.get(supB, i)) > 0.2 or math.abs(newMid - exMid) < atr
+                skip := true
+                break
+    if not skip
+        array.push(supT, _t), array.push(supB, _b), array.push(supI, _bar)
+        array.push(supN, 0),  array.push(supV, _vr), array.push(supM, _ms)
+        array.push(supH, _htf), array.push(supK, _kz), array.push(supS, _st)
+        array.push(supBrkCnt, 0)
+        array.push(supBx, box.new(_bar, _t, bar_index+20, _b, bgcolor=supFill(false,_htf,_st,_kz), border_color=supBrd(false,_htf,_st,_kz), border_width=1, border_style=line.style_solid))
+        array.push(supLb, label.new(na, na, "", color=color.new(#000000,100), textcolor=color.white, style=label.style_label_down, size=size.tiny))
+        array.push(supMl, line.new(na, na, na, na, color=color.new(#FF5252,60), style=line.style_dotted, width=1))
+        while array.size(supT) > maxZones
+            array.shift(supT), array.shift(supB), array.shift(supI), array.shift(supN)
+            array.shift(supV), array.shift(supM), array.shift(supH), array.shift(supK), array.shift(supS), array.shift(supBrkCnt)
+            box.delete(array.shift(supBx)), label.delete(array.shift(supLb)), line.delete(array.shift(supMl))
+
+addDem(float _t, float _b, int _bar, float _vr, float _ms, bool _htf, bool _kz, bool _st) =>
+    skip = false
+    newMid = (_t + _b) / 2
+    if array.size(demT) > 0
+        for i = array.size(demT) - 1 to 0
+            exMid = (array.get(demT, i) + array.get(demB, i)) / 2
+            if overlap(_t, _b, array.get(demT, i), array.get(demB, i)) > 0.2 or math.abs(newMid - exMid) < atr
+                skip := true
+                break
+    if not skip
+        array.push(demT, _t), array.push(demB, _b), array.push(demI, _bar)
+        array.push(demN, 0),  array.push(demV, _vr), array.push(demM, _ms)
+        array.push(demH, _htf), array.push(demK, _kz), array.push(demS, _st)
+        array.push(demBrkCnt, 0)
+        array.push(demBx, box.new(_bar, _t, bar_index+20, _b, bgcolor=demFill(false,_htf,_st,_kz), border_color=demBrd(false,_htf,_st,_kz), border_width=1, border_style=line.style_solid))
+        array.push(demLb, label.new(na, na, "", color=color.new(#000000,100), textcolor=color.white, style=label.style_label_up, size=size.tiny))
+        array.push(demMl, line.new(na, na, na, na, color=color.new(#4CAF50,60), style=line.style_dotted, width=1))
+        while array.size(demT) > maxZones
+            array.shift(demT), array.shift(demB), array.shift(demI), array.shift(demN)
+            array.shift(demV), array.shift(demM), array.shift(demH), array.shift(demK), array.shift(demS), array.shift(demBrkCnt)
+            box.delete(array.shift(demBx)), label.delete(array.shift(demLb)), line.delete(array.shift(demMl))
+
+rmSup(int i) =>
+    array.remove(supT,i), array.remove(supB,i), array.remove(supI,i), array.remove(supN,i)
+    array.remove(supV,i), array.remove(supM,i), array.remove(supH,i), array.remove(supK,i), array.remove(supS,i), array.remove(supBrkCnt,i)
+    box.delete(array.remove(supBx,i)), label.delete(array.remove(supLb,i)), line.delete(array.remove(supMl,i))
+
+rmDem(int i) =>
+    array.remove(demT,i), array.remove(demB,i), array.remove(demI,i), array.remove(demN,i)
+    array.remove(demV,i), array.remove(demM,i), array.remove(demH,i), array.remove(demK,i), array.remove(demS,i), array.remove(demBrkCnt,i)
+    box.delete(array.remove(demBx,i)), label.delete(array.remove(demLb,i)), line.delete(array.remove(demMl,i))
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  DETECT ZONES
+// ══════════════════════════════════════════════════════════════════════════════
+
+isStruct = bosUp or bosDn or choch
+isKZ     = inKillzone
+
+_zoneRTH = not na(time(timeframe.period, "0930-1600", "America/New_York"))
+
+if useSwing and not na(zSwHi) and volOk[zSL] and tfAllowed and _zoneRTH[zSL]
+    pb = bar_index - zSL
+    zt = high[zSL], zb = math.max(low[zSL], zt - atr * atrMult)
+    addSup(zt, zb, pb, volMA > 0 ? volume[zSL]/volMA : 1.0, atr > 0 ? (high[zSL]-low[zSL+1])/atr : 1.0, false, isKZ, isStruct)
+
+if useSwing and not na(zSwLo) and volOk[zSL] and tfAllowed and _zoneRTH[zSL]
+    pb = bar_index - zSL
+    zb = low[zSL], zt = math.min(high[zSL], zb + atr * atrMult)
+    addDem(zt, zb, pb, volMA > 0 ? volume[zSL]/volMA : 1.0, atr > 0 ? (high[zSL+1]-low[zSL])/atr : 1.0, false, isKZ, isStruct)
+
+baseB  = math.abs(close[1] - open[1])
+impulB = math.abs(close - open)
+
+if useCandle and close[1] >= open[1] and close < open and impulB > baseB * bodyMult and baseB > 0 and volOk and tfAllowed and _zoneRTH[1]
+    addSup(math.max(open[1],close[1]), math.min(open[1],low[1]), bar_index-1, volMA>0?volume/volMA:1.0, atr>0?impulB/atr:1.0, false, isKZ, isStruct)
+
+if useCandle and close[1] < open[1] and close > open and impulB > baseB * bodyMult and baseB > 0 and volOk and tfAllowed and _zoneRTH[1]
+    addDem(math.max(open[1],high[1]), math.min(open[1],close[1]), bar_index-1, volMA>0?volume/volMA:1.0, atr>0?impulB/atr:1.0, false, isKZ, isStruct)
+
+// ── MTF zones ───────────────────────────────────────────────────────────────
+[htfH, htfL, htfC, htfO, htfVol] = request.security(syminfo.tickerid, htfRes, [high, low, close, open, volume])
+htfAtr   = request.security(syminfo.tickerid, htfRes, ta.atr(atrLen))
+htfVolMA = request.security(syminfo.tickerid, htfRes, ta.sma(volume, volLen))
+htfSwH   = request.security(syminfo.tickerid, htfRes, ta.pivothigh(high, htfSwLen, htfSwLen))
+htfSwL   = request.security(syminfo.tickerid, htfRes, ta.pivotlow(low, htfSwLen, htfSwLen))
+htfVolOk = not useVol or (nz(htfVol) > nz(htfVolMA) * volThresh)
+
+if useMTF and not na(htfSwH) and htfVolOk
+    zt = nz(htfH), zb = math.max(nz(htfL), zt - nz(htfAtr)*atrMult)
+    addSup(zt, zb, bar_index-htfSwLen, nz(htfVolMA)>0?nz(htfVol)/nz(htfVolMA):1.0, nz(htfAtr)>0?(nz(htfH)-nz(htfL))/nz(htfAtr):1.0, true, false, false)
+
+if useMTF and not na(htfSwL) and htfVolOk
+    zb = nz(htfL), zt = math.min(nz(htfH), zb + nz(htfAtr)*atrMult)
+    addDem(zt, zb, bar_index-htfSwLen, nz(htfVolMA)>0?nz(htfVol)/nz(htfVolMA):1.0, nz(htfAtr)>0?(nz(htfH)-nz(htfL))/nz(htfAtr):1.0, true, false, false)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  FAIR VALUE GAPS
+// ══════════════════════════════════════════════════════════════════════════════
+
+var float[] fvgT = array.new_float(), var float[] fvgB = array.new_float()
+var int[]   fvgI = array.new_int(),   var bool[]  fvgBull = array.new_bool()
+var box[]   fvgBx = array.new_box()
+
+if showFVG
+    if low > high[2] and close[1] > open[1]
+        gapT = low, gapB = high[2]
+        if gapT - gapB > atr * 0.1
+            array.push(fvgT, gapT), array.push(fvgB, gapB), array.push(fvgI, bar_index-1), array.push(fvgBull, true)
+            array.push(fvgBx, box.new(bar_index-2, gapT, bar_index+30, gapB, bgcolor=color.new(#7C4DFF, 93), border_color=color.new(#7C4DFF, 85), border_width=1, border_style=line.style_dotted))
+            while array.size(fvgT) > maxFVG
+                array.shift(fvgT), array.shift(fvgB), array.shift(fvgI), array.shift(fvgBull), box.delete(array.shift(fvgBx))
+
+    if high < low[2] and close[1] < open[1]
+        gapT = low[2], gapB = high
+        if gapT - gapB > atr * 0.1
+            array.push(fvgT, gapT), array.push(fvgB, gapB), array.push(fvgI, bar_index-1), array.push(fvgBull, false)
+            array.push(fvgBx, box.new(bar_index-2, gapT, bar_index+30, gapB, bgcolor=color.new(#7C4DFF, 93), border_color=color.new(#7C4DFF, 85), border_width=1, border_style=line.style_dotted))
+            while array.size(fvgT) > maxFVG
+                array.shift(fvgT), array.shift(fvgB), array.shift(fvgI), array.shift(fvgBull), box.delete(array.shift(fvgBx))
+
+if array.size(fvgT) > 0
+    for i = array.size(fvgT) - 1 to 0
+        ft = array.get(fvgT, i), fb = array.get(fvgB, i)
+        filled = array.get(fvgBull, i) ? (low <= fb) : (high >= ft)
+        if filled
+            array.remove(fvgT,i), array.remove(fvgB,i), array.remove(fvgI,i), array.remove(fvgBull,i), box.delete(array.remove(fvgBx,i))
+        else
+            bx = array.get(fvgBx, i)
+            box.set_right(bx, bar_index + 3)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  LIQUIDITY LEVELS
+// ══════════════════════════════════════════════════════════════════════════════
+
+var float[] liqLvl = array.new_float(), var bool[] liqHi = array.new_bool()
+var int[]   liqBar = array.new_int(),   var bool[] liqSwept = array.new_bool()
+var line[]  liqLn  = array.new_line(),  var label[] liqLab = array.new_label()
+
+var float[] recentSwH = array.new_float(), var int[] recentSwHBar = array.new_int()
+var float[] recentSwL = array.new_float(), var int[] recentSwLBar = array.new_int()
+
+_swIsRTH = not na(time(timeframe.period, "0930-1600", "America/New_York")[swingLen])
+if not na(swHi) and _swIsRTH
+    array.push(recentSwH, high[swingLen]), array.push(recentSwHBar, bar_index - swingLen)
+    while array.size(recentSwH) > 30
+        array.shift(recentSwH), array.shift(recentSwHBar)
+
+if not na(swLo) and _swIsRTH
+    array.push(recentSwL, low[swingLen]), array.push(recentSwLBar, bar_index - swingLen)
+    while array.size(recentSwL) > 30
+        array.shift(recentSwL), array.shift(recentSwLBar)
+
+if array.size(liqLvl) > 0
+    for i = array.size(liqLvl) - 1 to 0
+        lvl = array.get(liqLvl, i), isHi = array.get(liqHi, i), sw = array.get(liqSwept, i)
+        if not sw
+            if isHi and high > lvl and close < lvl
+                array.set(liqSwept, i, true)
+                line.set_color(array.get(liqLn, i), color.new(#FFD600, 90))
+            if not isHi and low < lvl and close > lvl
+                array.set(liqSwept, i, true)
+                line.set_color(array.get(liqLn, i), color.new(#2196F3, 90))
+        if not sw
+            line.set_x2(array.get(liqLn, i), bar_index + 3)
+            label.set_x(array.get(liqLab, i), bar_index + 3)
+        if sw and bar_index - array.get(liqBar, i) > 200
+            array.remove(liqLvl,i), array.remove(liqHi,i), array.remove(liqBar,i), array.remove(liqSwept,i)
+            line.delete(array.remove(liqLn,i)), label.delete(array.remove(liqLab,i))
+
+while array.size(liqLvl) > 15
+    array.shift(liqLvl), array.shift(liqHi), array.shift(liqBar), array.shift(liqSwept)
+    line.delete(array.shift(liqLn)), label.delete(array.shift(liqLab))
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  ANCHORED VWAP
+// ══════════════════════════════════════════════════════════════════════════════
+
+isNewD = ta.change(time("D")) != 0
+isNewW = ta.change(time("W")) != 0
+isNewM = ta.change(time("M")) != 0
+vwapReset = vwapAnchor == "Session" ? isNewD : vwapAnchor == "Week" ? isNewW : isNewM
+
+var int curDayStart  = 0, var int prevDayStart  = 0
+var int curWeekStart = 0, var int prevWeekStart = 0
+var int curMonthStart = 0, var int prevMonthStart = 0
+
+var float rthWeekH = na, var int rthWeekHBar = 0
+var float rthWeekL = na, var int rthWeekLBar = 0
+var float rthPrevWeekH = na, var int rthPrevWeekHBar = 0
+var float rthPrevWeekL = na, var int rthPrevWeekLBar = 0
+
+var float rthMonthH = na, var int rthMonthHBar = 0
+var float rthMonthL = na, var int rthMonthLBar = 0
+var float rthPrevMonthH = na, var int rthPrevMonthHBar = 0
+var float rthPrevMonthL = na, var int rthPrevMonthLBar = 0
+
+var float orbH       = na,  var float orbL    = na
+var int   orbStartBr = 0,   var bool  orbDone = false
+var int   orbDoneBar = 0
+var bool  orbBrokenUp = false, var bool orbBrokenDn = false
+
+var float curDayHigh = na,  var int curDayHighBar  = 0
+var float curDayLow  = na,  var int curDayLowBar   = 0
+var int prevDayHighBar = 0, var int prevDayLowBar  = 0, var int prevDayCloseBar = 0
+
+var float rthPrevDayH = na, var float rthPrevDayL = na, var float rthPrevDayC = na
+var int   rthPrevDayHBar = 0, var int rthPrevDayLBar = 0, var int rthPrevDayCBar = 0
+
+var float rthDayL = na, var float rthDayH = na, var float rthDayC = na
+var int   rthDayHBar = 0, var int rthDayLBar = 0, var int rthDayCBar = 0
+var int   _lastDOW = 0
+
+var float twMoH = na, var float twMoL = na, var int twMoHBar = 0, var int twMoLBar = 0
+var float twTuH = na, var float twTuL = na, var int twTuHBar = 0, var int twTuLBar = 0
+var float twWeH = na, var float twWeL = na, var int twWeHBar = 0, var int twWeLBar = 0
+var float twThH = na, var float twThL = na, var int twThHBar = 0, var int twThLBar = 0
+var float twFrH = na, var float twFrL = na, var int twFrHBar = 0, var int twFrLBar = 0
+
+var float pwMoH = na, var float pwMoL = na, var int pwMoHBar = 0, var int pwMoLBar = 0
+var float pwTuH = na, var float pwTuL = na, var int pwTuHBar = 0, var int pwTuLBar = 0
+var float pwWeH = na, var float pwWeL = na, var int pwWeHBar = 0, var int pwWeLBar = 0
+var float pwThH = na, var float pwThL = na, var int pwThHBar = 0, var int pwThLBar = 0
+var float pwFrH = na, var float pwFrL = na, var int pwFrHBar = 0, var int pwFrLBar = 0
+
+var float pw2MoL = na, var float pw3MoL = na, var float pw4MoL = na
+var float pw2TuL = na, var float pw3TuL = na, var float pw4TuL = na
+var float pw2WeL = na, var float pw3WeL = na, var float pw4WeL = na
+var float pw2ThL = na, var float pw3ThL = na, var float pw4ThL = na
+var float pw2FrL = na, var float pw3FrL = na, var float pw4FrL = na
+
+if isNewD
+    if not na(rthDayL)
+        if _lastDOW == dayofweek.monday
+            twMoL := rthDayL, twMoH := rthDayH, twMoLBar := rthDayLBar, twMoHBar := rthDayHBar
+        if _lastDOW == dayofweek.tuesday
+            twTuL := rthDayL, twTuH := rthDayH, twTuLBar := rthDayLBar, twTuHBar := rthDayHBar
+        if _lastDOW == dayofweek.wednesday
+            twWeL := rthDayL, twWeH := rthDayH, twWeLBar := rthDayLBar, twWeHBar := rthDayHBar
+        if _lastDOW == dayofweek.thursday
+            twThL := rthDayL, twThH := rthDayH, twThLBar := rthDayLBar, twThHBar := rthDayHBar
+        if _lastDOW == dayofweek.friday
+            twFrL := rthDayL, twFrH := rthDayH, twFrLBar := rthDayLBar, twFrHBar := rthDayHBar
+    if not na(rthDayH)
+        rthPrevDayH := rthDayH, rthPrevDayHBar := rthDayHBar
+        rthPrevDayL := rthDayL, rthPrevDayLBar := rthDayLBar
+        rthPrevDayC := rthDayC, rthPrevDayCBar := rthDayCBar
+    rthDayL := na, rthDayH := na, rthDayC := na
+
+    prevDayStart    := curDayStart
+    curDayStart     := bar_index
+    prevDayHighBar  := curDayHighBar
+    prevDayLowBar   := curDayLowBar
+    prevDayCloseBar := bar_index - 1
+    curDayHigh      := high,  curDayHighBar := bar_index
+    curDayLow       := low,   curDayLowBar  := bar_index
+    orbH := na, orbL := na, orbDone := false, orbStartBr := 0
+    orbDoneBar := 0, orbBrokenUp := false, orbBrokenDn := false
+    array.clear(recentSwH), array.clear(recentSwHBar)
+    array.clear(recentSwL), array.clear(recentSwLBar)
+else
+    if high >= nz(curDayHigh, high)
+        curDayHigh    := high
+        curDayHighBar := bar_index
+    if low <= nz(curDayLow, low)
+        curDayLow    := low
+        curDayLowBar := bar_index
+
+if isNewW
+    prevWeekStart := curWeekStart
+    curWeekStart  := bar_index
+    rthPrevWeekH := rthWeekH, rthPrevWeekHBar := rthWeekHBar
+    rthPrevWeekL := rthWeekL, rthPrevWeekLBar := rthWeekLBar
+    rthWeekH := na, rthWeekL := na
+    pwMoH := twMoH, pwMoL := twMoL, pwMoHBar := twMoHBar, pwMoLBar := twMoLBar
+    pwTuH := twTuH, pwTuL := twTuL, pwTuHBar := twTuHBar, pwTuLBar := twTuLBar
+    pwWeH := twWeH, pwWeL := twWeL, pwWeHBar := twWeHBar, pwWeLBar := twWeLBar
+    pwThH := twThH, pwThL := twThL, pwThHBar := twThHBar, pwThLBar := twThLBar
+    pwFrH := twFrH, pwFrL := twFrL, pwFrHBar := twFrHBar, pwFrLBar := twFrLBar
+    pw4MoL := pw3MoL, pw3MoL := pw2MoL, pw2MoL := pwMoL
+    pw4TuL := pw3TuL, pw3TuL := pw2TuL, pw2TuL := pwTuL
+    pw4WeL := pw3WeL, pw3WeL := pw2WeL, pw2WeL := pwWeL
+    pw4ThL := pw3ThL, pw3ThL := pw2ThL, pw2ThL := pwThL
+    pw4FrL := pw3FrL, pw3FrL := pw2FrL, pw2FrL := pwFrL
+    twMoH := na, twMoL := na, twTuH := na, twTuL := na
+    twWeH := na, twWeL := na, twThH := na, twThL := na
+    twFrH := na, twFrL := na
+
+if isNewM
+    prevMonthStart := curMonthStart
+    curMonthStart  := bar_index
+    rthPrevMonthH := rthMonthH, rthPrevMonthHBar := rthMonthHBar
+    rthPrevMonthL := rthMonthL, rthPrevMonthLBar := rthMonthLBar
+    rthMonthH := na, rthMonthL := na
+
+isRTH       = not na(time(timeframe.period, "0930-1600", "America/New_York"))
+rthOpened   = isRTH and not isRTH[1]
+
+if isRTH
+    if na(rthDayL)
+        rthDayL := low,  rthDayH := high
+        rthDayLBar := bar_index, rthDayHBar := bar_index
+        rthDayC := close, rthDayCBar := bar_index
+    else
+        if low  < rthDayL
+            rthDayL := low, rthDayLBar := bar_index
+        if high > rthDayH
+            rthDayH := high, rthDayHBar := bar_index
+        rthDayC := close, rthDayCBar := bar_index
+
+if isRTH
+    if high > nz(rthWeekH, high)
+        rthWeekH := high, rthWeekHBar := bar_index
+    if low  < nz(rthWeekL, low)
+        rthWeekL := low, rthWeekLBar := bar_index
+    if high > nz(rthMonthH, high)
+        rthMonthH := high, rthMonthHBar := bar_index
+    if low  < nz(rthMonthL, low)
+        rthMonthL := low, rthMonthLBar := bar_index
+
+_lastDOW := dayofweek(time, "America/New_York")
+
+var float vSum = 0.0, var float vVol = 0.0, var float vSumSq = 0.0
+if vwapReset
+    vSum := 0.0, vVol := 0.0, vSumSq := 0.0
+tp = hlc3
+vSum += tp * volume, vVol += volume, vSumSq += tp * tp * volume
+vwapVal = vVol > 0 ? vSum / vVol : tp
+vari    = vVol > 0 ? (vSumSq / vVol) - (vwapVal * vwapVal) : 0.0
+sd      = math.sqrt(math.max(0, vari))
+vUp     = vwapVal + sd * vwapBandMult
+vDn     = vwapVal - sd * vwapBandMult
+
+plot(showVWAP ? vwapVal : na, "VWAP", color=vwapCol, linewidth=2)
+_vwapBandCol = color.new(vwapCol, 70)
+plot(showVWAP and showVBands ? vUp : na, "VWAP+σ", color=_vwapBandCol, linewidth=1)
+plot(showVWAP and showVBands ? vDn : na, "VWAP-σ", color=_vwapBandCol, linewidth=1)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  EMA CLOUDS
+// ══════════════════════════════════════════════════════════════════════════════
+
+e1s = ta.ema(close, c1Short), e1l = ta.ema(close, c1Long)
+e2s = ta.ema(close, c2Short), e2l = ta.ema(close, c2Long)
+
+p1s = plot(showClouds ? e1s : na, "Cloud 1 Short", color=color.new(#FF5252, 100), linewidth=c1Width, display=display.none)
+p1l = plot(showClouds ? e1l : na, "Cloud 1 Long",  color=color.new(#4CAF50, 100), linewidth=c1Width, display=display.none)
+fill(p1s, p1l, color=showClouds and showCloudFill ? (e1s >= e1l ? c1Bull : c1Bear) : na, title="Cloud 1 Fill")
+
+p2s = plot(showClouds ? e2s : na, "Cloud 2 Short", color=color.new(#FF5252, 0),   linewidth=c2Width)
+p2l = plot(showClouds ? e2l : na, "Cloud 2 Long",  color=color.new(#FFFFFF, 100), linewidth=c2Width, display=display.none)
+fill(p2s, p2l, color=color.new(#000000, 100), title="Cloud 2 Fill")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  DAILY SMAs
+// ══════════════════════════════════════════════════════════════════════════════
+
+[dsma1, dsma2, dsma3, dsma4, dsma5] = request.security(syminfo.tickerid, "D", [ta.sma(close, dsmaLen1), ta.sma(close, dsmaLen2), ta.sma(close, dsmaLen3), ta.sma(close, dsmaLen4), ta.sma(close, dsmaLen5)], lookahead=barmerge.lookahead_on)
+
+plot(showDSMA ? dsma1 : na, "SMA(10)",  color=dsmaCol1, linewidth=1, style=plot.style_circles, display=display.none)
+plot(showDSMA ? dsma2 : na, "SMA(20)",  color=dsmaCol2, linewidth=2)
+plot(showDSMA ? dsma3 : na, "SMA(50)",  color=dsmaCol3, linewidth=1)
+plot(showDSMA ? dsma4 : na, "SMA(100)", color=dsmaCol4, linewidth=1)
+plot(showDSMA ? dsma5 : na, "SMA(200)", color=dsmaCol5, linewidth=1)
+
+var label dsmaLb1 = na, var label dsmaLb2 = na, var label dsmaLb3 = na, var label dsmaLb4 = na, var label dsmaLb5 = na
+if barstate.islast and showDSMA
+    label.delete(dsmaLb1), label.delete(dsmaLb2), label.delete(dsmaLb3), label.delete(dsmaLb4), label.delete(dsmaLb5)
+    _off = bar_index + 3
+    if not na(dsma1)
+        dsmaLb1 := label.new(_off, dsma1, str.tostring(dsmaLen1), style=label.style_none, textcolor=dsmaCol1, size=size.small)
+    if not na(dsma2)
+        dsmaLb2 := label.new(_off, dsma2, str.tostring(dsmaLen2), style=label.style_none, textcolor=dsmaCol2, size=size.small)
+    if not na(dsma3)
+        dsmaLb3 := label.new(_off, dsma3, str.tostring(dsmaLen3), style=label.style_none, textcolor=dsmaCol3, size=size.small)
+    if not na(dsma4)
+        dsmaLb4 := label.new(_off, dsma4, str.tostring(dsmaLen4), style=label.style_none, textcolor=dsmaCol4, size=size.small)
+    if not na(dsma5)
+        dsmaLb5 := label.new(_off, dsma5, str.tostring(dsmaLen5), style=label.style_none, textcolor=dsmaCol5, size=size.small)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  OPENING RANGE (ORB)
+// ══════════════════════════════════════════════════════════════════════════════
+
+if rthOpened
+    orbH := high, orbL := low
+    orbDone := false, orbStartBr := bar_index
+else if not orbDone and isRTH
+    minsIn = (bar_index - orbStartBr) * chartMins
+    if minsIn < orbMins
+        orbH := math.max(nz(orbH, high), high)
+        orbL := math.min(nz(orbL, low),  low)
+    else
+        if not orbDone
+            orbDoneBar := bar_index
+        orbDone := true
+
+if orbDone and not na(orbH)
+    if close > orbH
+        orbBrokenUp := true
+    if close < orbL
+        orbBrokenDn := true
+
+var line[] orbLns  = array.new_line()
+var label[] orbLbs = array.new_label()
+var box[]  orbBoxs = array.new_box()
+
+if barstate.islast and showORB and not na(orbH) and not na(orbL)
+    if array.size(orbLns) > 0
+        for i = 0 to array.size(orbLns) - 1
+            line.delete(array.get(orbLns, i))
+    array.clear(orbLns)
+    if array.size(orbLbs) > 0
+        for i = 0 to array.size(orbLbs) - 1
+            label.delete(array.get(orbLbs, i))
+    array.clear(orbLbs)
+    if array.size(orbBoxs) > 0
+        for i = 0 to array.size(orbBoxs) - 1
+            box.delete(array.get(orbBoxs, i))
+    array.clear(orbBoxs)
+
+    rng = orbH - orbL
+    x1  = safeLeft(orbStartBr)
+    x2  = bar_index + 20
+
+    if showORBFill
+        array.push(orbBoxs, box.new(x1, orbH, bar_index + 3, orbL,
+            border_color=color.new(orbFillCol, 100),
+            bgcolor=orbFillCol))
+
+    if showORBLines
+        array.push(orbLns, line.new(x1, orbH, bar_index + 3, orbH, color=orbLineCol, style=line.style_dotted, width=2))
+        array.push(orbLbs, label.new(bar_index + 3, orbH, "ORB H", style=label.style_label_left, textcolor=orbLineCol, color=color.new(#000000, 100), size=size.tiny, tooltip="Opening Range High\nFirst " + str.tostring(orbMins) + " min of RTH (9:30 ET)\nPrice: " + str.tostring(orbH, format.mintick)))
+        array.push(orbLns, line.new(x1, orbL, bar_index + 3, orbL, color=orbLineCol, style=line.style_dotted, width=2))
+        array.push(orbLbs, label.new(bar_index + 3, orbL, "ORB L", style=label.style_label_left, textcolor=orbLineCol, color=color.new(#000000, 100), size=size.tiny, tooltip="Opening Range Low\nFirst " + str.tostring(orbMins) + " min of RTH (9:30 ET)\nPrice: " + str.tostring(orbL, format.mintick)))
+
+    _orbElapsed = orbDoneBar > 0 ? (bar_index - orbDoneBar) * chartMins : 0
+    if orbDone and orbDoneBar > 0 and not orbBrokenUp and not orbBrokenDn and _orbElapsed >= orbNoBreakMins
+        _warnTip = "⚠ No ORB Breakout — " + str.tostring(_orbElapsed, "#") + " minutes since ORB formed.\nPrice is still trapped inside the opening range.\nThis is a classic sign of a low-expansion, choppy day — consider staying out or reducing size."
+        array.push(orbLbs, label.new(bar_index + 3, (orbH + orbL) / 2,
+            "⚠ CHOP",
+            style=label.style_label_left,
+            color=color.new(#FF9800, 30),
+            textcolor=color.new(#FFFFFF, 0),
+            size=size.small,
+            tooltip=_warnTip))
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  ES/NQ PRE-OPEN CHOP WARNING  (small gap + flat overnight)
+// ══════════════════════════════════════════════════════════════════════════════
+
+_isEsNq = syminfo.root == "ES" or syminfo.root == "NQ" or syminfo.root == "MES" or syminfo.root == "MNQ"
+
+var float chopGapPts     = na
+var float chopOvnRng     = na
+var bool  chopWarnActive = false
+
+// Overnight session tracking — declared here so chop warning below can reference.
+// Populated in the Key Levels section (under `if inON`).
+_onSess = "1800-0930:23456"
+_inON   = not na(time(timeframe.period, _onSess, "America/New_York"))
+var float onH = na, var float onL = na, var int onStartBar = 0
+var int onHighBar = 0, var int onLowBar = 0
+
+if _inON
+    if not _inON[1]
+        onH := high, onL := low, onStartBar := bar_index
+        onHighBar := bar_index, onLowBar := bar_index
+    else
+        if high >= nz(onH, high)
+            onH := high, onHighBar := bar_index
+        if low <= nz(onL, low)
+            onL := low,  onLowBar  := bar_index
+
+if isNewD
+    chopWarnActive := false
+    chopGapPts     := na
+    chopOvnRng     := na
+
+if rthOpened and _isEsNq and showChopWarn
+    _gap = na(rthPrevDayC) ? na : math.abs(open - rthPrevDayC)
+    _ovn = (not na(onH) and not na(onL)) ? (onH - onL) : na
+    chopGapPts := _gap
+    chopOvnRng := _ovn
+    if not na(_gap) and not na(_ovn) and _gap < chopGapMax and _ovn < chopOvnMax
+        chopWarnActive := true
+
+var label chopWarnLb = na
+if barstate.islast
+    label.delete(chopWarnLb)
+    chopWarnLb := na
+    if chopWarnActive and _isEsNq and showChopWarn
+        _cwTip = "⚠ PRE-OPEN CHOP WARNING — " + syminfo.root + "\n" + "Gap: " + str.tostring(chopGapPts, "#.##") + " pts  (< " + str.tostring(chopGapMax, "#") + ")\n" + "Overnight range: " + str.tostring(chopOvnRng, "#.##") + " pts  (< " + str.tostring(chopOvnMax, "#") + ")\n" + "\nSmall gap + flat overnight = low expansion expected.\nExpect ranging price action — consider staying out or reducing size."
+        chopWarnLb := label.new(bar_index + 3, high + atr * 2,
+            "⚠ CHOP WARN — Small Gap + Flat ON",
+            style=label.style_label_down,
+            color=color.new(#FF9800, 15),
+            textcolor=color.new(#FFFFFF, 0),
+            size=size.normal,
+            tooltip=_cwTip)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  KEY LEVELS
+// ══════════════════════════════════════════════════════════════════════════════
+
+ydH = rthPrevDayH
+ydL = rthPrevDayL
+ydC = rthPrevDayC
+
+twH = rthWeekH
+twL = rthWeekL
+pwH = rthPrevWeekH
+pwL = rthPrevWeekL
+pmH = rthPrevMonthH
+pmL = rthPrevMonthL
+
+nearKeyLevel(float _p) =>
+    _prox = atr
+    bool _r = false
+    if not na(ydH) and math.abs(_p - ydH) < _prox
+        _r := true
+    if not na(ydL) and math.abs(_p - ydL) < _prox
+        _r := true
+    if not na(ydC) and math.abs(_p - ydC) < _prox
+        _r := true
+    if not na(twH) and math.abs(_p - twH) < _prox
+        _r := true
+    if not na(twL) and math.abs(_p - twL) < _prox
+        _r := true
+    if not na(pwH) and math.abs(_p - pwH) < _prox
+        _r := true
+    if not na(pwL) and math.abs(_p - pwL) < _prox
+        _r := true
+    if not na(pmH) and math.abs(_p - pmH) < _prox
+        _r := true
+    if not na(pmL) and math.abs(_p - pmL) < _prox
+        _r := true
+    if not na(onH) and math.abs(_p - onH) < _prox
+        _r := true
+    if not na(onL) and math.abs(_p - onL) < _prox
+        _r := true
+    _r
+
+if showLiquid and not na(swHi) and array.size(recentSwH) > 1
+    tol = close * eqlTol / 100
+    currH = high[swingLen]
+    for k = array.size(recentSwH) - 2 to math.max(0, array.size(recentSwH) - eqlLookback)
+        if math.abs(currH - array.get(recentSwH, k)) < tol
+            dup = false
+            for j = 0 to array.size(liqLvl) > 0 ? array.size(liqLvl) - 1 : na
+                if not na(j) and math.abs(array.get(liqLvl, j) - currH) < tol and array.get(liqHi, j)
+                    dup := true
+                    break
+            if not dup and not nearKeyLevel(currH)
+                array.push(liqLvl, currH), array.push(liqHi, true), array.push(liqBar, bar_index-swingLen), array.push(liqSwept, false)
+                array.push(liqLn, line.new(safeLeft(array.get(recentSwHBar, k)), currH, bar_index + 3, currH, color=color.new(#FFD600, 45), style=line.style_solid, width=1))
+                array.push(liqLab, label.new(bar_index + 3, currH, "EQH", style=label.style_label_left, color=color.new(#000000, 100), textcolor=color.new(#FFD600, 25), size=size.small, tooltip="Equal Highs — two or more swing highs at the same price level.\nLiquidity pools sitting above these highs. Price may sweep them before reversing.\nPrice: " + str.tostring(currH, format.mintick)))
+            break
+
+if showLiquid and not na(swLo) and array.size(recentSwL) > 1
+    tol = close * eqlTol / 100
+    currL = low[swingLen]
+    for k = array.size(recentSwL) - 2 to math.max(0, array.size(recentSwL) - eqlLookback)
+        if math.abs(currL - array.get(recentSwL, k)) < tol
+            dup = false
+            for j = 0 to array.size(liqLvl) > 0 ? array.size(liqLvl) - 1 : na
+                if not na(j) and math.abs(array.get(liqLvl, j) - currL) < tol and not array.get(liqHi, j)
+                    dup := true
+                    break
+            if not dup and not nearKeyLevel(currL)
+                array.push(liqLvl, currL), array.push(liqHi, false), array.push(liqBar, bar_index-swingLen), array.push(liqSwept, false)
+                array.push(liqLn, line.new(safeLeft(array.get(recentSwLBar, k)), currL, bar_index + 3, currL, color=color.new(#2196F3, 45), style=line.style_solid, width=1))
+                array.push(liqLab, label.new(bar_index + 3, currL, "EQL", style=label.style_label_left, color=color.new(#000000, 100), textcolor=color.new(#2196F3, 25), size=size.small, tooltip="Equal Lows — two or more swing lows at the same price level.\nLiquidity pools sitting below these lows. Price may sweep them before reversing.\nPrice: " + str.tostring(currL, format.mintick)))
+            break
+
+var line[] kLines  = array.new_line()
+var label[] kLabels = array.new_label()
+var box[]  kBoxes  = array.new_box()
+
+var float[]  kLvls   = array.new_float()
+var string[] kTxts   = array.new_string()
+var string[] kTips   = array.new_string()
+var color[]  kColors = array.new_color()
+var int[]    kBars   = array.new_int()
+var float[]  kWids   = array.new_float()
+mergeTol = atr * 0.1
+
+lvlFull(string _n) =>
+    switch _n
+        "PDH"  => "Previous Day High"
+        "PDL"  => "Previous Day Low"
+        "PDC"  => "Previous Day Close"
+        "TWH"  => "This Week High"
+        "TWL"  => "This Week Low"
+        "PWH"  => "Previous Week High"
+        "PWL"  => "Previous Week Low"
+        "MoH"  => "Previous Month High"
+        "MoL"  => "Previous Month Low"
+        "PMH"  => "Pre-Market High"
+        "PML"  => "Pre-Market Low"
+        "MnH"  => "This Week — Monday High"
+        "MnL"  => "This Week — Monday Low"
+        "TuH"  => "This Week — Tuesday High"
+        "TuL"  => "This Week — Tuesday Low"
+        "WdH"  => "This Week — Wednesday High"
+        "WdL"  => "This Week — Wednesday Low"
+        "ThH"  => "This Week — Thursday High"
+        "ThL"  => "This Week — Thursday Low"
+        "FrH"  => "This Week — Friday High"
+        "FrL"  => "This Week — Friday Low"
+        "pMnH" => "Prev Week — Monday High"
+        "pMnL" => "Prev Week — Monday Low"
+        "pTuH" => "Prev Week — Tuesday High"
+        "pTuL" => "Prev Week — Tuesday Low"
+        "pWdH" => "Prev Week — Wednesday High"
+        "pWdL" => "Prev Week — Wednesday Low"
+        "pThH" => "Prev Week — Thursday High"
+        "pThL" => "Prev Week — Thursday Low"
+        "pFrH" => "Prev Week — Friday High"
+        "pFrL" => "Prev Week — Friday Low"
+        => _n
+
+addLvl(float _v, string _n, color _c, int _bar, float _w) =>
+    if not na(_v)
+        merged = false
+        if array.size(kLvls) > 0
+            for i = 0 to array.size(kLvls) - 1
+                if math.abs(array.get(kLvls, i) - _v) <= mergeTol
+                    array.set(kTxts, i, array.get(kTxts, i) + " / " + _n)
+                    array.set(kTips, i, array.get(kTips, i) + "\n" + lvlFull(_n) + " • " + str.tostring(_v, format.mintick))
+                    array.set(kBars, i, math.min(array.get(kBars, i), _bar))
+                    array.set(kWids, i, math.max(array.get(kWids, i), _w))
+                    merged := true
+                    break
+        if not merged
+            array.push(kLvls, _v), array.push(kTxts, _n)
+            array.push(kTips, lvlFull(_n) + " • " + str.tostring(_v, format.mintick))
+            array.push(kColors, _c), array.push(kBars, _bar), array.push(kWids, _w)
+
+dowLowHits(float _lvl, float _w2, float _w3, float _w4, float _tol) =>
+    int _cnt = 0
+    if not na(_lvl)
+        if not na(_w2) and math.abs(_lvl - _w2) <= _tol
+            _cnt += 1
+        if not na(_w3) and math.abs(_lvl - _w3) <= _tol
+            _cnt += 1
+        if not na(_w4) and math.abs(_lvl - _w4) <= _tol
+            _cnt += 1
+    _cnt
+
+if barstate.islast and showLevels
+    if array.size(kLines) > 0
+        for i = 0 to array.size(kLines) - 1
+            line.delete(array.get(kLines, i))
+        array.clear(kLines)
+    if array.size(kLabels) > 0
+        for i = 0 to array.size(kLabels) - 1
+            label.delete(array.get(kLabels, i))
+        array.clear(kLabels)
+    if array.size(kBoxes) > 0
+        for i = 0 to array.size(kBoxes) - 1
+            box.delete(array.get(kBoxes, i))
+        array.clear(kBoxes)
+    array.clear(kLvls), array.clear(kTxts), array.clear(kTips), array.clear(kColors), array.clear(kBars), array.clear(kWids)
+
+    if showYD
+        addLvl(ydH, "PDH", lvlColYD, rthPrevDayHBar, lvlWidYD), addLvl(ydL, "PDL", lvlColYD, rthPrevDayLBar, lvlWidYD), addLvl(ydC, "PDC", lvlColPDC, rthPrevDayCBar, lvlWidPDC)
+    if showTW
+        addLvl(twH, "TWH", lvlColTW, rthWeekHBar, lvlWidTW), addLvl(twL, "TWL", lvlColTW, rthWeekLBar, lvlWidTW)
+    if showPW
+        addLvl(pwH, "PWH", lvlColPW, rthPrevWeekHBar, lvlWidPW), addLvl(pwL, "PWL", lvlColPW, rthPrevWeekLBar, lvlWidPW)
+    if showPM
+        addLvl(pmH, "MoH", lvlColPM, rthPrevMonthHBar, lvlWidPM), addLvl(pmL, "MoL", lvlColPM, rthPrevMonthLBar, lvlWidPM)
+    if showON
+        addLvl(onH, "PMH", lvlColON, onHighBar, lvlWidON), addLvl(onL, "PML", lvlColON, onLowBar, lvlWidON)
+
+    if showDOW and showDOWTW
+        addLvl(twMoH, "MnH", lvlColDOWTW, twMoHBar, lvlWidDOWTW), addLvl(twMoL, "MnL", lvlColDOWTW, twMoLBar, lvlWidDOWTW)
+        addLvl(twTuH, "TuH", lvlColDOWTW, twTuHBar, lvlWidDOWTW), addLvl(twTuL, "TuL", lvlColDOWTW, twTuLBar, lvlWidDOWTW)
+        addLvl(twWeH, "WdH", lvlColDOWTW, twWeHBar, lvlWidDOWTW), addLvl(twWeL, "WdL", lvlColDOWTW, twWeLBar, lvlWidDOWTW)
+        addLvl(twThH, "ThH", lvlColDOWTW, twThHBar, lvlWidDOWTW), addLvl(twThL, "ThL", lvlColDOWTW, twThLBar, lvlWidDOWTW)
+        addLvl(twFrH, "FrH", lvlColDOWTW, twFrHBar, lvlWidDOWTW), addLvl(twFrL, "FrL", lvlColDOWTW, twFrLBar, lvlWidDOWTW)
+    if showDOW and showDOWPW
+        _dt  = atr * dowConfTol
+        _pwS = prevWeekStart
+        if dowLowHits(pwMoL, pw2MoL, pw3MoL, pw4MoL, _dt) >= 1
+            addLvl(pwMoL, "pMnL", lvlColDOWPW, _pwS, lvlWidDOWPW)
+        if dowLowHits(pwTuL, pw2TuL, pw3TuL, pw4TuL, _dt) >= 1
+            addLvl(pwTuL, "pTuL", lvlColDOWPW, _pwS, lvlWidDOWPW)
+        if dowLowHits(pwWeL, pw2WeL, pw3WeL, pw4WeL, _dt) >= 1
+            addLvl(pwWeL, "pWdL", lvlColDOWPW, _pwS, lvlWidDOWPW)
+        if dowLowHits(pwThL, pw2ThL, pw3ThL, pw4ThL, _dt) >= 1
+            addLvl(pwThL, "pThL", lvlColDOWPW, _pwS, lvlWidDOWPW)
+        if dowLowHits(pwFrL, pw2FrL, pw3FrL, pw4FrL, _dt) >= 1
+            addLvl(pwFrL, "pFrL", lvlColDOWPW, _pwS, lvlWidDOWPW)
+        if not na(pwMoH)
+            addLvl(pwMoH, "pMnH", lvlColDOWPW, pwMoHBar, lvlWidDOWPW)
+        if not na(pwTuH)
+            addLvl(pwTuH, "pTuH", lvlColDOWPW, pwTuHBar, lvlWidDOWPW)
+        if not na(pwWeH)
+            addLvl(pwWeH, "pWdH", lvlColDOWPW, pwWeHBar, lvlWidDOWPW)
+        if not na(pwThH)
+            addLvl(pwThH, "pThH", lvlColDOWPW, pwThHBar, lvlWidDOWPW)
+        if not na(pwFrH)
+            addLvl(pwFrH, "pFrH", lvlColDOWPW, pwFrHBar, lvlWidDOWPW)
+
+    kLnStyle = lvlStyle == "Solid" ? line.style_solid : lvlStyle == "Dashed" ? line.style_dashed : line.style_dotted
+    if array.size(kLvls) > 0
+        for i = 0 to array.size(kLvls) - 1
+            lvl = array.get(kLvls, i)
+            txt = array.get(kTxts, i)
+            clr = array.get(kColors, i)
+            x1  = safeLeft(array.get(kBars, i))
+            lw  = array.get(kWids, i)
+            ln = line.new(x1, lvl, bar_index + 3, lvl, color=clr, style=kLnStyle)
+            line.set_width(ln, math.round(lw))
+            array.push(kLines, ln)
+            if txt != "PDC"
+                _srTol = atr * 0.4
+                _boxClr = color.new(clr, 78)
+                if bar_index >= 1
+                    for _j = 1 to math.min(bar_index, 30)
+                        if low[_j] <= lvl + _srTol and high[_j] >= lvl - _srTol
+                            _boxClr := close[_j] > lvl ? color.new(#4CAF50, 72) : color.new(#FF5252, 72)
+                            break
+                boxBot = lvl - atr * lvlBlockH
+                array.push(kBoxes, box.new(x1, lvl, bar_index + 3, boxBot, border_color=color.new(clr, 100), bgcolor=_boxClr))
+            tip = array.get(kTips, i)
+            array.push(kLabels, label.new(bar_index + 3, lvl, txt, style=label.style_label_left, textcolor=clr, color=color.new(#000000, 100), size=size.small, tooltip=tip))
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  ZONE MANAGEMENT — TOUCHES & BREAKS
+// ══════════════════════════════════════════════════════════════════════════════
+
+var bool supAlert = false, var bool demAlert = false, var bool brkAlert = false
+supAlert := false, demAlert := false, brkAlert := false
+
+if array.size(supT) > 0
+    for i = array.size(supT) - 1 to 0
+        t = array.get(supT, i), b = array.get(supB, i)
+        if high >= b and high <= t and close < t
+            n = array.get(supN, i) + 1
+            array.set(supN, i, n)
+            if alertSup
+                supAlert := true
+            if n >= maxTouches
+                rmSup(i)
+                continue
+        if close > t
+            cnt = array.get(supBrkCnt, i) + 1
+            array.set(supBrkCnt, i, cnt)
+            if cnt >= 2
+                array.push(brkLong, t)
+                array.push(brkLongBar, bar_index)
+                if alertBrk
+                    brkAlert := true
+                rmSup(i)
+                continue
+        else
+            array.set(supBrkCnt, i, 0)
+
+if array.size(demT) > 0
+    for i = array.size(demT) - 1 to 0
+        t = array.get(demT, i), b = array.get(demB, i)
+        if low <= t and low >= b and close > b
+            n = array.get(demN, i) + 1
+            array.set(demN, i, n)
+            if alertDem
+                demAlert := true
+            if n >= maxTouches
+                rmDem(i)
+                continue
+        if close < b
+            cnt = array.get(demBrkCnt, i) + 1
+            array.set(demBrkCnt, i, cnt)
+            if cnt >= 2
+                array.push(brkShort, b)
+                array.push(brkShortBar, bar_index)
+                if alertBrk
+                    brkAlert := true
+                rmDem(i)
+                continue
+        else
+            array.set(demBrkCnt, i, 0)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  KEY LEVEL BREAK & RETEST TRACKING
+// ══════════════════════════════════════════════════════════════════════════════
+
+if isNewD
+    kl_pdhCnt := 0, kl_pdhBrk := false
+    kl_pdlCnt := 0, kl_pdlBrk := false
+    kl_pdcUpCnt := 0, kl_pdcUpBrk := false
+    kl_pdcDnCnt := 0, kl_pdcDnBrk := false
+    kl_orbHCnt := 0, kl_orbHBrk := false
+    kl_orbLCnt := 0, kl_orbLBrk := false
+    kl_onHCnt := 0, kl_onHBrk := false
+    kl_onLCnt := 0, kl_onLBrk := false
+
+klPushLong(float _lvl) =>
+    already = false
+    for j = 0 to array.size(brkLong) > 0 ? array.size(brkLong) - 1 : na
+        if not na(j) and math.abs(array.get(brkLong, j) - _lvl) < atr * 0.1
+            already := true
+    if not already
+        array.push(brkLong, _lvl), array.push(brkLongBar, bar_index)
+
+klPushShort(float _lvl) =>
+    already = false
+    for j = 0 to array.size(brkShort) > 0 ? array.size(brkShort) - 1 : na
+        if not na(j) and math.abs(array.get(brkShort, j) - _lvl) < atr * 0.1
+            already := true
+    if not already
+        array.push(brkShort, _lvl), array.push(brkShortBar, bar_index)
+
+if showSignals
+    if not na(ydH)
+        if close > ydH and not kl_pdhBrk
+            kl_pdhCnt += 1
+            if kl_pdhCnt >= 2
+                klPushLong(ydH), kl_pdhBrk := true
+        else if close <= ydH
+            kl_pdhCnt := 0
+
+    if not na(ydL)
+        if close < ydL and not kl_pdlBrk
+            kl_pdlCnt += 1
+            if kl_pdlCnt >= 2
+                klPushShort(ydL), kl_pdlBrk := true
+        else if close >= ydL
+            kl_pdlCnt := 0
+
+    if not na(ydC)
+        if close > ydC and not kl_pdcUpBrk
+            kl_pdcUpCnt += 1
+            if kl_pdcUpCnt >= 2
+                klPushLong(ydC), kl_pdcUpBrk := true
+        else if close <= ydC
+            kl_pdcUpCnt := 0
+        if close < ydC and not kl_pdcDnBrk
+            kl_pdcDnCnt += 1
+            if kl_pdcDnCnt >= 2
+                klPushShort(ydC), kl_pdcDnBrk := true
+        else if close >= ydC
+            kl_pdcDnCnt := 0
+
+    if not na(pwH)
+        if close > pwH and not kl_pwhBrk
+            kl_pwhCnt += 1
+            if kl_pwhCnt >= 2
+                klPushLong(pwH), kl_pwhBrk := true
+        else if close <= pwH
+            kl_pwhCnt := 0
+
+    if not na(pwL)
+        if close < pwL and not kl_pwlBrk
+            kl_pwlCnt += 1
+            if kl_pwlCnt >= 2
+                klPushShort(pwL), kl_pwlBrk := true
+        else if close >= pwL
+            kl_pwlCnt := 0
+
+    if not na(orbH)
+        if close > orbH and not kl_orbHBrk
+            kl_orbHCnt += 1
+            if kl_orbHCnt >= 2
+                klPushLong(orbH), kl_orbHBrk := true
+        else if close <= orbH
+            kl_orbHCnt := 0
+
+    if not na(orbL)
+        if close < orbL and not kl_orbLBrk
+            kl_orbLCnt += 1
+            if kl_orbLCnt >= 2
+                klPushShort(orbL), kl_orbLBrk := true
+        else if close >= orbL
+            kl_orbLCnt := 0
+
+    if not na(onH)
+        if close > onH and not kl_onHBrk
+            kl_onHCnt += 1
+            if kl_onHCnt >= 2
+                klPushLong(onH), kl_onHBrk := true
+        else if close <= onH
+            kl_onHCnt := 0
+
+    if not na(onL)
+        if close < onL and not kl_onLBrk
+            kl_onLCnt += 1
+            if kl_onLCnt >= 2
+                klPushShort(onL), kl_onLBrk := true
+        else if close >= onL
+            kl_onLCnt := 0
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  VISUAL UPDATE
+// ══════════════════════════════════════════════════════════════════════════════
+
+rEdge = bar_index + 20
+
+isAtKeyLevel(float _t, float _b) =>
+    hit = false
+    pad = (_t - _b) * 0.25
+    t2 = _t + pad, b2 = _b - pad
+    if not na(ydH) and ydH <= t2 and ydH >= b2
+        hit := true
+    if not na(ydL) and ydL <= t2 and ydL >= b2
+        hit := true
+    if not na(ydC) and ydC <= t2 and ydC >= b2
+        hit := true
+    if not na(twH) and twH <= t2 and twH >= b2
+        hit := true
+    if not na(twL) and twL <= t2 and twL >= b2
+        hit := true
+    if not na(pwH) and pwH <= t2 and pwH >= b2
+        hit := true
+    if not na(pwL) and pwL <= t2 and pwL >= b2
+        hit := true
+    if not na(pmH) and pmH <= t2 and pmH >= b2
+        hit := true
+    if not na(pmL) and pmL <= t2 and pmL >= b2
+        hit := true
+    if not na(onH) and onH <= t2 and onH >= b2
+        hit := true
+    if not na(onL) and onL <= t2 and onL >= b2
+        hit := true
+    hit
+
+if array.size(supT) > 0
+    for i = 0 to array.size(supT) - 1
+        t = array.get(supT,i), b = array.get(supB,i), bi = array.get(supI,i)
+        ih = array.get(supH,i), ik = array.get(supK,i), ist = array.get(supS,i)
+        imaj = isAtKeyLevel(t, b)
+        sc = calcScore(bi, array.get(supN,i), array.get(supV,i), array.get(supM,i), ik, ist)
+        bx = array.get(supBx, i)
+        hidden = filterTrend and msTrend == 1
+        box.set_top(bx, t), box.set_bottom(bx, b), box.set_right(bx, rEdge)
+        box.set_bgcolor(bx, hidden ? color.new(#000000, 100) : supFill(imaj, ih, ist, ik))
+        box.set_border_color(bx, color.new(#000000, 100))
+        box.set_border_width(bx, 0)
+        if showLabels
+            lb = array.get(supLb, i)
+            label.set_xy(lb, rEdge, t)
+            label.set_text(lb, hidden ? "" : (imaj ? "⚠ " : "") + gradeText(sc))
+            label.set_textcolor(lb, hidden ? color.new(#000000, 100) : imaj ? color.new(#FF5252, 10) : ih ? color.new(#FF9800, 30) : ist ? color.new(#FF5252, 30) : color.new(#FF5252, 65))
+            label.set_tooltip(lb, hidden ? "" : gradeTip(sc, imaj, ih, ist, ik, "Supply"))
+        if showMid
+            ml = array.get(supMl, i)
+            line.set_y1(ml, (t+b)/2), line.set_xy2(ml, rEdge, (t+b)/2)
+
+if array.size(demT) > 0
+    for i = 0 to array.size(demT) - 1
+        t = array.get(demT,i), b = array.get(demB,i), bi = array.get(demI,i)
+        ih = array.get(demH,i), ik = array.get(demK,i), ist = array.get(demS,i)
+        imaj = isAtKeyLevel(t, b)
+        sc = calcScore(bi, array.get(demN,i), array.get(demV,i), array.get(demM,i), ik, ist)
+        bx = array.get(demBx, i)
+        hidden = filterTrend and msTrend == -1
+        box.set_top(bx, t), box.set_bottom(bx, b), box.set_right(bx, rEdge)
+        box.set_bgcolor(bx, hidden ? color.new(#000000, 100) : demFill(imaj, ih, ist, ik))
+        box.set_border_color(bx, color.new(#000000, 100))
+        box.set_border_width(bx, 0)
+        if showLabels
+            lb = array.get(demLb, i)
+            label.set_xy(lb, rEdge, b)
+            label.set_text(lb, hidden ? "" : (imaj ? "⚠ " : "") + gradeText(sc))
+            label.set_textcolor(lb, hidden ? color.new(#000000, 100) : imaj ? color.new(#4CAF50, 10) : ih ? color.new(#2196F3, 30) : ist ? color.new(#4CAF50, 30) : color.new(#4CAF50, 65))
+            label.set_tooltip(lb, hidden ? "" : gradeTip(sc, imaj, ih, ist, ik, "Demand"))
+        if showMid
+            ml = array.get(demMl, i)
+            line.set_y1(ml, (t+b)/2), line.set_xy2(ml, rEdge, (t+b)/2)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  ENTRY SIGNALS
+// ══════════════════════════════════════════════════════════════════════════════
+
+longSig  = false
+shortSig = false
+longConf  = 0
+shortConf = 0
+
+if array.size(brkLong) > 0
+    for i = array.size(brkLong) - 1 to 0
+        if bar_index - array.get(brkLongBar, i) > 50
+            array.remove(brkLong, i), array.remove(brkLongBar, i)
+if array.size(brkShort) > 0
+    for i = array.size(brkShort) - 1 to 0
+        if bar_index - array.get(brkShortBar, i) > 50
+            array.remove(brkShort, i), array.remove(brkShortBar, i)
+
+if showSignals
+    kvProx = atr * 1.5
+    keyResistAbove = (not na(ydH) and ydH > close and ydH <= close + kvProx) or (not na(ydC) and ydC > close and ydC <= close + kvProx) or (not na(twH) and twH > close and twH <= close + kvProx) or (not na(pwH) and pwH > close and pwH <= close + kvProx) or (not na(pmH) and pmH > close and pmH <= close + kvProx) or (not na(onH) and onH > close and onH <= close + kvProx)
+    keySupportBelow = (not na(ydL) and ydL < close and ydL >= close - kvProx) or (not na(ydC) and ydC < close and ydC >= close - kvProx) or (not na(twL) and twL < close and twL >= close - kvProx) or (not na(pwL) and pwL < close and pwL >= close - kvProx) or (not na(pmL) and pmL < close and pmL >= close - kvProx) or (not na(onL) and onL < close and onL >= close - kvProx)
+
+    trendOkLong = not sigUseTrend or msTrend == 1
+    vwapOkLong  = not sigUseVWAP  or close > vwapVal
+    emaOkLong   = close > ema20
+    cloudOkLong = e1s > e1l
+    longGate    = trendOkLong and vwapOkLong and emaOkLong and cloudOkLong and not keyResistAbove
+
+    trendOkShort = not sigUseTrend or msTrend == -1
+    vwapOkShort  = not sigUseVWAP  or close < vwapVal
+    emaOkShort   = close < ema20
+    cloudOkShort = e1s < e1l
+    shortGate    = trendOkShort and vwapOkShort and emaOkShort and cloudOkShort and not keySupportBelow
+
+    if longGate and array.size(brkLong) > 0
+        for i = 0 to array.size(brkLong) - 1
+            lvl   = array.get(brkLong, i)
+            brBar = array.get(brkLongBar, i)
+            retestLong = bar_index > brBar and low <= lvl * 1.002 and close > lvl and close > open
+            if retestLong
+                cf = 0
+                if sigUseTrend and msTrend == 1
+                    cf += 1
+                if sigUseVWAP and close > vwapVal
+                    cf += 1
+                if sigUseKZ and inKillzone
+                    cf += 1
+                if sigUseMajor and isAtKeyLevel(lvl + atr * 0.3, lvl - atr * 0.3)
+                    cf += 1
+                if sigUseSt
+                    cf += 1
+                if sigUseClose and close > open
+                    cf += 1
+                if cf >= sigMinConf
+                    longConf := cf
+                    longSig  := true
+                    array.remove(brkLong, i), array.remove(brkLongBar, i)
+                    break
+
+    if shortGate and array.size(brkShort) > 0
+        for i = 0 to array.size(brkShort) - 1
+            lvl   = array.get(brkShort, i)
+            brBar = array.get(brkShortBar, i)
+            retestShort = bar_index > brBar and high >= lvl * 0.998 and close < lvl and close < open
+            if retestShort
+                cf = 0
+                if sigUseTrend and msTrend == -1
+                    cf += 1
+                if sigUseVWAP and close < vwapVal
+                    cf += 1
+                if sigUseKZ and inKillzone
+                    cf += 1
+                if sigUseMajor and isAtKeyLevel(lvl + atr * 0.3, lvl - atr * 0.3)
+                    cf += 1
+                if sigUseSt
+                    cf += 1
+                if sigUseClose and close < open
+                    cf += 1
+                if cf >= sigMinConf
+                    shortConf := cf
+                    shortSig  := true
+                    array.remove(brkShort, i), array.remove(brkShortBar, i)
+                    break
+
+    if longSig and showLongSig
+        label.new(bar_index, low - atr * 1.2,
+            "▲ " + str.tostring(longConf) + "/7",
+            style=label.style_label_up,
+            color=color.new(#4CAF50, 55),
+            textcolor=color.new(#FFFFFF, 30),
+            size=size.tiny,
+            tooltip="LONG Break & Retest — " + str.tostring(longConf) + "/7 confluence factors aligned.\nKey level or supply zone broken with 2 consecutive closes above → price retested the level from above and closed bullishly.")
+    if shortSig and showShortSig
+        label.new(bar_index, high + atr * 1.2,
+            "▼ " + str.tostring(shortConf) + "/7",
+            style=label.style_label_down,
+            color=color.new(#FF5252, 55),
+            textcolor=color.new(#FFFFFF, 30),
+            size=size.tiny,
+            tooltip="SHORT Break & Retest — " + str.tostring(shortConf) + "/7 confluence factors aligned.\nKey level or demand zone broken with 2 consecutive closes below → price retested the level from below and closed bearishly.")
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  DASHBOARD
+// ══════════════════════════════════════════════════════════════════════════════
+
+var table dash = table.new(position.top_center, 5, 2, bgcolor=color.new(#1E1E1E, 15), border_width=1, border_color=color.new(#444444, 0), frame_width=1, frame_color=color.new(#666666, 0))
+if barstate.islast and showDash
+    w1 = close > (pwH + pwL) / 2 ? 1 : 0
+    w2 = close > (twH + twL) / 2 ? 1 : 0
+    w3 = close > (pmH + pmL) / 2 ? 1 : 0
+    wkScore = w1 + w2 + w3
+
+    d1 = msTrend == 1   ? 1 : 0
+    d2 = close > vwapVal ? 1 : 0
+    d3 = rsi14 > 50     ? 1 : 0
+    d4 = close > ema20  ? 1 : 0
+    dScore = d1 + d2 + d3 + d4
+
+    i1 = e1s > e1l ? 1 : 0
+    i2 = e2s > e2l ? 1 : 0
+    int demBelow = 0, int supAbove = 0
+    if array.size(demT) > 0
+        for i = 0 to array.size(demT) - 1
+            if (array.get(demT, i) + array.get(demB, i)) / 2 < close
+                demBelow += 1
+    if array.size(supT) > 0
+        for i = 0 to array.size(supT) - 1
+            if (array.get(supT, i) + array.get(supB, i)) / 2 > close
+                supAbove += 1
+    i3 = demBelow >= supAbove ? 1 : 0
+    intScore = i1 + i2 + i3
+
+    bullScore = wkScore + dScore + intScore
+    bp3 = bullScore * 10
+    sp3 = 100 - bp3
+
+    wkArrow  = wkScore  >= 2 ? "↑" : wkScore  == 1 ? "→" : "↓"
+    dayArrow = dScore   >= 3 ? "↑" : dScore   == 2 ? "→" : "↓"
+    intArrow = intScore >= 2 ? "↑" : intScore == 1 ? "→" : "↓"
+    wkCol    = wkScore  >= 2 ? color.new(#4CAF50, 0) : wkScore  == 1 ? color.new(#FFC107, 0) : color.new(#FF5252, 0)
+    dayCol   = dScore   >= 3 ? color.new(#4CAF50, 0) : dScore   == 2 ? color.new(#FFC107, 0) : color.new(#FF5252, 0)
+    intCol   = intScore >= 2 ? color.new(#4CAF50, 0) : intScore == 1 ? color.new(#FFC107, 0) : color.new(#FF5252, 0)
+    biasCol  = bullScore >= 6 ? color.new(#4CAF50, 0) : bullScore == 5 ? color.new(#FFC107, 0) : color.new(#FF5252, 0)
+    biasStr  = bullScore >= 6 ? str.tostring(bp3) + "% Bull" : bullScore == 5 ? "Neutral" : str.tostring(sp3) + "% Bear"
+
+    hdrBg = color.new(#111111, 20)
+    valBg = color.new(#000000, 60)
+
+    _sep = "\n━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    w1m  = str.tostring((pwH + pwL) / 2, format.mintick)
+    w2m  = str.tostring((twH + twL) / 2, format.mintick)
+    w3m  = str.tostring((pmH + pmL) / 2, format.mintick)
+    wkTip = "WEEKLY CONTEXT — 3 factors (score: " + str.tostring(wkScore) + "/3)" + _sep + "\n" + (w1 == 1 ? "✅" : "❌") + "  Price above Prev Week midpoint (" + w1m + ")" + "\n" + (w2 == 1 ? "✅" : "❌") + "  Price above This Week midpoint (" + w2m + ")" + "\n" + (w3 == 1 ? "✅" : "❌") + "  Price above Prev Month midpoint (" + w3m + ")" + _sep + "\n↑ = 2–3 factors bullish   → = 1 neutral   ↓ = 0 bearish"
+
+    dayTip = "DAILY STRUCTURE — 4 factors (score: " + str.tostring(dScore) + "/4)" + _sep + "\n" + (d1 == 1 ? "✅" : "❌") + "  Market Structure bullish (BOS/CHoCH)" + "\n" + (d2 == 1 ? "✅" : "❌") + "  Price above VWAP (" + str.tostring(vwapVal, format.mintick) + ")" + "\n" + (d3 == 1 ? "✅" : "❌") + "  RSI(14) above 50 — momentum bullish (RSI: " + str.tostring(rsi14, "#.##") + ")" + "\n" + (d4 == 1 ? "✅" : "❌") + "  Price above 20 EMA (" + str.tostring(ema20, format.mintick) + ")" + _sep + "\n↑ = 3–4 factors bullish   → = 2 neutral   ↓ = 0–1 bearish"
+
+    intTip = "INTRADAY — 3 factors (score: " + str.tostring(intScore) + "/3)" + _sep + "\n" + (i1 == 1 ? "✅" : "❌") + "  Fast EMA cloud bullish (EMA " + str.tostring(c1Short) + " > EMA " + str.tostring(c1Long) + ")" + "\n" + (i2 == 1 ? "✅" : "❌") + "  Slow EMA cloud bullish (EMA " + str.tostring(c2Short) + " > EMA " + str.tostring(c2Long) + ")" + "\n" + (i3 == 1 ? "✅" : "❌") + "  More demand zones below price (" + str.tostring(demBelow) + ") than supply above (" + str.tostring(supAbove) + ")" + _sep + "\n↑ = 2–3 factors bullish   → = 1 neutral   ↓ = 0 bearish"
+
+    biasTip = "OVERALL BIAS — " + str.tostring(bullScore) + "/10 bullish factors" + _sep + "\nWeekly:   " + str.tostring(wkScore) + "/3  " + wkArrow + "\nDaily:    " + str.tostring(dScore) + "/4  " + dayArrow + "\nIntraday: " + str.tostring(intScore) + "/3  " + intArrow + _sep + "\n🟢 7-10 = Bullish   🟡 5-6 = Neutral   🔴 0-4 = Bearish"
+
+    adxStr = adxVal < adxThresh ? "⚠ CHOP" : adxVal < 25 ? "~ WEAK" : "✓ TREND"
+    adxCol = adxVal < adxThresh ? color.new(#FF5252, 0) : adxVal <  25 ? color.new(#FFC107, 0) : color.new(#4CAF50, 0)
+    adxTip = "CHOP FILTER — ADX(" + str.tostring(adxLen) + "): " + str.tostring(adxVal, "#.#") + _sep + "\n🔴 < " + str.tostring(adxThresh) + " = Choppy — avoid directional trades" + "\n🟡 " + str.tostring(adxThresh) + "-25 = Weak trend — trade carefully" + "\n🟢 > 25 = Trending — trade with bias" + _sep + "\nCurrent ADX: " + str.tostring(adxVal, "#.##")
+
+    table.cell(dash, 0, 0, "WEEKLY",   text_color=color.new(#AAAAAA, 0), text_size=size.tiny, bgcolor=hdrBg, tooltip=wkTip)
+    table.cell(dash, 1, 0, "DAILY",    text_color=color.new(#AAAAAA, 0), text_size=size.tiny, bgcolor=hdrBg, tooltip=dayTip)
+    table.cell(dash, 2, 0, "INTRADAY", text_color=color.new(#AAAAAA, 0), text_size=size.tiny, bgcolor=hdrBg, tooltip=intTip)
+    table.cell(dash, 3, 0, "BIAS",     text_color=color.new(#AAAAAA, 0), text_size=size.tiny, bgcolor=hdrBg, tooltip=biasTip)
+    table.cell(dash, 4, 0, "REGIME",   text_color=color.new(#AAAAAA, 0), text_size=size.tiny, bgcolor=hdrBg, tooltip=adxTip)
+
+    table.cell(dash, 0, 1, wkArrow  + " " + str.tostring(wkScore)  + "/3",  text_color=wkCol,   text_size=size.small, bgcolor=valBg, tooltip=wkTip)
+    table.cell(dash, 1, 1, dayArrow + " " + str.tostring(dScore)   + "/4",  text_color=dayCol,  text_size=size.small, bgcolor=valBg, tooltip=dayTip)
+    table.cell(dash, 2, 1, intArrow + " " + str.tostring(intScore) + "/3",  text_color=intCol,  text_size=size.small, bgcolor=valBg, tooltip=intTip)
+    table.cell(dash, 3, 1, biasStr,                                         text_color=biasCol, text_size=size.small, bgcolor=valBg, tooltip=biasTip)
+    table.cell(dash, 4, 1, adxStr + " " + str.tostring(adxVal, "#.#"),      text_color=adxCol,  text_size=size.small, bgcolor=valBg, tooltip=adxTip)
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  ALERTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+alertcondition(supAlert, title="Supply Zone Entry",   message="{{ticker}} entered SUPPLY zone on {{interval}}")
+alertcondition(demAlert, title="Demand Zone Entry",   message="{{ticker}} entered DEMAND zone on {{interval}}")
+alertcondition(brkAlert, title="Zone Broken",         message="{{ticker}} broke a S/D zone on {{interval}}")
+alertcondition(supAlert or demAlert, title="Any Zone Entry", message="{{ticker}} entered a zone on {{interval}}")
+alertcondition(longSig,  title="Long Signal",  message="{{ticker}} LONG signal on {{interval}} — fresh demand zone entry with confluence")
+alertcondition(shortSig, title="Short Signal", message="{{ticker}} SHORT signal on {{interval}} — fresh supply zone entry with confluence")
+alertcondition(longSig or shortSig, title="Any Entry Signal", message="{{ticker}} entry signal fired on {{interval}}")
+alertcondition(chopWarnActive and rthOpened, title="ES/NQ Chop Warning", message="{{ticker}} — small gap + flat overnight. Low-expansion day expected.")
