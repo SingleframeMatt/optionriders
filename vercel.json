@@ -27,6 +27,10 @@
       "dest": "/api/top-trade-today.py"
     },
     {
+      "src": "/api/news",
+      "dest": "/api/news.py"
+    },
+    {
       "src": "/api/public-config",
       "dest": "/api/public-config.py"
     },
