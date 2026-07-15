@@ -13,6 +13,7 @@ import importlib.util
 from alpha_vantage import fetch_alpha_vantage_data
 from barchart_proxy import CACHE_TTL_SECONDS, fetch_options_activity
 from market_data import fetch_market_data
+from news_feed import fetch_news
 from top_trade_today import fetch_top_trade_today
 from top_watch import fetch_top_watch
 from bot_core import bot as _bot
@@ -73,6 +74,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return
         if self.path.startswith("/api/top-trade-today"):
             self.handle_top_trade_today()
+            return
+        if self.path.startswith("/api/news"):
+            self.handle_news()
             return
         if self.path.startswith("/api/alpha-vantage"):
             self.handle_alpha_vantage()
@@ -285,6 +289,26 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", f"public, max-age={CACHE_TTL_SECONDS}")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:
+            body = json.dumps({"error": str(exc)}).encode("utf-8")
+            self.send_response(502)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    def handle_news(self):
+        try:
+            params = parse_qs(urlparse(self.path).query)
+            force_refresh = params.get("fresh", ["0"])[0].lower() in {"1", "true", "yes"}
+            payload = fetch_news(force_refresh=force_refresh)
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "public, max-age=120")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)

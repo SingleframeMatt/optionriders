@@ -16,6 +16,7 @@ import os
 import time
 import urllib.parse
 import urllib.request
+from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -29,6 +30,7 @@ INTRADAY_CACHE_TTL     = 300       # 5 min — intraday bars
 INDICATOR_CACHE_TTL    = 300       # 5 min — RSI / MACD / BBands / ADX
 OPTIONS_CACHE_TTL      = 300       # 5 min — options chain
 FUNDAMENTALS_CACHE_TTL = 86_400    # 24 h  — OVERVIEW + EARNINGS
+NEWS_CACHE_TTL         = 600       # 10 min — NEWS_SENTIMENT (stay within 25/day)
 
 # In-memory cache: { key: (data, timestamp) }
 _cache: dict = {}
@@ -537,6 +539,44 @@ def fetch_enriched_ticker(symbol: str) -> dict:
 
     _cache_set(key, result)
     return result
+
+
+def fetch_news_sentiment(
+    tickers: Optional[list] = None,
+    topics: Optional[list] = None,
+    sort: str = "LATEST",
+    limit: int = 200,
+    time_from: Optional[str] = None,
+) -> dict:
+    """
+    Alpha Vantage NEWS_SENTIMENT — market news + per-ticker sentiment scores.
+
+    One call covers the whole watchlist (tickers are OR-matched), so this is the
+    cheap way to stay inside the 25-requests/day free-tier budget. Results are
+    cached for NEWS_CACHE_TTL.
+
+    Returns the raw AV payload: {"feed": [...], "sentiment_score_definition": ...}
+    """
+    params = {"function": "NEWS_SENTIMENT", "sort": sort, "limit": str(limit)}
+    if tickers:
+        params["tickers"] = ",".join(t.upper() for t in tickers)
+    if topics:
+        params["topics"] = ",".join(topics)
+    if time_from:
+        params["time_from"] = time_from
+
+    cache_key = "news:" + "|".join(f"{k}={v}" for k, v in sorted(params.items()))
+    cached = _cache_get(cache_key, NEWS_CACHE_TTL)
+    if cached is not None:
+        return cached
+
+    data = _fetch(params)
+    if "feed" not in data:
+        # AV returns {"Information": ...} when the ticker set yields nothing or
+        # the daily cap is hit — surface an empty-but-valid shape.
+        data = {"feed": [], "items": "0"}
+    _cache_set(cache_key, data)
+    return data
 
 
 # ---------------------------------------------------------------------------
