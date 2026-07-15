@@ -32,6 +32,14 @@ from zoneinfo import ZoneInfo
 
 import alpha_vantage as av
 
+# Static import so Vercel's Python builder traces + bundles the macro-calendar
+# dependency into the serverless function. Guarded so a bundling/import failure
+# degrades to "no macro events" rather than killing the whole news function.
+try:
+    from top_trade_today import _fetch_macro_events as _macro_events_fn
+except Exception:
+    _macro_events_fn = None
+
 NY_TZ = ZoneInfo("America/New_York")
 CACHE_TTL_SECONDS = 300  # 5 min — Yahoo backbone refresh cadence
 
@@ -295,9 +303,10 @@ def _fetch_av_sentiment(symbols: List[str]) -> Tuple[Dict[str, dict], List[dict]
 
 
 def _fetch_macro() -> dict:
+    if _macro_events_fn is None:
+        return {}
     try:
-        from top_trade_today import _fetch_macro_events
-        return _fetch_macro_events() or {}
+        return _macro_events_fn() or {}
     except Exception:
         return {}
 
