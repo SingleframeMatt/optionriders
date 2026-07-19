@@ -156,6 +156,30 @@ function fmtDisplayDate(iso) {
   return Y ? `${M}/${D}/${Y.slice(2)}` : iso;
 }
 
+// Full weekday + date + time (in the display timezone) for a datetime ISO.
+// Used where the day matters, e.g. a trade that opened and closed on
+// different days — "14:32" alone can't tell you which day it was.
+function fmtDisplayDateTime(iso, withSeconds = true) {
+  if (!iso || iso.length < 19) return "";
+  try {
+    const [datePart, timePart] = iso.split("T");
+    const [Y, M, D] = datePart.split("-").map(Number);
+    const [h, m, s] = timePart.slice(0, 8).split(":").map(Number);
+    const d = new Date(_nyWallClockToUtcMillis(Y, M, D, h, m, s));
+    const dateStr = d.toLocaleDateString(undefined, {
+      weekday: "short", month: "short", day: "2-digit", timeZone: _DISPLAY_TZ,
+    });
+    const timeStr = d.toLocaleTimeString("en-GB", {
+      hour: "2-digit", minute: "2-digit",
+      second: withSeconds ? "2-digit" : undefined,
+      timeZone: _DISPLAY_TZ, hourCycle: "h23",
+    });
+    return `${dateStr} · ${timeStr}`;
+  } catch (_) {
+    return iso.slice(0, withSeconds ? 19 : 16).replace("T", " ");
+  }
+}
+
 const fmt = {
   money(v, { sign = true, compact = false } = {}) {
     if (v == null || Number.isNaN(v)) return "—";
@@ -867,8 +891,8 @@ function openTradeDetail(trade) {
 
   // Stat rows
   $("tdSide").textContent = sideBadge.textContent;
-  $("tdEntry").textContent = fmtDisplayTime(trade.open_datetime);
-  $("tdExit").textContent = trade.is_open ? "—" : fmtDisplayTime(trade.close_datetime);
+  $("tdEntry").textContent = fmtDisplayDateTime(trade.open_datetime) || "—";
+  $("tdExit").textContent = trade.is_open ? "—" : (fmtDisplayDateTime(trade.close_datetime) || "—");
   $("tdQtyOpen").textContent = trade.qty_opened != null ? fmt.num(trade.qty_opened, 0) : "—";
   $("tdQtyClose").textContent = trade.qty_closed != null ? fmt.num(trade.qty_closed, 0) : "—";
   $("tdAvgEntry").textContent = trade.avg_entry_price != null ? fmt.money(trade.avg_entry_price, { compact: false, sign: false }) : "—";
