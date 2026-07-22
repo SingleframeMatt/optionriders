@@ -954,3 +954,96 @@ body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-ev
 
   color-scheme: light;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   PROFIT KINGDOM — gamified P&L territory map
+   ══════════════════════════════════════════════════════════════════ */
+.panel-kingdom { margin-bottom: var(--gap, 16px); }
+.kingdom-wrap {
+  display: flex; gap: 20px; align-items: stretch; flex-wrap: wrap;
+}
+.kingdom-stage {
+  flex: 1 1 460px; min-width: 300px;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(120% 80% at 50% 15%, rgba(0,212,255,0.06), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.12));
+  border: 1px solid var(--border, rgba(255,255,255,0.07));
+  border-radius: 14px; padding: 14px; overflow: hidden;
+}
+.kingdom-stage svg { width: 100%; height: auto; display: block; }
+.kingdom-side {
+  flex: 1 1 240px; min-width: 220px;
+  display: flex; flex-direction: column; gap: 12px; justify-content: center;
+}
+.kingdom-rank {
+  font-family: var(--font-mono, monospace); font-size: .72rem;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--cyan, #00d4ff);
+}
+.kingdom-net {
+  font-family: var(--font-mono, monospace); font-size: 2rem; font-weight: 700;
+  line-height: 1;
+}
+.kingdom-net.pos { color: var(--green, #00ff88); }
+.kingdom-net.neg { color: var(--red, #ff4444); }
+.kingdom-net.neutral { color: var(--text-secondary, #9898b0); }
+.kingdom-progress-top {
+  display: flex; justify-content: space-between;
+  font-family: var(--font-mono, monospace); font-size: .72rem;
+  color: var(--text-secondary, #9898b0); margin-bottom: 6px;
+}
+.kingdom-bar {
+  height: 10px; border-radius: 6px; overflow: hidden;
+  background: rgba(255,68,68,0.18);
+  border: 1px solid var(--border, rgba(255,255,255,0.07));
+}
+.kingdom-bar-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, #22c55e, #00ff88);
+  box-shadow: 0 0 10px rgba(0,255,136,0.5);
+  transition: width .8s cubic-bezier(.22,1,.36,1);
+}
+.kingdom-next {
+  font-family: var(--font-mono, monospace); font-size: .78rem;
+  color: var(--text-primary, #e8e8f0); margin-top: 7px;
+}
+.kingdom-milestones {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;
+}
+.km-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono, monospace); font-size: .66rem;
+  padding: 4px 8px; border-radius: 20px;
+  border: 1px solid var(--border, rgba(255,255,255,0.07));
+  background: rgba(255,255,255,0.03);
+  color: var(--text-muted, #6a6a80);
+  transition: all .2s;
+}
+.km-chip .km-ico { font-size: .95rem; filter: grayscale(1) opacity(.5); }
+.km-chip.unlocked {
+  color: var(--green, #00ff88);
+  border-color: rgba(0,255,136,0.35);
+  background: rgba(0,255,136,0.10);
+}
+.km-chip.unlocked .km-ico { filter: none; }
+.km-chip.target {
+  color: var(--amber, #ffaa00);
+  border-color: rgba(255,170,0,0.5);
+  background: rgba(255,170,0,0.10);
+  animation: km-pulse 1.8s ease-in-out infinite;
+}
+.km-chip.target .km-ico { filter: none; }
+@keyframes km-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(255,170,0,0.0); }
+  50%     { box-shadow: 0 0 10px 1px rgba(255,170,0,0.35); }
+}
+.kingdom-tile { transition: opacity .5s; }
+.kingdom-struct { animation: km-pop .5s cubic-bezier(.34,1.56,.64,1); }
+@keyframes km-pop {
+  0% { opacity: 0; transform: translateY(6px) scale(.6); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (max-width: 640px) {
+  .kingdom-net { font-size: 1.6rem; }
+}
