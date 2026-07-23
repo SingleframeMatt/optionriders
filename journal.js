@@ -294,14 +294,26 @@ function zellaScore(s) {
 
 /* ---------- Profit Kingdom (gamified P&L territory map) ---------- */
 
+const KINGDOM_ART = "assets/kingdom";
 const KINGDOM_TIERS = [
-  { t: 0,     name: "Barren Frontier", ico: "🌱", tile: null },
-  { t: 250,   name: "Settler",         ico: "🏕️", tile: [5, 5] },
-  { t: 1000,  name: "Homesteader",     ico: "🛖", tile: [5, 4] },
-  { t: 2500,  name: "Landowner",       ico: "🏠", tile: [4, 4] },
-  { t: 5000,  name: "Villager",        ico: "⛲", tile: [4, 5] },
-  { t: 10000, name: "Lord",            ico: "🏰", tile: [3, 4] },
-  { t: 25000, name: "Sovereign",       ico: "👑", tile: [3, 3] },
+  { t: 0,     name: "Barren Frontier", img: null },
+  { t: 250,   name: "Settler",         img: "tent.png" },
+  { t: 1000,  name: "Homesteader",     img: "hut.png" },
+  { t: 2500,  name: "Landowner",       img: "house.png" },
+  { t: 5000,  name: "Villager",        img: "fountain.png" },
+  { t: 10000, name: "Lord",            img: "castle.png" },
+  { t: 25000, name: "Sovereign",       img: "crown.png" },
+];
+// Structure placements on the island (bottom-centre anchor, % of the square
+// scene). Ordered front→back: earlier tiers sit at the front where the green
+// "tide" reaches first, later tiers toward the back ridge.
+const KINGDOM_STRUCTS = [
+  { t: 250,   img: "tent.png",     x: 33, y: 66, w: 15 },
+  { t: 1000,  img: "hut.png",      x: 63, y: 62, w: 14 },
+  { t: 2500,  img: "house.png",    x: 48, y: 55, w: 16 },
+  { t: 5000,  img: "fountain.png", x: 65, y: 53, w: 13 },
+  { t: 10000, img: "castle.png",   x: 37, y: 50, w: 23 },
+  { t: 25000, img: "crown.png",    x: 54, y: 42, w: 12 },
 ];
 
 // Piecewise 0..1 map fill: each tier segment is an equal chunk of the island,
@@ -322,60 +334,33 @@ function renderKingdom(net) {
   if (!stage) return;
   net = Number(net) || 0;
 
-  const ROWS = 9, COLS = 9, TW = 46, TH = 23, DEPTH = 9;
-  const cr = (ROWS - 1) / 2, cc = (COLS - 1) / 2;
-  const W = (COLS + ROWS) * (TW / 2) + 40;
-  const H = (COLS + ROWS) * (TH / 2) + DEPTH + 44;
-  const ox = W / 2;
-  const oy = 30;
+  // Build the layered scene once, then only update dynamic bits on refresh.
+  let scene = stage.querySelector(".ki-scene");
+  if (!scene) {
+    scene = document.createElement("div");
+    scene.className = "ki-scene";
+    scene.innerHTML =
+      `<img class="ki-island ki-red" src="${KINGDOM_ART}/island_red.png" alt="">` +
+      `<img class="ki-island ki-green" src="${KINGDOM_ART}/island_green.png" alt="">` +
+      KINGDOM_STRUCTS.map(s =>
+        `<img class="ki-struct" data-t="${s.t}" src="${KINGDOM_ART}/${s.img}" alt="" ` +
+        `style="left:${s.x}%;top:${s.y}%;width:${s.w}%;z-index:${Math.round(s.y)}">`
+      ).join("");
+    stage.appendChild(scene);
+  }
 
-  // Claim order: centre-out, so profit "spreads" from the heart of the map.
-  const tiles = [];
-  for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++)
-      tiles.push({ r, c, d: Math.hypot(r - cr, c - cc) });
-  const claimOrder = tiles.slice().sort((a, b) => a.d - b.d);
+  // Green "tide" rises front→back as P&L climbs (island spans ~25%–75% up).
   const progress = kingdomProgress(net);
-  const greenCount = Math.round(progress * tiles.length);
-  const isGreen = new Set(claimOrder.slice(0, greenCount).map(t => t.r + "," + t.c));
+  const tide = 25 + progress * 50;
+  const green = scene.querySelector(".ki-green");
+  const mask = progress <= 0
+    ? "linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0))"
+    : `linear-gradient(to top, #000 ${Math.max(0, tide - 8).toFixed(1)}%, rgba(0,0,0,0) ${tide.toFixed(1)}%)`;
+  green.style.webkitMaskImage = mask;
+  green.style.maskImage = mask;
 
-  const shade = (hex, k) => {
-    const n = parseInt(hex.slice(1), 16);
-    const r = Math.max(0, Math.min(255, ((n >> 16) & 255) + k));
-    const g = Math.max(0, Math.min(255, ((n >> 8) & 255) + k));
-    const b = Math.max(0, Math.min(255, (n & 255) + k));
-    return `rgb(${r},${g},${b})`;
-  };
-
-  // Paint back-to-front so nearer tiles overlap farther ones.
-  const painter = tiles.slice().sort((a, b) => (a.r + a.c) - (b.r + b.c));
-  let svg = `<svg viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" role="img" aria-label="Profit map">`;
-  for (const { r, c } of painter) {
-    const cx = ox + (c - r) * (TW / 2);
-    const cy = oy + (c + r) * (TH / 2);
-    const green = isGreen.has(r + "," + c);
-    const jit = ((r * 7 + c * 13) % 3 - 1) * 8;   // deterministic texture
-    const top = green ? shade("#2fd67f", jit) : shade("#bb3b3b", jit);
-    const lft = green ? "#1f9e5c" : "#8f2626";
-    const rgt = green ? "#17784a" : "#6f1c1c";
-    const tx = cx, ty = cy - TH / 2, rx = cx + TW / 2, ry = cy;
-    const bx = cx, by = cy + TH / 2, lx = cx - TW / 2, ly = cy;
-    svg += `<polygon class="kingdom-tile" points="${lx},${ly} ${bx},${by} ${bx},${by + DEPTH} ${lx},${ly + DEPTH}" fill="${lft}"/>`;
-    svg += `<polygon class="kingdom-tile" points="${rx},${ry} ${bx},${by} ${bx},${by + DEPTH} ${rx},${ry + DEPTH}" fill="${rgt}"/>`;
-    svg += `<polygon class="kingdom-tile" points="${tx},${ty} ${rx},${ry} ${bx},${by} ${lx},${ly}" fill="${top}" stroke="rgba(0,0,0,0.15)" stroke-width="0.5"/>`;
-  }
-  // Structures for every unlocked milestone, drawn front-to-back on top.
-  const structs = KINGDOM_TIERS
-    .filter(t => t.tile && net >= t.t)
-    .sort((a, b) => (a.tile[0] + a.tile[1]) - (b.tile[0] + b.tile[1]));
-  for (const t of structs) {
-    const [r, c] = t.tile;
-    const cx = ox + (c - r) * (TW / 2);
-    const cy = oy + (c + r) * (TH / 2);
-    svg += `<text class="kingdom-struct" x="${cx}" y="${cy - 2}" font-size="30" text-anchor="middle" dominant-baseline="middle">${t.ico}</text>`;
-  }
-  svg += `</svg>`;
-  stage.innerHTML = svg;
+  scene.querySelectorAll(".ki-struct").forEach(el =>
+    el.classList.toggle("shown", net >= Number(el.dataset.t)));
 
   // ── Side panel ──
   const netEl = $("kingdomNet");
@@ -394,12 +379,12 @@ function renderKingdom(net) {
     $("kingdomNextLabel").textContent = "Break even";
     $("kingdomNextPct").textContent = "0%";
     $("kingdomNextGoal").textContent = `Reclaim ${fmt.money(-net, { sign: false })} to break even`;
-    $("kingdomSub").textContent = "Your land is underwater — get back to green";
+    $("kingdomSub").textContent = "Your land is scorched — get back to green";
   } else if (!next) {
     barFill.style.width = "100%";
     $("kingdomNextLabel").textContent = "Kingdom complete";
     $("kingdomNextPct").textContent = "100%";
-    $("kingdomNextGoal").textContent = "👑 You rule the whole map";
+    $("kingdomNextGoal").textContent = "👑 You rule the whole realm";
     $("kingdomSub").textContent = "Sovereign — the entire realm is yours";
   } else {
     const prev = [...KINGDOM_TIERS].reverse().find(t => t.t <= net)?.t ?? 0;
@@ -407,13 +392,13 @@ function renderKingdom(net) {
     barFill.style.width = (segFrac * 100).toFixed(1) + "%";
     $("kingdomNextLabel").textContent = "Next unlock";
     $("kingdomNextPct").textContent = Math.round(segFrac * 100) + "%";
-    $("kingdomNextGoal").textContent = `${fmt.money(next.t - net, { sign: false })} to ${next.ico} ${next.name}`;
+    $("kingdomNextGoal").textContent = `${fmt.money(next.t - net, { sign: false })} to ${next.name}`;
     $("kingdomSub").textContent = "Claim the land with profit";
   }
 
   $("kingdomMilestones").innerHTML = KINGDOM_TIERS.filter(t => t.t > 0).map(t => {
     const cls = net >= t.t ? "unlocked" : (t === next ? "target" : "");
-    return `<span class="km-chip ${cls}"><span class="km-ico">${t.ico}</span>${fmt.money(t.t, { sign: false, compact: true })}</span>`;
+    return `<span class="km-chip ${cls}"><img class="km-ico" src="${KINGDOM_ART}/${t.img}" alt="">${fmt.money(t.t, { sign: false, compact: true })}</span>`;
   }).join("");
 }
 
