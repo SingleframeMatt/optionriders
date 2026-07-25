@@ -881,6 +881,26 @@ function renderZellaScale(w) {
   $("weekScaleFill").style.left = `${clamped}%`;
 }
 
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+const RULE_LABELS = {
+  "ADDED-DOWN": "Added to a losing position",
+  "OVERSIZED": "Position over $4,000 cap",
+  "STOP-BLOWN": "Loss ran past the -25% stop",
+  "OVERNIGHT": "Held overnight — not closed same session",
+  "OPEN-CHASE": "Entered in the first 15 minutes",
+};
+function ruleBadges(t) {
+  const flags = (t && t.rule_flags) || [];
+  if (!flags.length) return "";
+  return " " + flags.map(f =>
+    `<span class="rule-badge" title="${RULE_LABELS[f] || f}">${f}</span>`
+  ).join("");
+}
+
 function renderWeekTrades(days, trades) {
   const tbody = document.querySelector("#weekModalTable tbody");
   tbody.innerHTML = "";
@@ -907,7 +927,7 @@ function renderWeekTrades(days, trades) {
       <td>${t.time || ""}</td>
       <td><span class="ticker-pill">${t.ticker || ""}</span></td>
       <td class="${sideClass}">${sideLabel || ""}</td>
-      <td>${t.instrument || ""}</td>
+      <td>${t.instrument || ""}${ruleBadges(t)}</td>
       <td class="num ${signClass(t.net_pnl)}">${fmt.money(t.net_pnl)}</td>
       <td class="num ${signClass(t.net_roi)}">${roi}</td>`;
     tbody.appendChild(tr);
@@ -936,7 +956,7 @@ function renderDayTrades(trades) {
       <td>${timeCell}</td>
       <td><span class="ticker-pill">${t.ticker || ""}</span></td>
       <td class="${sideClass}">${sideLabel || ""}</td>
-      <td>${t.instrument || ""}</td>
+      <td>${t.instrument || ""}${ruleBadges(t)}</td>
       <td class="num ${signClass(t.net_pnl)}">${fmt.money(t.net_pnl)}</td>
       <td class="num ${signClass(t.net_roi)}">${roi}</td>`;
     tbody.appendChild(tr);
@@ -950,7 +970,8 @@ function openTradeDetail(trade) {
   const isOpt = trade.asset_class === "OPT" || trade.asset_class === "FOP";
 
   $("tradeDetailTicker").textContent = trade.ticker || "";
-  $("tradeDetailInstrument").textContent = trade.instrument || trade.symbol || "";
+  $("tradeDetailInstrument").innerHTML =
+    escapeHtml(trade.instrument || trade.symbol || "") + ruleBadges(trade);
   $("tradeDetailDate").textContent = trade.close_datetime
     ? new Date(trade.close_datetime.slice(0, 10) + "T00:00:00").toLocaleDateString(undefined, {
         weekday: "short", year: "numeric", month: "short", day: "2-digit",

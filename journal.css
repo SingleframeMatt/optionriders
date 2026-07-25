@@ -550,6 +550,23 @@ body.journal-body {
 .side-call { color: var(--green); font-weight: 600; }
 .side-put  { color: var(--red); font-weight: 600; }
 
+/* Rule-violation badges — flag trades that broke the locked rules. */
+.rule-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 82, 82, 0.14);
+  border: 1px solid rgba(255, 82, 82, 0.35);
+  color: var(--red);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+  cursor: help;
+}
+
 /* ── Sign-in gate ── */
 body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-events: none; user-select: none; }
 .auth-gate[hidden] { display: none; }

@@ -764,6 +764,90 @@ def _trade_metrics(fills: list[dict]) -> dict:
     }
 
 
+def _entry_basis_base(trade_fills: list[dict]) -> float | None:
+    """Entry cost of a round-trip in account-base currency, from opening fills.
+
+    ROI must divide realized P/L (already converted to base currency by
+    _build_trades) by the *entry* notional. The old code took the basis from a
+    single `meta` fill, which for a closed option is the near-zero CLOSING fill
+    (e.g. $0.08) — producing impossible ROIs like -63000%. Bucket open vs close
+    exactly like _trade_metrics, then sum entry notional × multiplier × FX.
+    """
+    entry_sign = 0
+    for f in trade_fills:
+        q = f.get("quantity") or 0.0
+        if q != 0:
+            entry_sign = 1 if q > 0 else -1
+            break
+    basis = 0.0
+    for f in trade_fills:
+        q = f.get("quantity") or 0.0
+        oc = f.get("open_close")
+        if oc in ("O", "C"):
+            is_open = oc == "O"
+        else:
+            is_open = entry_sign == 0 or ((q > 0) == (entry_sign > 0))
+        if not is_open:
+            continue
+        price = f.get("trade_price") or 0.0
+        mult = f.get("multiplier") or 1.0
+        fx = f.get("fx_rate_to_base") or 1.0
+        basis += abs(q) * price * mult * fx
+    return basis or None
+
+
+# Locked trading rules — see memory/feedback_trading_rules.md. We surface the
+# behaviours that drained the account as badges on each trade so a rule-break is
+# visible the moment it's reviewed. R5 (>2% OTM) and R7 (off-scan) need spot /
+# the scan log and stay a live check.
+RULE_MAX_POSITION_USD = 4000.0   # R2  max entry notional
+RULE_STOP_PCT = -25.0            # R3  -25% premium stop
+RULE_ADD_DOWN_TRIGGER = 0.98     # R1  later open <=98% of an earlier open
+RULE_FIRST15_START = "09:30"     # R6  no entries in the first 15 minutes
+RULE_FIRST15_END = "09:45"
+
+
+def _rule_flags(trade_fills: list[dict], roi: float | None) -> list[str]:
+    """Tag a round-trip with the locked-rule violations its fills reveal."""
+    opens = [f for f in trade_fills if (f.get("open_close") or "").upper() == "O"]
+    opens.sort(key=lambda f: f.get("datetime") or "")
+    flags: list[str] = []
+
+    # R1 — added to a loser (a later open filled below an earlier one)
+    prices = [f.get("trade_price") or 0.0 for f in opens]
+    if len(prices) > 1:
+        peak = prices[0]
+        for p in prices[1:]:
+            if p and peak and p <= peak * RULE_ADD_DOWN_TRIGGER:
+                flags.append("ADDED-DOWN")
+                break
+            peak = max(peak, p)
+
+    # R2 — oversized (entry notional in instrument currency, i.e. USD)
+    notional = sum(abs(f.get("quantity") or 0.0) * (f.get("trade_price") or 0.0)
+                   * (f.get("multiplier") or 1.0) for f in opens)
+    if notional > RULE_MAX_POSITION_USD:
+        flags.append("OVERSIZED")
+
+    # R3 — stop blown past -25%
+    if roi is not None and roi < RULE_STOP_PCT:
+        flags.append("STOP-BLOWN")
+
+    # R4 — held overnight (fills span more than one trade date)
+    dates = {f.get("trade_date") for f in trade_fills if f.get("trade_date")}
+    if len(dates) > 1:
+        flags.append("OVERNIGHT")
+
+    # R6 — entered in the first 15 minutes
+    if opens:
+        dt0 = opens[0].get("datetime") or ""
+        hhmm = dt0[11:16] if len(dt0) >= 16 else ""
+        if RULE_FIRST15_START <= hhmm < RULE_FIRST15_END:
+            flags.append("OPEN-CHASE")
+
+    return flags
+
+
 def _slice_pnl_for_day(trade_fills: list[dict], date_iso: str) -> tuple[float, float]:
     """
     Return (realized_pnl, commission) for the portion of a position cycle's
@@ -850,20 +934,14 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
             instrument = f"{m}-{d}-{y} {strike_s} {pc}".strip()
         else:
             instrument = t["underlying"] or t["symbol"]
-        roi = None
-        basis = meta.get("cost_basis")
-        if not basis:
-            qty = abs(meta.get("quantity") or 0.0)
-            mult = meta.get("multiplier") or 1.0
-            price = meta.get("trade_price") or 0.0
-            basis = qty * mult * price if price else None
-        if basis:
-            roi = t["gross_pnl"] / abs(basis) * 100.0
         trade_fills = _fills_for_trade(
             rows, t.get("account") or "", t["symbol"],
             t.get("open_datetime"), t.get("close_datetime"),
         )
         tmetrics = _trade_metrics(trade_fills)
+        # ROI = P/L ÷ ENTRY notional (opening fills), both in base currency.
+        basis = _entry_basis_base(trade_fills)
+        roi = (t["gross_pnl"] / basis * 100.0) if basis else None
         trades_out.append({
             "time": time_str,
             "ticker": t["underlying"] or t["symbol"],
@@ -883,6 +961,7 @@ def day_detail(bearer_token: str, date_iso: str) -> dict:
             "realized_pnl": t["realized_pnl"],
             "commission": t["commission"],
             "net_roi": round(roi, 2) if roi is not None else None,
+            "rule_flags": _rule_flags(trade_fills, roi),
             "is_open": False,
             "open_datetime": t.get("open_datetime"),
             "close_datetime": t.get("close_datetime"),
@@ -1060,20 +1139,14 @@ def week_detail(bearer_token: str, start_iso: str) -> dict:
             instrument = f"{m}-{d}-{y} {strike_s} {pc}".strip()
         else:
             instrument = t["underlying"] or t["symbol"]
-        roi = None
-        basis = meta.get("cost_basis")
-        if not basis:
-            qty = abs(meta.get("quantity") or 0.0)
-            mult = meta.get("multiplier") or 1.0
-            price = meta.get("trade_price") or 0.0
-            basis = qty * mult * price if price else None
-        if basis:
-            roi = t["gross_pnl"] / abs(basis) * 100.0
         trade_fills = _fills_for_trade(
             rows, t.get("account") or "", t["symbol"],
             t.get("open_datetime"), t.get("close_datetime"),
         )
         tmetrics = _trade_metrics(trade_fills)
+        # ROI = P/L ÷ ENTRY notional (opening fills), both in base currency.
+        basis = _entry_basis_base(trade_fills)
+        roi = (t["gross_pnl"] / basis * 100.0) if basis else None
         trades_out.append({
             "time": time_str,
             "trade_date": t["close_date"],
@@ -1094,6 +1167,7 @@ def week_detail(bearer_token: str, start_iso: str) -> dict:
             "realized_pnl": t["realized_pnl"],
             "commission": t["commission"],
             "net_roi": round(roi, 2) if roi is not None else None,
+            "rule_flags": _rule_flags(trade_fills, roi),
             "is_open": False,
             "open_datetime": t.get("open_datetime"),
             "close_datetime": t.get("close_datetime"),
