@@ -550,6 +550,45 @@ body.journal-body {
 .side-call { color: var(--green); font-weight: 600; }
 .side-put  { color: var(--red); font-weight: 600; }
 
+/* ── Monthly Target pie ── */
+.goal-wrap {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  flex-wrap: wrap;
+}
+.goal-pie {
+  flex: none;
+  line-height: 0;
+  filter: drop-shadow(0 0 20px rgba(16, 185, 129, 0.18));
+}
+.goal-meta { display: flex; flex-direction: column; gap: 2px; }
+.goal-amount {
+  font-family: var(--font-mono);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-bright);
+}
+.goal-amount.pos { color: var(--green); }
+.goal-amount.neg { color: var(--red); }
+.goal-of { color: var(--text-secondary); font-size: 13px; }
+.goal-pct {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-primary);
+  margin-top: 8px;
+}
+.goal-note {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-top: 10px;
+  max-width: 340px;
+}
+@media (max-width: 640px) {
+  .goal-wrap { justify-content: center; text-align: center; }
+}
+
 /* Rule-violation badges — flag trades that broke the locked rules. */
 .rule-badge {
   display: inline-block;
