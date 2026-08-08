@@ -306,7 +306,7 @@ function zellaScore(s) {
 
 /* ---------- Monthly Target pie (fill to £10k, resets monthly) ---------- */
 
-const GOAL_TARGET = 10000;
+const GOAL_TARGET = 5000;
 
 // Filled pie wedge from 12 o'clock, sweeping `deg` degrees clockwise.
 function goalWedge(cx, cy, r, deg) {
