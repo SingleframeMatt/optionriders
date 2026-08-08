@@ -254,16 +254,28 @@ async function refresh() {
     calQs.set("year", state.calYear);
     calQs.set("month", state.calMonth);
 
-    const [stats, fills, equity, calendar] = await Promise.all([
+    // The Monthly Target pie always tracks the CURRENT month, independent of
+    // wherever the calendar has been navigated to.
+    const now = new Date();
+    const goalQs = new URLSearchParams(qs);
+    goalQs.set("year", now.getFullYear());
+    goalQs.set("month", now.getMonth() + 1);
+    const goalIsCurrentCal = Number(state.calYear) === now.getFullYear()
+      && Number(state.calMonth) === now.getMonth() + 1;
+
+    const [stats, fills, equity, calendar, goalCal] = await Promise.all([
       api(`/api/journal/stats?${qs}`),
       api(`/api/journal/fills?${qs}&limit=300`),
       api(`/api/journal/equity?${qs}`),
       api(`/api/journal/calendar?${calQs.toString()}`),
+      goalIsCurrentCal ? Promise.resolve(null)
+                       : api(`/api/journal/calendar?${goalQs.toString()}`),
     ]);
     state.baseAlreadyApplied = !!stats.base_currency_applied;
     await ensureFxRate();
     state.lastEquity = equity;
     renderStats(stats);
+    renderGoalPie((goalCal || calendar).month_pnl || 0);
     renderKingdom(stats.net_pnl);
     renderSymbolTable(stats.by_symbol);
     renderDayTable(stats.by_day);
@@ -290,6 +302,65 @@ function zellaScore(s) {
     ? Math.max(0, Math.min(100, ((s.avg_win || 0) / Math.abs(s.avg_loss)) * 50))
     : (s.avg_win ? 100 : 50);
   return Math.round((win * 0.3 + pf * 0.3 + exp * 0.2 + wl * 0.2) * 10) / 10;
+}
+
+/* ---------- Monthly Target pie (fill to £10k, resets monthly) ---------- */
+
+const GOAL_TARGET = 10000;
+
+// Filled pie wedge from 12 o'clock, sweeping `deg` degrees clockwise.
+function goalWedge(cx, cy, r, deg) {
+  if (deg <= 0) return "";
+  if (deg >= 360) deg = 359.999;
+  const rad = (deg - 90) * Math.PI / 180;   // -90° so 0 starts at the top
+  const x = cx + r * Math.cos(rad);
+  const y = cy + r * Math.sin(rad);
+  const large = deg > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${large} 1 ${x.toFixed(2)} ${y.toFixed(2)} Z`;
+}
+
+function renderGoalPie(pnl) {
+  const el = $("goalPie");
+  if (!el) return;
+  pnl = pnl || 0;
+  const frac = pnl / GOAL_TARGET;
+  const mainDeg = Math.max(0, Math.min(1, frac)) * 360;
+  const overDeg = frac > 1 ? Math.min(1, frac - 1) * 360 : 0;
+
+  const size = 220, cx = size / 2, cy = size / 2, r = size / 2 - 6;
+  let svg = `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">`;
+  // Empty track
+  svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="var(--bg-surface)" stroke="var(--border)" stroke-width="1.5"/>`;
+  // Green fill up to the goal (full circle once reached)
+  if (frac >= 1) {
+    svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="var(--green)" opacity="0.92"/>`;
+  } else if (mainDeg > 0) {
+    svg += `<path d="${goalWedge(cx, cy, r, mainDeg)}" fill="var(--green)" opacity="0.92"/>`;
+  }
+  // Overflow past the goal — an amber wedge overlapping the full green pie
+  if (overDeg > 0) {
+    svg += `<path d="${goalWedge(cx, cy, r, overDeg)}" fill="var(--amber)" opacity="0.9"/>`;
+  }
+  // Crisp rim on top
+  svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="1.5"/>`;
+  svg += `</svg>`;
+  el.innerHTML = svg;
+
+  const amt = $("goalAmount");
+  amt.textContent = fmt.money(pnl);
+  amt.className = "goal-amount " + signClass(pnl);
+  $("goalPct").textContent = `${Math.round(frac * 100)}% of goal`;
+
+  const note = $("goalNote");
+  if (pnl <= 0) {
+    note.textContent = "Down month — get back to break even first.";
+  } else if (frac >= 1) {
+    note.textContent = `Goal smashed — £${fmt.num(pnl - GOAL_TARGET, 0)} over target. 🟢`;
+  } else {
+    const remain = GOAL_TARGET - pnl;
+    const days = Math.max(1, Math.ceil(remain / 1000));
+    note.textContent = `£${fmt.num(remain, 0)} to go — about ${days} clean £1k day${days === 1 ? "" : "s"}.`;
+  }
 }
 
 /* ---------- Profit Kingdom (gamified P&L territory map) ---------- */
