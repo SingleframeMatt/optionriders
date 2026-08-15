@@ -259,11 +259,186 @@ def _normalize(rows: list) -> list[dict]:
     return out
 
 
+# ── Trend scan (ADX trend / early-pop hunter) ────────────────────────────────
+# The gap scan above needs a pre-market move. This path finds names already in
+# a clean directional trend (what SNDK was) — regardless of a gap — using ADX
+# for trend strength, ±DI for direction, and the SMA stack for alignment.
+
+TREND_COLUMNS = [
+    "name",                        # 0  ticker
+    "description",                 # 1  company
+    "close",                       # 2  last price
+    "change",                      # 3  day % change
+    "volume",                      # 4  session volume
+    "average_volume_10d_calc",     # 5  10d avg volume
+    "relative_volume_10d_calc",    # 6  today vs typical (RVOL)
+    "market_cap_basic",            # 7  market cap
+    "ATR",                         # 8  ATR(14)
+    "ADX",                         # 9  trend strength (14)
+    "ADX+DI",                      # 10 bullish directional
+    "ADX-DI",                      # 11 bearish directional
+    "SMA20",                       # 12
+    "SMA50",                       # 13
+    "SMA200",                      # 14
+    "Perf.W",                      # 15 1-week performance %
+    "Recommend.All",               # 16 TV rating -1..1
+    "earnings_release_next_date",  # 17 next earnings (epoch s)
+]
+
+
+def _tv_trend_request(universe: set[str] | None, min_adx: float,
+                      max_results: int = 100) -> list:
+    """Query TradingView for names with ADX above `min_adx` (a real trend)."""
+    filters: list[dict] = [
+        {"left": "type",     "operation": "equal",    "right": "stock"},
+        {"left": "exchange", "operation": "in_range", "right": ["NASDAQ", "NYSE", "AMEX"]},
+        {"left": "is_primary", "operation": "equal", "right": True},
+        {"left": "ADX", "operation": "greater", "right": min_adx},
+    ]
+    if not universe:
+        filters.append({"left": "subtype",  "operation": "in_range",
+                        "right": ["common", "foreign-issuer"]})
+        filters.append({"left": "market_cap_basic", "operation": "greater",
+                        "right": 5_000_000_000})
+        filters.append({"left": "close", "operation": "in_range", "right": [5, 5000]})
+        # Broad scan still needs tradable liquidity in the shares themselves.
+        filters.append({"left": "average_volume_10d_calc", "operation": "greater",
+                        "right": 1_000_000})
+
+    payload: dict = {
+        "filter": filters,
+        "options": {"lang": "en"},
+        "markets": ["america"],
+        "columns": TREND_COLUMNS,
+        "sort": {"sortBy": "ADX", "sortOrder": "desc"},
+        "range": [0, max_results],
+    }
+    if universe:
+        payload["symbols"] = {"tickers": [f"NASDAQ:{t}" for t in universe]
+                                       + [f"NYSE:{t}"  for t in universe]
+                                       + [f"AMEX:{t}"  for t in universe]}
+    else:
+        payload["symbols"] = {"query": {"types": []}, "tickers": []}
+
+    req = urllib.request.Request(
+        TV_SCAN_URL,
+        data=json.dumps(payload).encode(),
+        headers={"User-Agent": _UA, "Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.loads(resp.read().decode("utf-8", errors="replace"))
+    return data.get("data", [])
+
+
+def _trend_score(row: dict) -> int:
+    """Trend-quality score, 0-100. Rewards a clean, confirmed, not-yet-exhausted
+    trend with real volume; penalises over-extension (late chase) and earnings."""
+    score = 0
+    adx = row["adx"]
+    # Trend strength — the sweet spot is strong but not blown-out.
+    if 25 <= adx <= 40:
+        score += 35
+    elif 20 <= adx < 25:
+        score += 30           # fresh/early trend — often the best entry
+    elif 40 < adx <= 50:
+        score += 20           # strong but extended
+    elif adx > 50:
+        score += 8            # very extended — reversal risk
+    else:
+        score += 5
+
+    # Directional cleanliness — how one-sided is the trend (DI spread).
+    di_spread = abs(row["di_plus"] - row["di_minus"])
+    if di_spread >= 15:
+        score += 20
+    elif di_spread >= 8:
+        score += 13
+    elif di_spread >= 4:
+        score += 6
+
+    # Moving-average stack alignment (0..3 stacked in trend direction).
+    score += row["ma_stack"] * 7          # up to +21
+
+    # Relative volume — is the move real participation?
+    rv = row["rel_vol"] or 0
+    if rv >= 1.5:
+        score += 15
+    elif rv >= 1.1:
+        score += 10
+    elif rv >= 0.8:
+        score += 5
+
+    # Over-extension penalty — price too far from SMA20 in ATRs = late chase.
+    if row["ext_atr"] > 5:
+        score -= 12
+    elif row["ext_atr"] > 3.5:
+        score -= 5
+
+    # Earnings trap (IV crush / gap risk).
+    d2e = row["days_to_earnings"]
+    if d2e is not None and 0 <= d2e <= 2:
+        score -= 25
+    elif d2e is not None and 0 <= d2e <= 7:
+        score -= 5
+
+    # Penny-wide options names are easier for you to actually trade.
+    if row["in_whitelist"]:
+        score += 8
+
+    return max(0, min(100, score))
+
+
+def _normalize_trend(rows: list) -> list[dict]:
+    """Convert TradingView trend rows to clean dicts + score them."""
+    import time
+    now_s = time.time()
+    out = []
+    for r in rows:
+        d = r.get("d") or []
+        if len(d) < len(TREND_COLUMNS):
+            continue
+        price = d[2] or 0
+        atr = d[8] or 0.01
+        di_plus = d[10] or 0
+        di_minus = d[11] or 0
+        sma20, sma50, sma200 = d[12] or 0, d[13] or 0, d[14] or 0
+        direction = "up" if di_plus >= di_minus else "down"
+        if direction == "up":
+            stack = int(price > sma20) + int(sma20 > sma50) + (int(sma50 > sma200) if sma200 else 0)
+        else:
+            stack = int(price < sma20) + int(sma20 < sma50) + (int(sma50 < sma200) if sma200 else 0)
+        ext_atr = abs(price - sma20) / atr if (atr and sma20) else 0
+        next_earn_s = d[17]
+        days_to_earn = (int((next_earn_s - now_s) / 86400)
+                        if (next_earn_s and next_earn_s > now_s) else None)
+        out.append({
+            "ticker": d[0], "name": d[1], "price": price,
+            "change_pct": d[3] or 0, "volume": d[4] or 0,
+            "avg_vol_10d": d[5] or 0, "rel_vol": d[6] or 0,
+            "market_cap": d[7] or 0, "atr": atr,
+            "adx": d[9] or 0, "di_plus": di_plus, "di_minus": di_minus,
+            "direction": direction, "ma_stack": stack, "ext_atr": ext_atr,
+            "perf_w": d[15] or 0, "tv_rating": d[16] or 0,
+            "days_to_earnings": days_to_earn,
+            "in_whitelist": d[0] in LIQUID_OPTIONS_TICKERS,
+            "fresh": 20 <= (d[9] or 0) <= 30,   # early trend = pop candidate
+        })
+    for r in out:
+        r["score"] = _trend_score(r)
+    return out
+
+
 # ── CLI output ─────────────────────────────────────────────────────────────────
 
-_GREEN, _RED, _YEL, _DIM, _BOLD, _RST = (
-    "\x1b[32m", "\x1b[31m", "\x1b[33m", "\x1b[2m", "\x1b[1m", "\x1b[0m"
-)
+# Only emit ANSI when writing to a real terminal — keeps the saved daily
+# report (redirected to a file) clean plain-text.
+if sys.stdout.isatty():
+    _GREEN, _RED, _YEL, _DIM, _BOLD, _RST = (
+        "\x1b[32m", "\x1b[31m", "\x1b[33m", "\x1b[2m", "\x1b[1m", "\x1b[0m"
+    )
+else:
+    _GREEN = _RED = _YEL = _DIM = _BOLD = _RST = ""
 
 
 def _color(text: str, code: str) -> str:
@@ -371,6 +546,79 @@ def _print_table(rows: list[dict], top: int) -> None:
         print()
 
 
+def _print_trend_table(rows: list[dict], top: int) -> None:
+    rows = sorted(rows, key=lambda r: -r["score"])[:top]
+    if not rows:
+        print("\n  No trending names match the filter — market's likely chop today. "
+              "That's a sit-out signal, not a reason to force one.\n")
+        return
+
+    print()
+    print(f"  {_BOLD}{'':<2}{'TICKER':<7}{'PRICE':>9}{'DAY%':>8}{'ADX':>6}"
+          f"{'DIR':>6}{'DI±':>6}{'MA':>4}{'RVOL':>7}{'WK%':>8}{'EARN':>7}{'SCORE':>10}{_RST}")
+    print(f"  {'─' * 90}")
+
+    for r in rows:
+        up = r["direction"] == "up"
+        dir_s = "▲ up" if up else "▼ dn"
+        dir_col = _GREEN if up else _RED
+        score = r["score"]
+        score_col = _GREEN if score >= 65 else _YEL if score >= 45 else _RED
+        di_spread = abs(r["di_plus"] - r["di_minus"])
+        earn = r["days_to_earnings"]
+        if earn is None:
+            earn_disp, earn_col = "—", _DIM
+        else:
+            earn_disp = f"{earn}d"
+            earn_col = _RED if earn <= 2 else _YEL if earn <= 7 else _DIM
+        star = _color("★ ", _BOLD) if r["in_whitelist"] else "  "
+
+        chg_s = f"{r['change_pct']:+.1f}%"
+        chg_col = _GREEN if r["change_pct"] >= 0 else _RED
+        wk_s = f"{r['perf_w']:+.1f}%"
+        score_s = f"{score:>3}/100"
+        print(
+            f"  {star}{r['ticker']:<7}{r['price']:>9.2f}"
+            f"{_color(chg_s, chg_col):>8}"
+            f"{r['adx']:>6.0f}"
+            f"{_color(dir_s, dir_col):>6}"
+            f"{di_spread:>6.0f}"
+            f"{r['ma_stack']:>3}/3"
+            f"{r['rel_vol']:>6.1f}x"
+            f"{wk_s:>8}"
+            f"  {_color(earn_disp, earn_col):>5}"
+            f"  {_color(score_s, score_col):>10}"
+        )
+
+    print()
+    # Fresh trends = the "about to run / early" ones (ADX 20-30, real volume,
+    # aligned MAs, not extended). Your best entries live here, not in the
+    # blown-out ADX>45 names you'd be chasing.
+    fresh = sorted([r for r in rows if r["fresh"] and r["ma_stack"] >= 2
+                    and (r["rel_vol"] or 0) >= 1.0 and r["ext_atr"] <= 3.5
+                    and r["score"] >= 55],
+                   key=lambda r: -r["score"])
+    if fresh:
+        print(f"  {_BOLD}🔥 Fresh trends — early ADX + real volume (best R:R, not a chase):{_RST}")
+        for r in fresh[:5]:
+            arrow = "▲" if r["direction"] == "up" else "▼"
+            side = "calls" if r["direction"] == "up" else "puts"
+            liq = "" if r["in_whitelist"] else _color("  (check option spread — off whitelist)", _YEL)
+            print(f"    {arrow} {r['ticker']:<5} ATM {side:<5}  ADX {r['adx']:.0f}  "
+                  f"RVOL {r['rel_vol']:.1f}x  score {r['score']}/100{liq}")
+        print()
+
+    strong = sorted([r for r in rows if r["adx"] > 40 and r["score"] >= 55],
+                    key=lambda r: -r["adx"])
+    if strong:
+        print(f"  {_BOLD}Mature trends (ADX>40 — strong but extended, wait for a pullback):{_RST}")
+        for r in strong[:5]:
+            arrow = "▲" if r["direction"] == "up" else "▼"
+            print(f"    {arrow} {r['ticker']:<5}  ADX {r['adx']:.0f}  "
+                  f"{r['ext_atr']:.1f} ATR from SMA20  score {r['score']}/100")
+        print()
+
+
 # ── Confluence enrichment ─────────────────────────────────────────────────────
 
 def _enrich_confluence(rows: list[dict]) -> list[dict]:
@@ -416,9 +664,31 @@ def main() -> int:
     p.add_argument("--all", action="store_true",
                    help="Scan ALL liquid stocks instead of the curated "
                         "penny-wide-options whitelist (default: whitelist only)")
+    p.add_argument("--trend", action="store_true",
+                   help="Hunt trending / early-breakout names (ADX-based) "
+                        "instead of pre-market gaps — finds SNDK-style movers")
+    p.add_argument("--min-adx", type=float, default=20.0,
+                   help="Minimum ADX for --trend mode (default 20)")
     args = p.parse_args()
 
     universe = None if args.all else LIQUID_OPTIONS_TICKERS
+
+    # Trend-hunting path — find names already in a clean directional trend.
+    if args.trend:
+        try:
+            raw = _tv_trend_request(universe, args.min_adx, max_results=100)
+        except Exception as exc:
+            print(f"Trend scan request failed: {exc}", file=sys.stderr)
+            return 1
+        rows = _normalize_trend(raw)
+        if args.side in ("up", "down"):
+            rows = [r for r in rows if r["direction"] == args.side]
+        if args.json:
+            print(json.dumps(rows, indent=2, default=str))
+        else:
+            _print_trend_table(rows, args.top)
+        return 0
+
     try:
         raw = _tv_request(args.min_gap, args.side, universe, max_results=100)
     except Exception as exc:

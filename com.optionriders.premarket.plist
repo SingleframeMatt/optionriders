@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Daily pre-market report scheduler (gap scan + ADX trend hunt).
+  Runs premarket_report.sh at 10:00 local time (UTC+1 ~= 05:00 ET), Mon-Fri.
+
+  Install:   launchctl load  ~/Library/LaunchAgents/com.optionriders.premarket.plist
+  Remove:    launchctl unload ~/Library/LaunchAgents/com.optionriders.premarket.plist
+  Run now:   launchctl start com.optionriders.premarket
+  (Copy this file into ~/Library/LaunchAgents/ first.)
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.optionriders.premarket</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/mattesterhuizen/Documents/optionriders/premarket_report.sh</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/mattesterhuizen/Documents/optionriders</string>
+
+  <!-- 10:00 local, Monday(1) through Friday(5). Weekends skipped. -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict>
+  </array>
+
+  <key>StandardOutPath</key>
+  <string>/Users/mattesterhuizen/Documents/optionriders/output/premarket_launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/mattesterhuizen/Documents/optionriders/output/premarket_launchd.err</string>
+</dict>
+</plist>
