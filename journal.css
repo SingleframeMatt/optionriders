@@ -589,6 +589,45 @@ body.journal-body {
   .goal-wrap { justify-content: center; text-align: center; }
 }
 
+/* Menagerie — unlocked-creature shelf next to the pie */
+.goal-rewards { margin-top: 18px; }
+.goal-rewards-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 9px;
+}
+.goal-rewards-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.reward-thumb {
+  width: 54px;
+  height: 54px;
+  border-radius: 13px;
+  background: var(--bg-surface);
+  border: 1.5px solid var(--ring, var(--border));
+  box-shadow: 0 0 16px -5px var(--ring, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  transition: transform 0.12s ease;
+}
+.reward-thumb:hover { transform: translateY(-2px); }
+.reward-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.reward-emoji { font-size: 27px; line-height: 1; }
+.reward-locked {
+  border-style: dashed;
+  border-color: var(--border);
+  box-shadow: none;
+  opacity: 0.55;
+  flex-direction: column;
+  gap: 1px;
+}
+.reward-locked .reward-emoji { font-size: 15px; }
+.reward-next { font-family: var(--font-mono); font-size: 9px; color: var(--text-secondary); }
+
 /* Rule-violation badges — flag trades that broke the locked rules. */
 .rule-badge {
   display: inline-block;

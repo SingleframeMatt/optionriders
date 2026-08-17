@@ -308,6 +308,46 @@ function zellaScore(s) {
 
 const GOAL_TARGET = 5000;
 
+// Menagerie — every £5k of monthly profit unlocks the next creature; a £5k
+// drawdown drops the top one (it's just floor(pnl/5000) recomputing). Art in
+// assets/rewards/<key>.png, emoji fallback until the images exist.
+const REWARD_ART = "assets/rewards";
+const REWARD_TIERS = [
+  { t: 5000,  name: "Fox",      key: "fox",      emoji: "🦊", ring: "var(--green)" },
+  { t: 10000, name: "Wolf",     key: "wolf",     emoji: "🐺", ring: "var(--cyan)" },
+  { t: 15000, name: "Stag",     key: "stag",     emoji: "🦌", ring: "var(--cyan)" },
+  { t: 20000, name: "Stallion", key: "stallion", emoji: "🐎", ring: "var(--gold)" },
+  { t: 25000, name: "Lion",     key: "lion",     emoji: "🦁", ring: "var(--gold)" },
+  { t: 30000, name: "Dragon",   key: "dragon",   emoji: "🐉", ring: "var(--amber)" },
+];
+
+function renderGoalRewards(pnl) {
+  const el = $("goalRewards");
+  if (!el) return;
+  const unlocked = Math.max(0, Math.floor((pnl || 0) / GOAL_TARGET));
+  const shown = Math.min(unlocked, REWARD_TIERS.length);
+  let tiles = "";
+  for (let i = 0; i < shown; i++) {
+    const tr = REWARD_TIERS[i];
+    tiles += `<div class="reward-thumb" style="--ring:${tr.ring}" title="${tr.name} — unlocked at £${tr.t / 1000}k">`
+      + `<img src="${REWARD_ART}/${tr.key}.png" alt="${tr.name}" `
+      + `onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
+      + `<span class="reward-emoji" style="display:none;">${tr.emoji}</span></div>`;
+  }
+  if (unlocked < REWARD_TIERS.length) {
+    const next = REWARD_TIERS[unlocked];
+    const toNext = Math.max(0, next.t - (pnl || 0));
+    tiles += `<div class="reward-thumb reward-locked" title="Next: ${next.name} at £${next.t / 1000}k">`
+      + `<span class="reward-emoji">🔒</span>`
+      + `<span class="reward-next">£${fmt.num(toNext, 0)}</span></div>`;
+  }
+  const label = shown === 0
+    ? "MENAGERIE · unlock your first at £5k"
+    : `MENAGERIE · ${shown} unlocked`;
+  el.innerHTML = `<div class="goal-rewards-label">${label}</div>`
+    + `<div class="goal-rewards-row">${tiles}</div>`;
+}
+
 // Filled pie wedge from 12 o'clock, sweeping `deg` degrees clockwise.
 function goalWedge(cx, cy, r, deg) {
   if (deg <= 0) return "";
@@ -361,6 +401,8 @@ function renderGoalPie(pnl) {
     const days = Math.max(1, Math.ceil(remain / 1000));
     note.textContent = `£${fmt.num(remain, 0)} to go — about ${days} clean £1k day${days === 1 ? "" : "s"}.`;
   }
+
+  renderGoalRewards(pnl);
 }
 
 /* ---------- Profit Kingdom (gamified P&L territory map) ---------- */
