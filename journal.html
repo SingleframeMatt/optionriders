@@ -166,9 +166,12 @@
     </div>
   </section>
 
-  <section class="panel">
-    <div class="panel-head"><h2>Recent Fills</h2><span class="panel-sub" id="fillsSub"></span></div>
-    <div class="table-wrap">
+  <section class="panel panel-collapsible is-collapsed" id="fillsPanel">
+    <button class="panel-head panel-toggle" type="button" id="fillsToggle" aria-expanded="false" aria-controls="fillsWrap">
+      <span class="panel-toggle-left"><span class="panel-chevron" aria-hidden="true">▸</span><h2>Recent Fills</h2></span>
+      <span class="panel-sub" id="fillsSub"></span>
+    </button>
+    <div class="table-wrap" id="fillsWrap">
       <table class="journal-table" id="fillsTable">
         <thead>
           <tr>
