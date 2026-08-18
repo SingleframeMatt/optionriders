@@ -627,6 +627,24 @@ body.journal-body {
   margin-bottom: 9px;
 }
 .goal-rewards-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.goal-seeds { margin-bottom: 16px; }
+.goal-seeds-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.reward-seed {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border-color: rgba(0, 255, 136, 0.35);
+  box-shadow: 0 0 10px -4px var(--green);
+}
+.reward-seed .reward-emoji { font-size: 18px; }
+.reward-seed.reward-faint { opacity: 0.4; border-style: dashed; box-shadow: none; }
+.reward-seed-more {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  align-self: center;
+  margin-left: 2px;
+}
 .reward-thumb {
   width: 54px;
   height: 54px;
