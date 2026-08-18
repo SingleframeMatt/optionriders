@@ -308,17 +308,18 @@ function zellaScore(s) {
 
 const GOAL_TARGET = 5000;
 
-// Menagerie — every £5k of monthly profit unlocks the next creature; a £5k
-// drawdown drops the top one (it's just floor(pnl/5000) recomputing). Art in
-// assets/rewards/<key>.png, emoji fallback until the images exist.
+// The Farm — every £5k of monthly profit builds the next asset; a £5k
+// drawdown loses the top one (floor(pnl/5000) recomputing). Locked assets stay
+// a MYSTERY ("?") — you don't see what's next until you earn it. Art in
+// assets/rewards/<key>.png, emoji fallback until the images load.
 const REWARD_ART = "assets/rewards";
 const REWARD_TIERS = [
-  { t: 5000,  name: "Fox",      key: "fox",      emoji: "🦊", ring: "var(--green)" },
-  { t: 10000, name: "Wolf",     key: "wolf",     emoji: "🐺", ring: "var(--cyan)" },
-  { t: 15000, name: "Stag",     key: "stag",     emoji: "🦌", ring: "var(--cyan)" },
-  { t: 20000, name: "Stallion", key: "stallion", emoji: "🐎", ring: "var(--gold)" },
-  { t: 25000, name: "Lion",     key: "lion",     emoji: "🦁", ring: "var(--gold)" },
-  { t: 30000, name: "Dragon",   key: "dragon",   emoji: "🐉", ring: "var(--amber)" },
+  { t: 5000,  name: "Chicken",   key: "chicken",   emoji: "🐔", ring: "var(--amber)" },
+  { t: 10000, name: "Pig",       key: "pig",       emoji: "🐖", ring: "var(--amber)" },
+  { t: 15000, name: "Horse",     key: "horse",     emoji: "🐎", ring: "var(--green)" },
+  { t: 20000, name: "Barn",      key: "barn",      emoji: "🛖", ring: "var(--red)" },
+  { t: 25000, name: "Tractor",   key: "tractor",   emoji: "🚜", ring: "var(--cyan)" },
+  { t: 30000, name: "Harvester", key: "harvester", emoji: "🌾", ring: "var(--gold)" },
 ];
 
 function renderGoalRewards(pnl) {
@@ -327,23 +328,31 @@ function renderGoalRewards(pnl) {
   const unlocked = Math.max(0, Math.floor((pnl || 0) / GOAL_TARGET));
   const shown = Math.min(unlocked, REWARD_TIERS.length);
   let tiles = "";
+  // Earned assets — revealed.
   for (let i = 0; i < shown; i++) {
     const tr = REWARD_TIERS[i];
-    tiles += `<div class="reward-thumb" style="--ring:${tr.ring}" title="${tr.name} — unlocked at £${tr.t / 1000}k">`
+    tiles += `<div class="reward-thumb" style="--ring:${tr.ring}" title="${tr.name} — built at £${tr.t / 1000}k">`
       + `<img src="${REWARD_ART}/${tr.key}.png" alt="${tr.name}" `
       + `onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
       + `<span class="reward-emoji" style="display:none;">${tr.emoji}</span></div>`;
   }
+  // Locked assets — MYSTERY. Identity hidden until earned.
   if (unlocked < REWARD_TIERS.length) {
     const next = REWARD_TIERS[unlocked];
     const toNext = Math.max(0, next.t - (pnl || 0));
-    tiles += `<div class="reward-thumb reward-locked" title="Next: ${next.name} at £${next.t / 1000}k">`
-      + `<span class="reward-emoji">🔒</span>`
+    tiles += `<div class="reward-thumb reward-mystery" title="Next reward at £${next.t / 1000}k — earn it to reveal">`
+      + `<span class="reward-qm">?</span>`
       + `<span class="reward-next">£${fmt.num(toNext, 0)}</span></div>`;
+    for (let i = unlocked + 1; i < REWARD_TIERS.length; i++) {
+      tiles += `<div class="reward-thumb reward-mystery reward-faint" title="Locked — keep building">`
+        + `<span class="reward-qm">?</span></div>`;
+    }
   }
   const label = shown === 0
-    ? "MENAGERIE · unlock your first at £5k"
-    : `MENAGERIE · ${shown} unlocked`;
+    ? "YOUR FARM · build your first at £5k"
+    : shown === REWARD_TIERS.length
+      ? "YOUR FARM · fully built 🏆"
+      : `YOUR FARM · ${shown} built`;
   el.innerHTML = `<div class="goal-rewards-label">${label}</div>`
     + `<div class="goal-rewards-row">${tiles}</div>`;
 }
