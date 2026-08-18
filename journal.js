@@ -276,7 +276,7 @@ async function refresh() {
     state.lastEquity = equity;
     renderStats(stats);
     renderGoalPie((goalCal || calendar).month_pnl || 0);
-    renderKingdom(stats.net_pnl);
+    renderFarm(stats.net_pnl);
     renderSymbolTable(stats.by_symbol);
     renderDayTable(stats.by_day);
     renderRecentTrades(fills);
@@ -437,113 +437,100 @@ function renderGoalPie(pnl) {
   renderGoalRewards(pnl);
 }
 
-/* ---------- Profit Kingdom (gamified P&L territory map) ---------- */
+/* ---------- The Farm (all-time P&L brought to life: barren → lush) ---------- */
 
-const KINGDOM_ART = "assets/kingdom";
-const KINGDOM_TIERS = [
-  { t: 0,     name: "Barren Frontier", img: null },
-  { t: 250,   name: "Settler",         img: "tent.png" },
-  { t: 1000,  name: "Homesteader",     img: "hut.png" },
-  { t: 2500,  name: "Landowner",       img: "house.png" },
-  { t: 5000,  name: "Villager",        img: "fountain.png" },
-  { t: 10000, name: "Lord",            img: "castle.png" },
-  { t: 25000, name: "Sovereign",       img: "crown.png" },
-];
-// Structure placements on the island (bottom-centre anchor, % of the square
-// scene). Ordered front→back: earlier tiers sit at the front where the green
-// "tide" reaches first, later tiers toward the back ridge.
-const KINGDOM_STRUCTS = [
-  { t: 250,   img: "tent.png",     x: 33, y: 66, w: 15 },
-  { t: 1000,  img: "hut.png",      x: 63, y: 62, w: 14 },
-  { t: 2500,  img: "house.png",    x: 48, y: 55, w: 16 },
-  { t: 5000,  img: "fountain.png", x: 65, y: 53, w: 13 },
-  { t: 10000, img: "castle.png",   x: 37, y: 50, w: 23 },
-  { t: 25000, img: "crown.png",    x: 54, y: 42, w: 12 },
+const FARM_ART = "assets/rewards";
+// The land greens across this all-time-net range: barren at/below FLOOR, fully
+// lush at/above TOP. Breakeven (0) lands well into green — the goal is to climb
+// out of the drought and bloom.
+const FARM_FLOOR = -50000;
+const FARM_TOP = 25000;
+
+// Milestone chips (net-based farm-vitality stages); icons reuse the shelf art.
+const FARM_MILES = [
+  { t: 0,     name: "Breakeven",    img: "seed.png" },
+  { t: 5000,  name: "Sprouting",    img: "chicken.png" },
+  { t: 15000, name: "Growing",      img: "pig.png" },
+  { t: 25000, name: "Green Fields", img: "horse.png" },
+  { t: 50000, name: "Thriving",     img: "barn.png" },
+  { t: 75000, name: "Bountiful",    img: "harvester.png" },
 ];
 
-// Piecewise 0..1 map fill: each tier segment is an equal chunk of the island,
-// so the land greens evenly no matter how far apart the $ thresholds are.
-function kingdomProgress(net) {
-  const T = KINGDOM_TIERS.map(x => x.t);
-  if (net <= 0) return 0;
-  const top = T[T.length - 1];
-  if (net >= top) return 1;
-  let i = 0;
-  while (i < T.length - 1 && net >= T[i + 1]) i++;
-  const segFrac = (net - T[i]) / (T[i + 1] - T[i]);
-  return (i + segFrac) / (T.length - 1);
+function farmProgress(net) {
+  if (net <= FARM_FLOOR) return 0;
+  if (net >= FARM_TOP) return 1;
+  return (net - FARM_FLOOR) / (FARM_TOP - FARM_FLOOR);
 }
 
-function renderKingdom(net) {
+function renderFarm(net) {
   const stage = $("kingdomStage");
   if (!stage) return;
   net = Number(net) || 0;
 
-  // Build the layered scene once, then only update dynamic bits on refresh.
+  // Two-layer scene: barren base, lush revealed from the foreground up.
   let scene = stage.querySelector(".ki-scene");
   if (!scene) {
     scene = document.createElement("div");
-    scene.className = "ki-scene";
+    scene.className = "ki-scene ki-farm";
     scene.innerHTML =
-      `<img class="ki-island ki-red" src="${KINGDOM_ART}/island_red.png" alt="">` +
-      `<img class="ki-island ki-green" src="${KINGDOM_ART}/island_green.png" alt="">` +
-      KINGDOM_STRUCTS.map(s =>
-        `<img class="ki-struct" data-t="${s.t}" src="${KINGDOM_ART}/${s.img}" alt="" ` +
-        `style="left:${s.x}%;top:${s.y}%;width:${s.w}%;z-index:${Math.round(s.y)}">`
-      ).join("");
+      `<img class="ki-island ki-red" src="${FARM_ART}/farm_barren.jpg" alt="">` +
+      `<img class="ki-island ki-green" src="${FARM_ART}/farm_lush.jpg" alt="">`;
     stage.appendChild(scene);
   }
 
-  // Green "tide" rises front→back as P&L climbs (island spans ~25%–75% up).
-  const progress = kingdomProgress(net);
-  const tide = 25 + progress * 50;
+  // The land greens from the ground up as net climbs FLOOR → TOP.
+  const progress = farmProgress(net);
+  const tide = progress * 100;
   const green = scene.querySelector(".ki-green");
-  const mask = progress <= 0
-    ? "linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0))"
-    : `linear-gradient(to top, #000 ${Math.max(0, tide - 8).toFixed(1)}%, rgba(0,0,0,0) ${tide.toFixed(1)}%)`;
+  let mask;
+  if (progress <= 0) {
+    mask = "linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0))";
+  } else if (progress >= 1) {
+    mask = "linear-gradient(#000, #000)";
+  } else {
+    mask = `linear-gradient(to top, #000 ${Math.max(0, tide - 22).toFixed(1)}%, `
+      + `rgba(0,0,0,0) ${Math.min(100, tide + 6).toFixed(1)}%)`;
+  }
   green.style.webkitMaskImage = mask;
   green.style.maskImage = mask;
-
-  scene.querySelectorAll(".ki-struct").forEach(el =>
-    el.classList.toggle("shown", net >= Number(el.dataset.t)));
 
   // ── Side panel ──
   const netEl = $("kingdomNet");
   netEl.textContent = fmt.money(net);
   netEl.className = "kingdom-net " + signClass(net);
 
-  const unlocked = KINGDOM_TIERS.filter(t => t.t > 0 && net >= t.t);
-  const rank = net < 0 ? "Underwater"
-    : unlocked.length ? unlocked[unlocked.length - 1].name : "Barren Frontier";
-  $("kingdomRank").textContent = rank;
+  const unlocked = FARM_MILES.filter(m => net >= m.t);
+  $("kingdomRank").textContent =
+    net < 0 ? "Drought" : (unlocked.length ? unlocked[unlocked.length - 1].name : "Bare Soil");
 
-  const next = KINGDOM_TIERS.find(t => t.t > net);
+  const next = FARM_MILES.find(m => m.t > net);
   const barFill = $("kingdomBarFill");
   if (net < 0) {
-    barFill.style.width = "0%";
-    $("kingdomNextLabel").textContent = "Break even";
-    $("kingdomNextPct").textContent = "0%";
+    const rec = Math.max(0, Math.min(1, (net - FARM_FLOOR) / (0 - FARM_FLOOR)));
+    barFill.style.width = (rec * 100).toFixed(1) + "%";
+    $("kingdomNextLabel").textContent = "Back to green";
+    $("kingdomNextPct").textContent = Math.round(rec * 100) + "%";
     $("kingdomNextGoal").textContent = `Reclaim ${fmt.money(-net, { sign: false })} to break even`;
-    $("kingdomSub").textContent = "Your land is scorched — get back to green";
+    $("kingdomSub").textContent = "Your land's in drought — trade it back to green";
   } else if (!next) {
     barFill.style.width = "100%";
-    $("kingdomNextLabel").textContent = "Kingdom complete";
+    $("kingdomNextLabel").textContent = "Farm complete";
     $("kingdomNextPct").textContent = "100%";
-    $("kingdomNextGoal").textContent = "👑 You rule the whole realm";
-    $("kingdomSub").textContent = "Sovereign — the entire realm is yours";
+    $("kingdomNextGoal").textContent = "🌾 A bountiful harvest";
+    $("kingdomSub").textContent = "Thriving — the whole farm is alive";
   } else {
-    const prev = [...KINGDOM_TIERS].reverse().find(t => t.t <= net)?.t ?? 0;
+    const prev = [...FARM_MILES].reverse().find(m => m.t <= net)?.t ?? 0;
     const segFrac = Math.max(0, Math.min(1, (net - prev) / (next.t - prev)));
     barFill.style.width = (segFrac * 100).toFixed(1) + "%";
-    $("kingdomNextLabel").textContent = "Next unlock";
+    $("kingdomNextLabel").textContent = "Next";
     $("kingdomNextPct").textContent = Math.round(segFrac * 100) + "%";
     $("kingdomNextGoal").textContent = `${fmt.money(next.t - net, { sign: false })} to ${next.name}`;
-    $("kingdomSub").textContent = "Claim the land with profit";
+    $("kingdomSub").textContent = "Grow the farm with clean profit";
   }
 
-  $("kingdomMilestones").innerHTML = KINGDOM_TIERS.filter(t => t.t > 0).map(t => {
-    const cls = net >= t.t ? "unlocked" : (t === next ? "target" : "");
-    return `<span class="km-chip ${cls}"><img class="km-ico" src="${KINGDOM_ART}/${t.img}" alt="">${fmt.money(t.t, { sign: false, compact: true })}</span>`;
+  $("kingdomMilestones").innerHTML = FARM_MILES.map(m => {
+    const cls = net >= m.t ? "unlocked" : (m === next ? "target" : "");
+    return `<span class="km-chip ${cls}"><img class="km-ico" src="${FARM_ART}/${m.img}" alt="">${fmt.money(m.t, { sign: false, compact: true })}</span>`;
   }).join("");
 }
 
