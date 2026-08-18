@@ -313,6 +313,7 @@ const GOAL_TARGET = 5000;
 // a MYSTERY ("?") — you don't see what's next until you earn it. Art in
 // assets/rewards/<key>.png, emoji fallback until the images load.
 const REWARD_ART = "assets/rewards";
+const SEED_STEP = 2000;   // every £2k earns a seed — a frequent micro-win
 const REWARD_TIERS = [
   { t: 5000,  name: "Chicken",   key: "chicken",   emoji: "🐔", ring: "var(--amber)" },
   { t: 10000, name: "Pig",       key: "pig",       emoji: "🐖", ring: "var(--amber)" },
@@ -353,7 +354,29 @@ function renderGoalRewards(pnl) {
     : shown === REWARD_TIERS.length
       ? "YOUR FARM · fully built 🏆"
       : `YOUR FARM · ${shown} built`;
-  el.innerHTML = `<div class="goal-rewards-label">${label}</div>`
+
+  // Seeds — a smaller, more frequent win: one per £2k of monthly profit.
+  const seeds = Math.max(0, Math.floor((pnl || 0) / SEED_STEP));
+  const seedShown = Math.min(seeds, 10);
+  let seedTiles = "";
+  for (let i = 0; i < seedShown; i++) {
+    seedTiles += `<div class="reward-thumb reward-seed" title="Seed — earned at £${(i + 1) * SEED_STEP / 1000}k">`
+      + `<img src="${REWARD_ART}/seed.png" alt="seed" `
+      + `onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
+      + `<span class="reward-emoji" style="display:none;">🌱</span></div>`;
+  }
+  if (seeds > 10) seedTiles += `<span class="reward-seed-more">+${seeds - 10}</span>`;
+  if (seeds === 0) {
+    seedTiles = `<div class="reward-thumb reward-seed reward-faint" title="First seed at £2k"><span class="reward-emoji">🌱</span></div>`;
+  }
+  const toNextSeed = (seeds + 1) * SEED_STEP - Math.max(0, pnl || 0);
+  const seedLabel = (seeds === 0 ? "SEEDS · first at £2k" : `SEEDS · ×${seeds}`)
+    + ((pnl || 0) > 0 ? ` · next £${fmt.num(toNextSeed, 0)}` : "");
+
+  el.innerHTML =
+    `<div class="goal-seeds"><div class="goal-rewards-label">${seedLabel}</div>`
+    + `<div class="goal-seeds-row">${seedTiles}</div></div>`
+    + `<div class="goal-rewards-label">${label}</div>`
     + `<div class="goal-rewards-row">${tiles}</div>`;
 }
 
