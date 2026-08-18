@@ -589,6 +589,33 @@ body.journal-body {
   .goal-wrap { justify-content: center; text-align: center; }
 }
 
+/* Collapsible panel (Recent Fills) — header toggles the body */
+.panel-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.panel-toggle-left { display: flex; align-items: center; gap: 9px; }
+.panel-chevron {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.panel-toggle:hover .panel-chevron { color: var(--text-primary); }
+.panel-collapsible:not(.is-collapsed) .panel-toggle { margin-bottom: 12px; }
+.panel-collapsible:not(.is-collapsed) .panel-chevron { transform: rotate(90deg); }
+.panel-collapsible.is-collapsed .table-wrap { display: none; }
+
 /* Menagerie — unlocked-creature shelf next to the pie */
 .goal-rewards { margin-top: 18px; }
 .goal-rewards-label {

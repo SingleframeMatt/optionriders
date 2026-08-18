@@ -1726,6 +1726,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("refreshBtn").addEventListener("click", refresh);
   $("clearBtn").addEventListener("click", clearAll);
   $("syncBtn").addEventListener("click", () => syncIbkr());
+  const fillsToggle = $("fillsToggle");
+  if (fillsToggle) fillsToggle.addEventListener("click", () => {
+    const panel = $("fillsPanel");
+    const open = panel.classList.toggle("is-collapsed") === false;
+    fillsToggle.setAttribute("aria-expanded", String(open));
+  });
   // Auto-sync is deliberately off on every page load — it triggers a fresh
   // IBKR round-trip + Supabase writes every 15 min, which is the biggest
   // driver of usage for an idle tab left open. User must opt in each session.
