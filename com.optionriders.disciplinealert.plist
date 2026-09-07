@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Same-day discipline watchdog. Runs discipline_alert.py every 15 minutes,
+  every day — the script itself no-ops outside Mon-Fri 14:30-21:00 Lisbon
+  (market hours), so this stays cheap and simple to schedule.
+
+  Install:   cp com.optionriders.disciplinealert.plist ~/Library/LaunchAgents/
+             launchctl load ~/Library/LaunchAgents/com.optionriders.disciplinealert.plist
+  Remove:    launchctl unload ~/Library/LaunchAgents/com.optionriders.disciplinealert.plist
+  Run now:   launchctl start com.optionriders.disciplinealert
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.optionriders.disciplinealert</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/mattesterhuizen/Documents/optionriders/.venv/bin/python</string>
+    <string>/Users/mattesterhuizen/Documents/optionriders/discipline_alert.py</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/mattesterhuizen/Documents/optionriders</string>
+
+  <!-- every 15 minutes, all day — the script gates itself to market hours -->
+  <key>StartInterval</key>
+  <integer>900</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/mattesterhuizen/Documents/optionriders/output/disciplinealert_launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/mattesterhuizen/Documents/optionriders/output/disciplinealert_launchd.err</string>
+</dict>
+</plist>

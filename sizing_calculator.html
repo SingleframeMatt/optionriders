@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Position Sizing — Option Riders</title>
+<style>
+  :root {
+    --bg-deep: #0b0e14; --bg-card: #131722; --bg-surface: #1a1f2e;
+    --border: #262b3a; --text-primary: #e6e9f0; --text-secondary: #8b93a7;
+    --cyan: #61dafb; --green: #3ddc84; --red: #ff4444; --amber: #ffb020;
+    --font-mono: 'SF Mono', 'Menlo', monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg-deep); color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    margin: 0; padding: 24px 16px; display: flex; justify-content: center;
+  }
+  .card {
+    width: 100%; max-width: 460px; background: var(--bg-card);
+    border: 1px solid var(--border); border-radius: 14px; padding: 24px;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--text-secondary); font-size: 12.5px; margin: 0 0 22px; line-height: 1.5; }
+  label { display: block; font-size: 12px; color: var(--text-secondary); margin: 14px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
+  input {
+    width: 100%; background: var(--bg-surface); border: 1px solid var(--border);
+    color: var(--text-primary); font-family: var(--font-mono); font-size: 16px;
+    padding: 10px 12px; border-radius: 8px; outline: none;
+  }
+  input:focus { border-color: var(--cyan); }
+  .caps { display: flex; gap: 10px; margin-top: 4px; }
+  .caps input { font-size: 13px; padding: 7px 10px; }
+  .caps span { font-size: 11px; color: var(--text-secondary); display: block; margin-bottom: 4px; }
+  .result {
+    margin-top: 24px; padding: 18px; border-radius: 10px;
+    background: var(--bg-surface); border: 1px solid var(--border);
+    text-align: center;
+  }
+  .result.ok { border-color: rgba(61,220,132,0.4); }
+  .result.zero { border-color: rgba(255,68,68,0.5); }
+  .contracts { font-family: var(--font-mono); font-size: 40px; font-weight: 700; line-height: 1; }
+  .ok .contracts { color: var(--green); }
+  .zero .contracts { color: var(--red); }
+  .contracts-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; margin-top: 6px; }
+  .detail { margin-top: 14px; font-size: 13px; color: var(--text-secondary); font-family: var(--font-mono); text-align: left; display: flex; flex-direction: column; gap: 4px; }
+  .detail b { color: var(--text-primary); font-weight: 600; }
+  .binding { color: var(--amber); }
+  .warn { margin-top: 14px; font-size: 12.5px; color: var(--red); text-align: left; line-height: 1.5; }
+  footer { margin-top: 18px; font-size: 11px; color: var(--text-secondary); text-align: center; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Position Size — before you click Buy</h1>
+  <p class="sub">Set your stop on the underlying first. Then this tells you the contract count — not the other way around.</p>
+
+  <label>Entry premium (per share, £)</label>
+  <input type="number" id="entry" step="0.01" min="0" placeholder="e.g. 4.20" inputmode="decimal">
+
+  <label>Estimated premium if the underlying hits your stop (£)</label>
+  <input type="number" id="stopPrem" step="0.01" min="0" placeholder="e.g. 1.60" inputmode="decimal">
+
+  <label>Contract multiplier</label>
+  <input type="number" id="mult" value="100" step="1" min="1">
+
+  <label>Caps</label>
+  <div class="caps">
+    <div><span>Max loss (£)</span><input type="number" id="maxLoss" value="730" step="10"></div>
+    <div><span>Max position value (£)</span><input type="number" id="maxValue" value="2900" step="10"></div>
+  </div>
+
+  <div class="result" id="result">
+    <div class="contracts" id="contracts">—</div>
+    <div class="contracts-label">contracts</div>
+    <div class="detail" id="detail"></div>
+    <div class="warn" id="warn"></div>
+  </div>
+
+  <footer>If this says 0, the trade doesn't fit your rules at any size — that's the answer, not a reason to override the caps.</footer>
+</div>
+
+<script>
+function fmt(n) { return '£' + n.toLocaleString('en-GB', {maximumFractionDigits: 0}); }
+
+function calc() {
+  const entry = parseFloat(document.getElementById('entry').value) || 0;
+  const stopPrem = parseFloat(document.getElementById('stopPrem').value) || 0;
+  const mult = parseFloat(document.getElementById('mult').value) || 100;
+  const maxLoss = parseFloat(document.getElementById('maxLoss').value) || 0;
+  const maxValue = parseFloat(document.getElementById('maxValue').value) || 0;
+
+  const resultEl = document.getElementById('result');
+  const contractsEl = document.getElementById('contracts');
+  const detailEl = document.getElementById('detail');
+  const warnEl = document.getElementById('warn');
+
+  if (entry <= 0) {
+    contractsEl.textContent = '—';
+    detailEl.innerHTML = '';
+    warnEl.textContent = '';
+    resultEl.className = 'result';
+    return;
+  }
+
+  const lossPerContract = Math.max(0, (entry - stopPrem) * mult);
+  const valuePerContract = entry * mult;
+
+  const byRisk = lossPerContract > 0 ? Math.floor(maxLoss / lossPerContract) : Infinity;
+  const byValue = valuePerContract > 0 ? Math.floor(maxValue / valuePerContract) : Infinity;
+
+  const finalContracts = Math.max(0, Math.min(byRisk, byValue));
+  const binding = byRisk <= byValue ? 'risk cap' : 'value cap';
+
+  contractsEl.textContent = isFinite(finalContracts) ? finalContracts : '0';
+  resultEl.className = 'result ' + (finalContracts > 0 ? 'ok' : 'zero');
+
+  const posValue = finalContracts * valuePerContract;
+  const posLoss = finalContracts * lossPerContract;
+
+  detailEl.innerHTML = `
+    <div>Loss per contract if stop hit: <b>${fmt(lossPerContract)}</b></div>
+    <div>Value per contract: <b>${fmt(valuePerContract)}</b></div>
+    <div>Position value at ${finalContracts}x: <b>${fmt(posValue)}</b></div>
+    <div>Max loss at ${finalContracts}x: <b>${fmt(posLoss)}</b></div>
+    <div>Binding constraint: <b class="binding">${binding}</b></div>
+  `;
+
+  if (finalContracts === 0) {
+    warnEl.textContent = stopPrem >= entry
+      ? 'Estimated stop premium is at or above entry — that\'s not a stop, redefine where you\'re wrong.'
+      : 'Even 1 contract breaks a cap at this premium. Skip it or find a tighter stop.';
+  } else {
+    warnEl.textContent = '';
+  }
+}
+
+['entry','stopPrem','mult','maxLoss','maxValue'].forEach(id =>
+  document.getElementById(id).addEventListener('input', calc)
+);
+</script>
+</body>
+</html>
