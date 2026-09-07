@@ -169,25 +169,38 @@
     </section>
   </section>
 
-  <section class="panel">
-    <div class="panel-head"><h2>Equity Curve</h2><span class="panel-sub" id="equitySub"></span></div>
-    <canvas id="equityChart" height="260"></canvas>
+  <section class="panel panel-collapsible is-collapsed" id="equityPanel">
+    <button class="panel-head panel-toggle" type="button" id="equityToggle" aria-expanded="false" aria-controls="equityBody">
+      <span class="panel-toggle-left"><span class="panel-chevron" aria-hidden="true">▸</span><h2>Equity Curve</h2></span>
+      <span class="panel-sub" id="equitySub"></span>
+    </button>
+    <div class="panel-body" id="equityBody">
+      <canvas id="equityChart" height="260"></canvas>
+    </div>
   </section>
 
   <section class="two-col">
-    <div class="panel">
-      <div class="panel-head"><h2>By Symbol</h2></div>
-      <table class="journal-table" id="symbolTable">
-        <thead><tr><th>Symbol</th><th class="num">P&amp;L</th><th class="num">Trades</th><th class="num">Win %</th></tr></thead>
-        <tbody></tbody>
-      </table>
+    <div class="panel panel-collapsible is-collapsed" id="symbolPanel">
+      <button class="panel-head panel-toggle" type="button" id="symbolToggle" aria-expanded="false" aria-controls="symbolBody">
+        <span class="panel-toggle-left"><span class="panel-chevron" aria-hidden="true">▸</span><h2>By Symbol</h2></span>
+      </button>
+      <div class="panel-body" id="symbolBody">
+        <table class="journal-table" id="symbolTable">
+          <thead><tr><th>Symbol</th><th class="num">P&amp;L</th><th class="num">Trades</th><th class="num">Win %</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
-    <div class="panel">
-      <div class="panel-head"><h2>By Day</h2></div>
-      <table class="journal-table" id="dayTable">
-        <thead><tr><th>Date</th><th class="num">P&amp;L</th></tr></thead>
-        <tbody></tbody>
-      </table>
+    <div class="panel panel-collapsible is-collapsed" id="dayPanel">
+      <button class="panel-head panel-toggle" type="button" id="dayToggle" aria-expanded="false" aria-controls="dayBody">
+        <span class="panel-toggle-left"><span class="panel-chevron" aria-hidden="true">▸</span><h2>By Day</h2></span>
+      </button>
+      <div class="panel-body" id="dayBody">
+        <table class="journal-table" id="dayTable">
+          <thead><tr><th>Date</th><th class="num">P&amp;L</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   </section>
 
