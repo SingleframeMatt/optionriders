@@ -615,6 +615,7 @@ body.journal-body {
 .panel-collapsible:not(.is-collapsed) .panel-toggle { margin-bottom: 12px; }
 .panel-collapsible:not(.is-collapsed) .panel-chevron { transform: rotate(90deg); }
 .panel-collapsible.is-collapsed .table-wrap { display: none; }
+.panel-collapsible.is-collapsed .panel-body { display: none; }
 
 /* The Wall — brick-by-brick monthly progress shelf next to the pie */
 .goal-rewards { margin-top: 18px; }

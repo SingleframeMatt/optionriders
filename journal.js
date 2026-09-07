@@ -1769,6 +1769,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     const open = panel.classList.toggle("is-collapsed") === false;
     fillsToggle.setAttribute("aria-expanded", String(open));
   });
+  [["equityToggle", "equityPanel"], ["symbolToggle", "symbolPanel"], ["dayToggle", "dayPanel"]]
+    .forEach(([toggleId, panelId]) => {
+      const toggle = $(toggleId);
+      const panel = $(panelId);
+      if (!toggle || !panel) return;
+      toggle.addEventListener("click", () => {
+        const open = panel.classList.toggle("is-collapsed") === false;
+        toggle.setAttribute("aria-expanded", String(open));
+        // Canvas draws at 0 width while its panel is display:none — redraw
+        // once it's actually visible.
+        if (open && panelId === "equityPanel") drawEquity(state.lastEquity);
+      });
+    });
   // Auto-sync is deliberately off on every page load — it triggers a fresh
   // IBKR round-trip + Supabase writes every 15 min, which is the biggest
   // driver of usage for an idle tab left open. User must opt in each session.
