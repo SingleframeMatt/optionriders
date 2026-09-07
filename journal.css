@@ -1087,7 +1087,7 @@ body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-ev
   display: flex; gap: 20px; align-items: stretch; flex-wrap: wrap;
 }
 .kingdom-stage {
-  flex: 1 1 460px; min-width: 300px;
+  flex: 0 1 380px; min-width: 260px;
   display: flex; align-items: center; justify-content: center;
   background:
     radial-gradient(120% 80% at 50% 15%, rgba(0,212,255,0.06), transparent 60%),
@@ -1178,8 +1178,8 @@ body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-ev
 /* The Build — layered brick construction scene */
 .kingdom-stage { background: #060b13; }
 .ki-scene {
-  position: relative; width: 100%; max-width: 560px; margin: 0 auto;
-  aspect-ratio: 1 / 1;
+  position: relative; width: 100%; max-width: 340px; margin: 0 auto;
+  aspect-ratio: 2 / 3;
 }
 .ki-island {
   position: absolute; inset: 0; width: 100%; height: 100%;

@@ -434,17 +434,17 @@ const BUILD_STAGES = [
 // brick-filled twin, revealed bottom-up by a CSS mask as net climbs. The gold
 // roof only fades in once fully topped out.
 const BUILD_SVG = `
-  <svg class="ki-island ki-red" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">
-    <rect x="90" y="60" width="120" height="210" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="1.5"/>
-    <line x1="90" y1="95" x2="210" y2="95" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
-    <line x1="90" y1="130" x2="210" y2="130" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
-    <line x1="90" y1="165" x2="210" y2="165" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
-    <line x1="90" y1="200" x2="210" y2="200" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
-    <line x1="90" y1="235" x2="210" y2="235" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
-    <polygon points="80,60 220,60 150,25" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="1.5" stroke-dasharray="4 4"/>
-    <line x1="60" y1="270" x2="240" y2="270" stroke="rgba(255,255,255,0.2)" stroke-width="2"/>
+  <svg class="ki-island ki-red" viewBox="0 0 200 300" preserveAspectRatio="xMidYMid meet">
+    <rect x="40" y="60" width="120" height="210" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="1.5"/>
+    <line x1="40" y1="95" x2="160" y2="95" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <line x1="40" y1="130" x2="160" y2="130" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <line x1="40" y1="165" x2="160" y2="165" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <line x1="40" y1="200" x2="160" y2="200" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <line x1="40" y1="235" x2="160" y2="235" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <polygon points="30,60 170,60 100,25" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="1.5" stroke-dasharray="4 4"/>
+    <line x1="10" y1="270" x2="190" y2="270" stroke="rgba(255,255,255,0.2)" stroke-width="2"/>
   </svg>
-  <svg class="ki-island ki-green" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">
+  <svg class="ki-island ki-green" viewBox="0 0 200 300" preserveAspectRatio="xMidYMid meet">
     <defs>
       <pattern id="brickFill" width="24" height="12" patternUnits="userSpaceOnUse">
         <rect width="24" height="12" fill="#7a3d22"/>
@@ -455,22 +455,22 @@ const BUILD_SVG = `
         <rect x="-5.5" y="6.5" width="4.5" height="5" rx="0.6" fill="#c9752f"/>
       </pattern>
     </defs>
-    <rect x="90" y="60" width="120" height="210" fill="url(#brickFill)" stroke="rgba(0,0,0,0.35)" stroke-width="1.5"/>
-    <rect x="105" y="75" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
-    <rect x="179" y="75" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
-    <rect x="105" y="110" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
-    <rect x="179" y="110" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
-    <rect x="105" y="145" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
-    <rect x="179" y="145" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
-    <rect x="105" y="180" width="16" height="20" rx="2" fill="#f0cf6e" opacity="0.9"/>
-    <rect x="179" y="180" width="16" height="20" rx="2" fill="#f0cf6e" opacity="0.9"/>
-    <rect x="105" y="215" width="16" height="20" rx="2" fill="#f0cf6e" opacity="0.9"/>
-    <rect x="179" y="215" width="16" height="20" rx="2" fill="#f0cf6e" opacity="0.9"/>
-    <rect x="130" y="245" width="40" height="25" rx="2" fill="#0d0f13" opacity="0.9"/>
+    <rect x="40" y="60" width="120" height="210" fill="url(#brickFill)" stroke="rgba(0,0,0,0.35)" stroke-width="1.5"/>
+    <rect x="55" y="75" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
+    <rect x="129" y="75" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
+    <rect x="55" y="110" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
+    <rect x="129" y="110" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
+    <rect x="55" y="145" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
+    <rect x="129" y="145" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
+    <rect x="55" y="180" width="16" height="20" rx="2" fill="#f0cf6e" opacity="0.9"/>
+    <rect x="129" y="180" width="16" height="20" rx="2" fill="#f0cf6e" opacity="0.9"/>
+    <rect x="55" y="215" width="16" height="20" rx="2" fill="#f0cf6e" opacity="0.9"/>
+    <rect x="129" y="215" width="16" height="20" rx="2" fill="#f0cf6e" opacity="0.9"/>
+    <rect x="80" y="245" width="40" height="25" rx="2" fill="#0d0f13" opacity="0.9"/>
   </svg>
-  <svg class="ki-island ki-roof" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">
-    <polygon points="80,60 220,60 150,20" fill="#d8b34a"/>
-    <polygon points="80,60 220,60 150,20" fill="none" stroke="#0d0f13" stroke-width="1.5"/>
+  <svg class="ki-island ki-roof" viewBox="0 0 200 300" preserveAspectRatio="xMidYMid meet">
+    <polygon points="30,60 170,60 100,20" fill="#d8b34a"/>
+    <polygon points="30,60 170,60 100,20" fill="none" stroke="#0d0f13" stroke-width="1.5"/>
   </svg>
 `;
 
