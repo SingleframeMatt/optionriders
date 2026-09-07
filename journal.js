@@ -304,80 +304,56 @@ function zellaScore(s) {
   return Math.round((win * 0.3 + pf * 0.3 + exp * 0.2 + wl * 0.2) * 10) / 10;
 }
 
-/* ---------- Monthly Target pie (fill to £10k, resets monthly) ---------- */
+/* ---------- Monthly Target pie (fill to £5k, resets monthly) ---------- */
 
 const GOAL_TARGET = 5000;
 
-// The Farm — every £5k of monthly profit builds the next asset; a £5k
-// drawdown loses the top one (floor(pnl/5000) recomputing). Locked assets stay
-// a MYSTERY ("?") — you don't see what's next until you earn it. Art in
-// assets/rewards/<key>.png, emoji fallback until the images load.
-const REWARD_ART = "assets/rewards";
-const SEED_STEP = 2000;   // every £2k earns a seed — a frequent micro-win
-const REWARD_TIERS = [
-  { t: 5000,  name: "Chicken",   key: "chicken",   emoji: "🐔", ring: "var(--amber)" },
-  { t: 10000, name: "Pig",       key: "pig",       emoji: "🐖", ring: "var(--amber)" },
-  { t: 15000, name: "Horse",     key: "horse",     emoji: "🐎", ring: "var(--green)" },
-  { t: 20000, name: "Barn",      key: "barn",      emoji: "🛖", ring: "var(--red)" },
-  { t: 25000, name: "Tractor",   key: "tractor",   emoji: "🚜", ring: "var(--cyan)" },
-  { t: 30000, name: "Harvester", key: "harvester", emoji: "🌾", ring: "var(--gold)" },
-];
+// The Wall — one brick every £250 of monthly profit (a single clean day's
+// target). 5 bricks lays a row (one trading week, £1,250); 4 rows tops the
+// wall out at the £5k goal. Profit past the goal keeps laying bricks in gold.
+const BRICK_VALUE = 250;
+const BRICKS_PER_ROW = 5;
+const WALL_ROWS = 4;                        // 20 bricks = £5,000
+const WALL_BRICKS = BRICKS_PER_ROW * WALL_ROWS;
 
 function renderGoalRewards(pnl) {
   const el = $("goalRewards");
   if (!el) return;
-  const unlocked = Math.max(0, Math.floor((pnl || 0) / GOAL_TARGET));
-  const shown = Math.min(unlocked, REWARD_TIERS.length);
-  let tiles = "";
-  // Earned assets — revealed.
-  for (let i = 0; i < shown; i++) {
-    const tr = REWARD_TIERS[i];
-    tiles += `<div class="reward-thumb" style="--ring:${tr.ring}" title="${tr.name} — built at £${tr.t / 1000}k">`
-      + `<img src="${REWARD_ART}/${tr.key}.png" alt="${tr.name}" `
-      + `onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
-      + `<span class="reward-emoji" style="display:none;">${tr.emoji}</span></div>`;
-  }
-  // Locked assets — MYSTERY. Identity hidden until earned.
-  if (unlocked < REWARD_TIERS.length) {
-    const next = REWARD_TIERS[unlocked];
-    const toNext = Math.max(0, next.t - (pnl || 0));
-    tiles += `<div class="reward-thumb reward-mystery" title="Next reward at £${next.t / 1000}k — earn it to reveal">`
-      + `<span class="reward-qm">?</span>`
-      + `<span class="reward-next">£${fmt.num(toNext, 0)}</span></div>`;
-    for (let i = unlocked + 1; i < REWARD_TIERS.length; i++) {
-      tiles += `<div class="reward-thumb reward-mystery reward-faint" title="Locked — keep building">`
-        + `<span class="reward-qm">?</span></div>`;
-    }
-  }
-  const label = shown === 0
-    ? "YOUR FARM · build your first at £5k"
-    : shown === REWARD_TIERS.length
-      ? "YOUR FARM · fully built 🏆"
-      : `YOUR FARM · ${shown} built`;
+  pnl = Math.max(0, pnl || 0);
+  const laid = Math.floor(pnl / BRICK_VALUE);
+  const wallLaid = Math.min(laid, WALL_BRICKS);
+  const overLaid = Math.max(0, laid - WALL_BRICKS);
 
-  // Seeds — a smaller, more frequent win: one per £2k of monthly profit.
-  const seeds = Math.max(0, Math.floor((pnl || 0) / SEED_STEP));
-  const seedShown = Math.min(seeds, 10);
-  let seedTiles = "";
-  for (let i = 0; i < seedShown; i++) {
-    seedTiles += `<div class="reward-thumb reward-seed" title="Seed — earned at £${(i + 1) * SEED_STEP / 1000}k">`
-      + `<img src="${REWARD_ART}/seed.png" alt="seed" `
-      + `onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
-      + `<span class="reward-emoji" style="display:none;">🌱</span></div>`;
+  // Built bottom-up, left-to-right within each row — an actual wall going up.
+  let rows = "";
+  for (let r = WALL_ROWS - 1; r >= 0; r--) {
+    let row = "";
+    for (let c = 0; c < BRICKS_PER_ROW; c++) {
+      const idx = r * BRICKS_PER_ROW + c;
+      row += `<span class="brick${idx < wallLaid ? " brick-laid" : ""}"></span>`;
+    }
+    rows += `<div class="brick-row">${row}</div>`;
   }
-  if (seeds > 10) seedTiles += `<span class="reward-seed-more">+${seeds - 10}</span>`;
-  if (seeds === 0) {
-    seedTiles = `<div class="reward-thumb reward-seed reward-faint" title="First seed at £2k"><span class="reward-emoji">🌱</span></div>`;
+
+  let overRow = "";
+  if (overLaid > 0) {
+    const shown = Math.min(overLaid, BRICKS_PER_ROW * 2);
+    let over = "";
+    for (let i = 0; i < shown; i++) over += `<span class="brick brick-gold"></span>`;
+    if (overLaid > shown) over += `<span class="brick-more">+${overLaid - shown}</span>`;
+    overRow = `<div class="brick-row brick-row-over">${over}</div>`;
   }
-  const toNextSeed = (seeds + 1) * SEED_STEP - Math.max(0, pnl || 0);
-  const seedLabel = (seeds === 0 ? "SEEDS · first at £2k" : `SEEDS · ×${seeds}`)
-    + ((pnl || 0) > 0 ? ` · next £${fmt.num(toNextSeed, 0)}` : "");
+
+  const toNext = (laid + 1) * BRICK_VALUE - pnl;
+  const label = wallLaid === 0
+    ? "THE WALL · first brick at £250"
+    : wallLaid === WALL_BRICKS
+      ? `THE WALL · topped out${overLaid ? ` · +${overLaid} gold` : ""} 🏗️`
+      : `THE WALL · ${wallLaid}/${WALL_BRICKS} bricks · next in £${fmt.num(toNext, 0)}`;
 
   el.innerHTML =
-    `<div class="goal-seeds"><div class="goal-rewards-label">${seedLabel}</div>`
-    + `<div class="goal-seeds-row">${seedTiles}</div></div>`
-    + `<div class="goal-rewards-label">${label}</div>`
-    + `<div class="goal-rewards-row">${tiles}</div>`;
+    `<div class="goal-rewards-label">${label}</div>`
+    + `<div class="wall">${overRow}${rows}</div>`;
 }
 
 // Filled pie wedge from 12 o'clock, sweeping `deg` degrees clockwise.
@@ -437,29 +413,71 @@ function renderGoalPie(pnl) {
   renderGoalRewards(pnl);
 }
 
-/* ---------- The Farm (all-time P&L brought to life: barren → lush) ---------- */
+/* ---------- The Build (all-time P&L brought to life: foundation → topped out) ---------- */
 
-const FARM_ART = "assets/rewards";
-// The land greens across this all-time-net range: barren at/below FLOOR, fully
-// lush at/above TOP. Breakeven (0) lands well into green — the goal is to climb
-// out of the drought and bloom.
-const FARM_FLOOR = -50000;
-const FARM_TOP = 25000;
+// The tower rises across this all-time-net range: bare frame at/below FLOOR,
+// fully topped out at/above TOP. Breakeven (0) lands a third of the way up —
+// the goal is to build out of the hole and top the tower out.
+const BUILD_FLOOR = -50000;
+const BUILD_TOP = 75000;
 
-// Milestone chips (net-based farm-vitality stages); icons reuse the shelf art.
-const FARM_MILES = [
-  { t: 0,     name: "Breakeven",    img: "seed.png" },
-  { t: 5000,  name: "Sprouting",    img: "chicken.png" },
-  { t: 15000, name: "Growing",      img: "pig.png" },
-  { t: 25000, name: "Green Fields", img: "horse.png" },
-  { t: 50000, name: "Thriving",     img: "barn.png" },
-  { t: 75000, name: "Bountiful",    img: "harvester.png" },
+const BUILD_STAGES = [
+  { t: 0,     name: "Foundation" },
+  { t: 5000,  name: "Framing" },
+  { t: 15000, name: "Walls Up" },
+  { t: 25000, name: "Roof On" },
+  { t: 50000, name: "Windows In" },
+  { t: 75000, name: "Topped Out" },
 ];
 
-function farmProgress(net) {
-  if (net <= FARM_FLOOR) return 0;
-  if (net >= FARM_TOP) return 1;
-  return (net - FARM_FLOOR) / (FARM_TOP - FARM_FLOOR);
+// Two-layer brick tower: a dashed blueprint outline (always visible) and a
+// brick-filled twin, revealed bottom-up by a CSS mask as net climbs. The gold
+// roof only fades in once fully topped out.
+const BUILD_SVG = `
+  <svg class="ki-island ki-red" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">
+    <rect x="90" y="60" width="120" height="210" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="1.5"/>
+    <line x1="90" y1="95" x2="210" y2="95" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <line x1="90" y1="130" x2="210" y2="130" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <line x1="90" y1="165" x2="210" y2="165" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <line x1="90" y1="200" x2="210" y2="200" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <line x1="90" y1="235" x2="210" y2="235" stroke="rgba(255,255,255,0.10)" stroke-width="1"/>
+    <polygon points="80,60 220,60 150,25" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="1.5" stroke-dasharray="4 4"/>
+    <line x1="60" y1="270" x2="240" y2="270" stroke="rgba(255,255,255,0.2)" stroke-width="2"/>
+  </svg>
+  <svg class="ki-island ki-green" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <pattern id="brickFill" width="24" height="12" patternUnits="userSpaceOnUse">
+        <rect width="24" height="12" fill="#7a3d22"/>
+        <rect x="0.5" y="0.5" width="10" height="5" rx="0.6" fill="#c9752f"/>
+        <rect x="12.5" y="0.5" width="10" height="5" rx="0.6" fill="#c9752f"/>
+        <rect x="6.5" y="6.5" width="10" height="5" rx="0.6" fill="#c9752f"/>
+        <rect x="18.5" y="6.5" width="4.5" height="5" rx="0.6" fill="#c9752f"/>
+        <rect x="-5.5" y="6.5" width="4.5" height="5" rx="0.6" fill="#c9752f"/>
+      </pattern>
+    </defs>
+    <rect x="90" y="60" width="120" height="210" fill="url(#brickFill)" stroke="rgba(0,0,0,0.35)" stroke-width="1.5"/>
+    <rect x="105" y="75" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
+    <rect x="179" y="75" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
+    <rect x="105" y="110" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
+    <rect x="179" y="110" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
+    <rect x="105" y="145" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
+    <rect x="179" y="145" width="16" height="20" rx="2" fill="#0d0f13" opacity="0.85"/>
+    <rect x="105" y="180" width="16" height="20" rx="2" fill="#f0cf6e" opacity="0.9"/>
+    <rect x="179" y="180" width="16" height="20" rx="2" fill="#f0cf6e" opacity="0.9"/>
+    <rect x="105" y="215" width="16" height="20" rx="2" fill="#f0cf6e" opacity="0.9"/>
+    <rect x="179" y="215" width="16" height="20" rx="2" fill="#f0cf6e" opacity="0.9"/>
+    <rect x="130" y="245" width="40" height="25" rx="2" fill="#0d0f13" opacity="0.9"/>
+  </svg>
+  <svg class="ki-island ki-roof" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">
+    <polygon points="80,60 220,60 150,20" fill="#d8b34a"/>
+    <polygon points="80,60 220,60 150,20" fill="none" stroke="#0d0f13" stroke-width="1.5"/>
+  </svg>
+`;
+
+function buildProgress(net) {
+  if (net <= BUILD_FLOOR) return 0;
+  if (net >= BUILD_TOP) return 1;
+  return (net - BUILD_FLOOR) / (BUILD_TOP - BUILD_FLOOR);
 }
 
 function renderFarm(net) {
@@ -467,19 +485,16 @@ function renderFarm(net) {
   if (!stage) return;
   net = Number(net) || 0;
 
-  // Two-layer scene: barren base, lush revealed from the foreground up.
   let scene = stage.querySelector(".ki-scene");
   if (!scene) {
     scene = document.createElement("div");
-    scene.className = "ki-scene ki-farm";
-    scene.innerHTML =
-      `<img class="ki-island ki-red" src="${FARM_ART}/farm_barren.jpg" alt="">` +
-      `<img class="ki-island ki-green" src="${FARM_ART}/farm_lush.jpg" alt="">`;
+    scene.className = "ki-scene ki-build";
+    scene.innerHTML = BUILD_SVG;
     stage.appendChild(scene);
   }
 
-  // The land greens from the ground up as net climbs FLOOR → TOP.
-  const progress = farmProgress(net);
+  // The tower fills from the ground up as net climbs FLOOR → TOP.
+  const progress = buildProgress(net);
   const tide = progress * 100;
   const green = scene.querySelector(".ki-green");
   let mask;
@@ -488,49 +503,52 @@ function renderFarm(net) {
   } else if (progress >= 1) {
     mask = "linear-gradient(#000, #000)";
   } else {
-    mask = `linear-gradient(to top, #000 ${Math.max(0, tide - 22).toFixed(1)}%, `
-      + `rgba(0,0,0,0) ${Math.min(100, tide + 6).toFixed(1)}%)`;
+    mask = `linear-gradient(to top, #000 ${Math.max(0, tide - 10).toFixed(1)}%, `
+      + `rgba(0,0,0,0) ${Math.min(100, tide + 4).toFixed(1)}%)`;
   }
   green.style.webkitMaskImage = mask;
   green.style.maskImage = mask;
+
+  const roof = scene.querySelector(".ki-roof");
+  if (roof) roof.style.opacity = progress >= 1 ? "1" : "0";
 
   // ── Side panel ──
   const netEl = $("kingdomNet");
   netEl.textContent = fmt.money(net);
   netEl.className = "kingdom-net " + signClass(net);
 
-  const unlocked = FARM_MILES.filter(m => net >= m.t);
+  const unlocked = BUILD_STAGES.filter(m => net >= m.t);
   $("kingdomRank").textContent =
-    net < 0 ? "Drought" : (unlocked.length ? unlocked[unlocked.length - 1].name : "Bare Soil");
+    net < 0 ? "Excavating" : (unlocked.length ? unlocked[unlocked.length - 1].name : "Cleared Site");
 
-  const next = FARM_MILES.find(m => m.t > net);
+  const next = BUILD_STAGES.find(m => m.t > net);
   const barFill = $("kingdomBarFill");
   if (net < 0) {
-    const rec = Math.max(0, Math.min(1, (net - FARM_FLOOR) / (0 - FARM_FLOOR)));
+    const rec = Math.max(0, Math.min(1, (net - BUILD_FLOOR) / (0 - BUILD_FLOOR)));
     barFill.style.width = (rec * 100).toFixed(1) + "%";
-    $("kingdomNextLabel").textContent = "Back to green";
+    $("kingdomNextLabel").textContent = "Back to ground level";
     $("kingdomNextPct").textContent = Math.round(rec * 100) + "%";
-    $("kingdomNextGoal").textContent = `Reclaim ${fmt.money(-net, { sign: false })} to break even`;
-    $("kingdomSub").textContent = "Your land's in drought — trade it back to green";
+    $("kingdomNextGoal").textContent = `Fill ${fmt.money(-net, { sign: false })} to break even`;
+    $("kingdomSub").textContent = "Below ground — trade it back to level";
   } else if (!next) {
     barFill.style.width = "100%";
-    $("kingdomNextLabel").textContent = "Farm complete";
+    $("kingdomNextLabel").textContent = "Build complete";
     $("kingdomNextPct").textContent = "100%";
-    $("kingdomNextGoal").textContent = "🌾 A bountiful harvest";
-    $("kingdomSub").textContent = "Thriving — the whole farm is alive";
+    $("kingdomNextGoal").textContent = "🏗️ Topped out";
+    $("kingdomSub").textContent = "Fully built — the whole tower stands";
   } else {
-    const prev = [...FARM_MILES].reverse().find(m => m.t <= net)?.t ?? 0;
+    const prev = [...BUILD_STAGES].reverse().find(m => m.t <= net)?.t ?? 0;
     const segFrac = Math.max(0, Math.min(1, (net - prev) / (next.t - prev)));
     barFill.style.width = (segFrac * 100).toFixed(1) + "%";
     $("kingdomNextLabel").textContent = "Next";
     $("kingdomNextPct").textContent = Math.round(segFrac * 100) + "%";
     $("kingdomNextGoal").textContent = `${fmt.money(next.t - net, { sign: false })} to ${next.name}`;
-    $("kingdomSub").textContent = "Grow the farm with clean profit";
+    $("kingdomSub").textContent = "Build it up with clean profit";
   }
 
-  $("kingdomMilestones").innerHTML = FARM_MILES.map(m => {
+  $("kingdomMilestones").innerHTML = BUILD_STAGES.map(m => {
     const cls = net >= m.t ? "unlocked" : (m === next ? "target" : "");
-    return `<span class="km-chip ${cls}"><img class="km-ico" src="${FARM_ART}/${m.img}" alt="">${fmt.money(m.t, { sign: false, compact: true })}</span>`;
+    return `<span class="km-chip ${cls}"><span class="km-ico" aria-hidden="true"></span>${m.name} · ${fmt.money(m.t, { sign: false, compact: true })}</span>`;
   }).join("");
 }
 
