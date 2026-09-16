@@ -223,8 +223,8 @@ the dashboard do not validate this intraday options screen.
 
 Screening now requires aligned, finite, completed OHLCV rows with timestamps,
 21 bars of history on the 2-minute and 15-minute frames, and current-session
-candles. Their latest starts must be no more than one candle duration plus eight
-minutes old. Hourly bars use regular hours. The derived four-hour context uses
+candles. Their latest starts must be no more than two candle durations plus six
+minutes old, allowing the next candle to form without rejecting the last close. Hourly bars use regular hours. The derived four-hour context uses
 only complete 09:30–13:30 blocks; it never combines adjacent trading days and
 omits shortened sessions.
 

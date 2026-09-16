@@ -75,6 +75,9 @@ class ScreeningTests(unittest.TestCase):
         old=bars(start=NOW-timedelta(days=1));self.assertFalse(engine._fresh_intraday(old,NOW))
         forming=bars(start=NOW-timedelta(minutes=58));self.assertFalse(engine._fresh_intraday(forming,NOW))
         self.assertFalse(engine._fresh_intraday(bars(5),NOW))
+        fifteen=bars(step=900)
+        self.assertTrue(engine._fresh_intraday(fifteen,NOW+timedelta(minutes=14),15))
+        self.assertFalse(engine._fresh_intraday(fifteen,NOW+timedelta(minutes=22),15))
 
     def test_four_hour_blocks_never_cross_session_or_missing_hour(self):
         hourly=bars(8,start=NOW.replace(hour=9,minute=30),step=3600)

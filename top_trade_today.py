@@ -25,7 +25,7 @@ from top_watch import fetch_top_watch
 
 
 CACHE_TTL_SECONDS = 300
-MAX_BAR_AGE_SECONDS = 600  # Last completed 2-minute candle; excludes stale sessions.
+BAR_DELAY_TOLERANCE_SECONDS = 360  # Extra feed-delay allowance after two candle intervals.
 MAX_SOURCE_AGE_SECONDS = 900
 MAX_OPTION_SPREAD_PCT = 10.0  # Screening policy, not an empirically optimized threshold.
 # Minimum current-session pre-market gap (vs prior close) for a name to survive
@@ -267,7 +267,7 @@ def _fresh_intraday(two_min: dict, now: datetime, minutes: int = 2) -> bool:
     if not times or len(two_min.get("close") or []) < 21:
         return False
     last = datetime.fromtimestamp(times[-1], NY_TZ)
-    return last.date() == now.date() and minutes * 60 <= now.timestamp() - times[-1] <= minutes * 60 + MAX_BAR_AGE_SECONDS - 120
+    return last.date() == now.date() and minutes * 60 <= now.timestamp() - times[-1] <= minutes * 120 + BAR_DELAY_TOLERANCE_SECONDS
 
 
 def _number(value) -> Optional[float]:
