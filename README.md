@@ -173,3 +173,26 @@ APP_URL=https://www.optionriders.com   # base URL for Stripe redirect_url
 
 Access is always verified server-side via `/api/subscription-status` — the
 frontend cannot self-grant access by manipulating local state.
+
+## Journal trade chart
+
+Opening a trade shows the underlying's five-minute candles with green Entry
+arrows and red Exit arrows for its executions, including partial fills. Arrows
+attach to the candle containing the execution; the labels and execution strip
+show the contract fill prices, not the underlying price. Times use Europe/London
+with daylight-saving conversion from IBKR's New York timestamps. For overnight
+trades, the chart includes each session containing an execution.
+
+Historical candles come from Alpha Vantage using the requested trade month. If
+that returns no data, recent sessions fall back to Yahoo Finance through the
+existing yfinance dependency. Older dates require historical intraday access
+from Alpha Vantage. Missing candles are explicitly identified; executions are
+never snapped to unrelated candles. When all candles are unavailable, exact
+execution times remain visible above a clearly labelled live reference chart.
+
+Regression checks:
+
+```bash
+node tests/journal-chart.cjs
+python3 -m unittest discover -s tests -p 'test_*.py'
+```

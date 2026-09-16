@@ -1228,12 +1228,14 @@ function openTradeDetail(trade) {
 
   // Chart with entry/exit markers for the underlying
   const chartWrap = $("tradeDetailChartWrap");
-  chartWrap.innerHTML = "";
+  disposeTradeChart(chartWrap);
+  const request = chartWrap._chartRequest;
   const underlying = (trade.ticker || trade.symbol || "").trim();
   if (underlying) {
-    renderTradeChart(chartWrap, underlying, trade).catch(err => {
+    renderTradeChart(chartWrap, underlying, trade, request).catch(err => {
+      if (chartWrap._chartRequest !== request) return;
       console.warn("[trade-chart] fallback to iframe", err);
-      renderTradeChartFallback(chartWrap, underlying);
+      renderTradeChartFallback(chartWrap, underlying, trade);
     });
   }
 
@@ -1309,97 +1311,156 @@ async function saveTradeNote() {
   }
 }
 
-async function renderTradeChart(container, symbol, trade) {
-  container.innerHTML = `<div class="trade-chart-loading">Loading ${symbol} chart…</div>`;
-  const date = (trade.open_datetime || trade.close_datetime || "").slice(0, 10);
-  if (!date) throw new Error("no date on trade");
+function disposeTradeChart(container) {
+  container._chartRequest = (container._chartRequest || 0) + 1;
+  if (container._lwObserver) container._lwObserver.disconnect();
+  if (container._lwChart) container._lwChart.remove();
+  container._lwObserver = container._lwChart = null;
+  container.innerHTML = "";
+}
 
-  const data = await api(`/api/journal/bars?symbol=${encodeURIComponent(symbol)}&date=${encodeURIComponent(date)}`);
-  if (data.error) throw new Error(data.error);
-  const bars = data.bars || [];
-  if (!bars.length) throw new Error("no bars returned");
+function tradeTimestamp(iso) {
+  if (!iso) return NaN;
+  if (/(Z|[+-]\d{2}:?\d{2})$/i.test(iso)) return Date.parse(iso) / 1000;
+  const parts = iso.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})/);
+  return parts ? _nyWallClockToUtcMillis(...parts.slice(1).map(Number)) / 1000 : NaN;
+}
 
-  if (!window.LightweightCharts) throw new Error("lightweight-charts not loaded");
+function tradeChartEvents(trade) {
+  const fills = (trade.fills || []).filter(f => Number.isFinite(tradeTimestamp(f.datetime)))
+    .slice().sort((a, b) => tradeTimestamp(a.datetime) - tradeTimestamp(b.datetime));
+  // Calls and puts can both be bought or sold. Infer direction from the
+  // opening execution, never from the option right.
+  const first = fills.find(f => String(f.open_close || "").toUpperCase() === "O") || fills[0];
+  const buy = f => f.buy_sell ? String(f.buy_sell).toUpperCase() === "BUY" : Number(f.quantity) > 0;
+  const openingBuy = first ? buy(first) : !["SELL", "SHORT"].includes(String(trade.side).toUpperCase());
+  if (fills.length) return fills.map(f => {
+    const oc = String(f.open_close || "").toUpperCase();
+    return { time: tradeTimestamp(f.datetime), datetime: f.datetime,
+      exit: oc === "C" || (oc !== "O" && buy(f) !== openingBuy),
+      quantity: Math.abs(Number(f.quantity)), price: f.trade_price };
+  });
+  return [
+    { datetime: trade.open_datetime, exit: false, quantity: trade.qty_opened, price: trade.avg_entry_price },
+    ...(!trade.is_open && trade.close_datetime ? [{ datetime: trade.close_datetime, exit: true,
+      quantity: trade.qty_closed, price: trade.avg_exit_price }] : []),
+  ].map(e => ({ ...e, time: tradeTimestamp(e.datetime) })).filter(e => Number.isFinite(e.time));
+}
+
+function tradeChartMarkers(events, bars, intervalSeconds = 300) {
+  return events.flatMap(e => {
+    // Attach to the candle containing the execution, not the next candle.
+    // Never snap an out-of-session execution to an unrelated bar.
+    let lo = 0, hi = bars.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (bars[mid].time <= e.time) lo = mid + 1; else hi = mid;
+    }
+    const bar = bars[lo - 1];
+    if (!bar || e.time >= bar.time + intervalSeconds) return [];
+    const qty = e.quantity != null ? ` ${e.quantity}` : "";
+    const price = e.price != null ? ` @ $${Number(e.price).toFixed(2)}` : "";
+    return [{ time: bar.time, position: e.exit ? "aboveBar" : "belowBar",
+      color: e.exit ? "#ef4444" : "#10b981", shape: e.exit ? "arrowDown" : "arrowUp",
+      text: `${e.exit ? "Exit" : "Entry"}${qty}${price}` }];
+  }).sort((a, b) => a.time - b.time);
+}
+
+function appendTradeChartEvents(container, trade) {
+  const events = tradeChartEvents(trade);
+  const list = document.createElement("div");
+  list.className = "trade-chart-events";
+  for (const e of events) {
+    const item = document.createElement("span");
+    item.className = e.exit ? "trade-chart-exit" : "trade-chart-entry";
+    const time = new Date(e.time * 1000).toLocaleString("en-GB", {
+      timeZone: _DISPLAY_TZ, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+    item.textContent = `${e.exit ? "↓ Exit" : "↑ Entry"} · ${time}${e.price != null ? ` · $${Number(e.price).toFixed(2)}` : ""}`;
+    list.appendChild(item);
+  }
+  container.appendChild(list);
+}
+
+async function renderTradeChart(container, symbol, trade, request = container._chartRequest) {
+  container.textContent = `Loading ${symbol} trade chart…`;
+  const events = tradeChartEvents(trade);
+  const dateFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: _IBKR_TZ,
+    year: "numeric", month: "2-digit", day: "2-digit" });
+  const dates = [...new Set(events.map(e => dateFormatter.format(new Date(e.time * 1000))))];
+  if (!dates.length) throw new Error("No execution dates available");
+  const results = await Promise.all(dates.map(date =>
+    api(`/api/journal/bars?symbol=${encodeURIComponent(symbol)}&date=${encodeURIComponent(date)}`)
+      .catch(() => ({ bars: [] }))));
+  if (container._chartRequest !== request) return;
+  const bars = [...new Map(results.flatMap(d => d.bars || []).map(b => [b.time, b])).values()]
+    .sort((a, b) => a.time - b.time);
+  if (!bars.length) throw new Error("Historical intraday data unavailable");
+  if (!window.LightweightCharts) throw new Error("Chart library unavailable");
 
   container.innerHTML = "";
+  const caption = document.createElement("div");
+  caption.className = "trade-chart-caption";
+  caption.textContent = `${symbol} underlying · 5-minute candles · London/Lisbon time. Arrows mark execution candles; labels show fill prices in USD. Sessions with executions shown.`;
+  container.appendChild(caption);
+  const plot = document.createElement("div");
+  container.appendChild(plot);
   const isLight = document.body.classList.contains("is-light");
-  const chart = LightweightCharts.createChart(container, {
-    width: container.clientWidth,
-    height: 340,
-    layout: {
-      background: { type: "solid", color: isLight ? "#ffffff" : "#0f1220" },
-      textColor: isLight ? "#1f2937" : "#e8e8f0",
-    },
+  const clock = t => new Date(t * 1000).toLocaleTimeString("en-GB", {
+    hour: "2-digit", minute: "2-digit", timeZone: _DISPLAY_TZ, hourCycle: "h23" });
+  const chart = LightweightCharts.createChart(plot, {
+    width: container.clientWidth, height: 340,
+    layout: { background: { type: "solid", color: isLight ? "#ffffff" : "#0f1220" },
+      textColor: isLight ? "#1f2937" : "#e8e8f0" },
     grid: {
       vertLines: { color: isLight ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.04)" },
       horzLines: { color: isLight ? "rgba(0,0,0,0.04)" : "rgba(255,255,255,0.04)" },
     },
-    rightPriceScale: { borderColor: isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)" },
-    timeScale: {
-      borderColor: isLight ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.1)",
-      timeVisible: true,
-      secondsVisible: false,
-    },
+    rightPriceScale: { scaleMargins: { top: 0.2, bottom: 0.2 } },
+    timeScale: { timeVisible: true, secondsVisible: false,
+      tickMarkFormatter: (t, type) => type <= 2
+        ? new Date(t * 1000).toLocaleDateString("en-GB", { timeZone: _DISPLAY_TZ, day: "2-digit", month: "short" }) : clock(t) },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-    localization: { timeFormatter: (t) => {
-      const d = new Date(t * 1000);
-      return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London", hourCycle: "h23" });
-    }},
+    localization: { timeFormatter: t => new Date(t * 1000).toLocaleString("en-GB", {
+      timeZone: _DISPLAY_TZ, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) },
   });
-
+  container._lwChart = chart;
   const candles = chart.addCandlestickSeries({
-    upColor: "#10b981", downColor: "#ef4444",
-    borderUpColor: "#10b981", borderDownColor: "#ef4444",
+    upColor: "#10b981", downColor: "#ef4444", borderUpColor: "#10b981", borderDownColor: "#ef4444",
     wickUpColor: "#10b981", wickDownColor: "#ef4444",
   });
   candles.setData(bars);
-
-  // Build entry/exit markers from the trade's fills
-  const markers = [];
-  (trade.fills || []).forEach(f => {
-    if (!f.datetime) return;
-    const qty = f.quantity || 0;
-    const opening = f.open_close === "O" || (f.open_close == null && qty > 0 === (trade.put_call !== "P"));
-    const isClose = f.open_close === "C";
-    const ts = Math.floor(new Date(f.datetime + (f.datetime.endsWith("Z") ? "" : "-04:00")).getTime() / 1000);
-    // ^ IBKR times are NY local; -04:00 during EDT. For EST (winter) it's -05:00
-    //   but intraday bar timestamps are also in that same wall clock, so a
-    //   consistent offset is good enough for lining up on the chart.
-    markers.push({
-      time: ts,
-      position: qty > 0 ? "belowBar" : "aboveBar",
-      color: isClose ? "#ef4444" : "#10b981",
-      shape: qty > 0 ? "arrowUp" : "arrowDown",
-      text: `${isClose ? "Exit" : "Entry"} ${Math.abs(qty)} @ ${f.trade_price ?? "?"}`,
-    });
-  });
-  markers.sort((a, b) => a.time - b.time);
+  const markers = tradeChartMarkers(events, bars);
   candles.setMarkers(markers);
-
   chart.timeScale().fitContent();
-
-  // Resize with the container
-  const resizeObserver = new ResizeObserver(entries => {
-    for (const entry of entries) {
-      chart.applyOptions({ width: entry.contentRect.width });
-    }
-  });
+  if (markers.length) {
+    const first = bars.findIndex(b => b.time === markers[0].time);
+    const last = bars.findIndex(b => b.time === markers[markers.length - 1].time);
+    chart.timeScale().setVisibleLogicalRange({ from: Math.max(-1, first - 8), to: Math.min(bars.length, last + 8) });
+  }
+  if (markers.length < events.length) {
+    const warning = document.createElement("div");
+    warning.className = "trade-chart-fallback-msg";
+    warning.textContent = `${events.length - markers.length} execution(s) have no matching historical candle. Their exact times are listed below.`;
+    container.appendChild(warning);
+  }
+  appendTradeChartEvents(container, trade);
+  const resizeObserver = new ResizeObserver(() => chart.applyOptions({ width: container.clientWidth }));
   resizeObserver.observe(container);
-  container._lwChart = chart;
   container._lwObserver = resizeObserver;
 }
 
-function renderTradeChartFallback(container, symbol) {
-  container.innerHTML = "";
+function renderTradeChartFallback(container, symbol, trade) {
+  disposeTradeChart(container);
   const msg = document.createElement("div");
   msg.className = "trade-chart-fallback-msg";
-  msg.textContent = "Intraday markers unavailable (free-tier data limit) — showing live TradingView chart.";
+  msg.textContent = "Historical candles unavailable for this trade. Entry/exit times are shown below; the live reference chart cannot display these markers.";
   container.appendChild(msg);
+  appendTradeChartEvents(container, trade);
   const iframe = document.createElement("iframe");
+  iframe.title = `${symbol} live reference chart (not historical trade data)`;
   iframe.src = `https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(symbol)}&interval=15&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=rgba(0,0,0,0)&studies=&theme=${document.body.classList.contains("is-light") ? "light" : "dark"}&style=1&timezone=Europe%2FLondon&locale=en`;
-  iframe.style.width = "100%";
   iframe.style.height = "300px";
-  iframe.style.border = "0";
   iframe.allow = "fullscreen";
   container.appendChild(iframe);
 }
@@ -1408,9 +1469,7 @@ function closeTradeDetail() {
   const modal = $("tradeDetailModal");
   modal.hidden = true;
   const wrap = $("tradeDetailChartWrap");
-  if (wrap._lwObserver) { wrap._lwObserver.disconnect(); wrap._lwObserver = null; }
-  if (wrap._lwChart) { wrap._lwChart.remove(); wrap._lwChart = null; }
-  wrap.innerHTML = "";
+  disposeTradeChart(wrap);
   // Only clear overflow lock if no other modal is open
   if ($("dayModal").hidden && $("weekModal").hidden && $("settingsModal").hidden) {
     document.body.style.overflow = "";

@@ -2,7 +2,7 @@
   "version": 2,
   "functions": {
     "api/journal.py": {
-      "includeFiles": "{journal_cloud,trade_journal}.py"
+      "includeFiles": "{journal_cloud,journal_chart,trade_journal,alpha_vantage}.py"
     }
   },
   "routes": [

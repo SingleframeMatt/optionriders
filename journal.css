@@ -1321,3 +1321,12 @@ body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-ev
   0%   { opacity: 0; transform: translate(-50%, -80%) scale(.5); }
   100% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
 }
+
+/* Historical trade executions */
+.trade-chart-caption, .trade-chart-events { padding: 10px 14px; font-size: 12px; line-height: 1.6; }
+.trade-chart-caption { color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); }
+.trade-chart-events { display: flex; flex-wrap: wrap; gap: 6px 18px; border-top: 1px solid var(--border-subtle); }
+.trade-chart-entry { color: #10b981; }
+.trade-chart-exit { color: #ef4444; }
+body.is-light .trade-chart-entry { color: #047857; }
+body.is-light .trade-chart-exit { color: #b91c1c; }

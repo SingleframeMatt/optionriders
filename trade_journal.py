@@ -892,6 +892,12 @@ def day_detail(date_iso: str, user_id: str | None = None) -> dict[str, Any]:
             "open_datetime": t["open_datetime"],
             "close_datetime": t["close_datetime"],
             "put_call": meta.get("put_call"),
+            "fills": [{k: f.get(k) for k in (
+                "datetime", "quantity", "trade_price", "proceeds", "commission",
+                "realized_pnl", "buy_sell", "open_close")}
+                for f in all_rows if f.get("account") == t.get("account")
+                and f.get("symbol") == t.get("symbol")
+                and (t.get("open_datetime") or "") <= (f.get("datetime") or "") <= (t.get("close_datetime") or "")],
         })
 
     return {
@@ -1036,6 +1042,12 @@ def week_detail(start_iso: str, user_id: str | None = None) -> dict[str, Any]:
             "open_datetime": t["open_datetime"],
             "close_datetime": t["close_datetime"],
             "put_call": meta.get("put_call"),
+            "fills": [{k: f.get(k) for k in (
+                "datetime", "quantity", "trade_price", "proceeds", "commission",
+                "realized_pnl", "buy_sell", "open_close")}
+                for f in all_rows if f.get("account") == t.get("account")
+                and f.get("symbol") == t.get("symbol")
+                and (t.get("open_datetime") or "") <= (f.get("datetime") or "") <= (t.get("close_datetime") or "")],
         })
 
     return {

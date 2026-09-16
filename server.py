@@ -426,6 +426,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                     self._json({"error": "missing start"}, status=400)
                 else:
                     self._json(trade_journal.week_detail(start, user_id=user_id))
+            elif path == "/api/journal/bars":
+                from journal_chart import intraday_bars
+                params = parse_qs(urlparse(self.path).query)
+                self._json(intraday_bars(
+                    params.get("symbol", [""])[0], params.get("date", [""])[0],
+                    params.get("interval", ["5min"])[0]))
             elif path == "/api/journal/trade-note":
                 params = parse_qs(urlparse(self.path).query)
                 symbol = (params.get("symbol", [""])[0] or "").strip()
