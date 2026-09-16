@@ -96,6 +96,21 @@
         <h2>Monthly Target</h2>
         <span class="panel-sub" id="goalSub">Your monthly plan · progress resets on the 1st</span>
       </div>
+
+      <div class="goal-wrap">
+        <div class="goal-pie" id="goalPie" role="img" aria-label="Monthly profit progress"></div>
+        <div class="goal-meta">
+          <div class="goal-amount" id="goalAmount">—</div>
+          <div class="goal-of" id="goalOf">—</div>
+          <div class="goal-daily-target" id="goalDailyTarget">—</div>
+          <div class="goal-pct" id="goalPct">—</div>
+          <div class="goal-note" id="goalNote"></div>
+
+        </div>
+      </div>
+      <div class="goal-secondary-actions">
+        <details class="plan-disclosure">
+          <summary>Edit target</summary>
       <form id="goalSettingsForm" class="goal-settings-form">
         <label><span id="goalCurrencyLabel">Monthly target (GBP)</span>
           <input id="goalMonthlyInput" type="number" min="0.01" max="999999999.99" step="0.01" inputmode="decimal" required value="5000">
@@ -108,23 +123,18 @@
         <p id="goalPlanHelp" class="goal-plan-help">Monthly target ÷ planned trading days. Starts at 20 days; adjust for your schedule.</p>
         <p id="goalSaveStatus" class="goal-save-status" role="status"></p>
       </form>
-      <div class="goal-wrap">
-        <div class="goal-pie" id="goalPie" role="img" aria-label="Monthly profit progress"></div>
-        <div class="goal-meta">
-          <div class="goal-amount" id="goalAmount">—</div>
-          <div class="goal-of" id="goalOf">—</div>
-          <div class="goal-daily-target" id="goalDailyTarget">—</div>
-          <div class="goal-pct" id="goalPct">—</div>
-          <div class="goal-note" id="goalNote"></div>
+        </details>
+        <details class="plan-disclosure">
+          <summary>View milestones</summary>
           <div class="goal-rewards" id="goalRewards"></div>
-        </div>
+        </details>
       </div>
     </section>
 
     <section class="panel panel-why">
       <div class="why-eyebrow">Why I Trade</div>
-      <h2 class="why-headline">Small, every day. That's the whole plan.</h2>
-      <div class="why-goal"><strong id="whyMonthlyTarget">—</strong><span>/ month</span></div>
+      <h2 class="why-headline">Small steps. More freedom.</h2>
+
 
       <div class="why-reasons">
         <div class="why-reason"><span class="why-reason-num">01</span><span><b>Freedom</b> to choose how I spend my time</span></div>
@@ -132,6 +142,9 @@
         <div class="why-reason"><span class="why-reason-num">03</span><span><b>Retirement income</b> — built, not gambled for</span></div>
       </div>
 
+      <details class="plan-disclosure why-plan-details">
+        <summary>View the bigger picture</summary>
+      <div class="why-goal"><strong id="whyMonthlyTarget">—</strong><span>/ month</span></div>
       <div class="why-compound">
         <div class="why-compound-label">Your target, broken down</div>
         <div class="why-compound-row">
@@ -144,6 +157,7 @@
       </div>
 
       <div class="why-gate" id="whyDailyGate"></div>
+      </details>
     </section>
   </div>
 

@@ -1347,36 +1347,61 @@ body.is-light .trade-chart-exit { color: #b91c1c; }
   .goal-daily-preview { flex: 1 1 180px; }
 }
 
-/* Keep the monthly plan and motivation together above the calendar. */
+/* Quiet, separate blocks keep the calendar close to the monthly overview. */
 .journal-plan-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: 16px;
   margin-bottom: 18px;
 }
-.journal-plan-grid > .panel { min-width: 0; margin-bottom: 0; }
-.journal-plan-grid .panel-head { flex-wrap: wrap; gap: 6px 16px; }
-.journal-plan-grid .goal-meta { min-width: 0; }
+.journal-plan-grid > .panel { min-width: 0; margin-bottom: 0; padding: 22px; border-color: var(--border-subtle); border-radius: 14px; }
+.journal-plan-grid .panel-goal { background: #101b20; }
+.journal-plan-grid .panel-why { background: #171b29; }
+.journal-body.is-light .journal-plan-grid .panel-goal { background: #edf5f2; }
+.journal-body.is-light .journal-plan-grid .panel-why { background: #f0f1f7; }
+.journal-plan-grid .panel-head { display: block; margin-bottom: 18px; }
+.journal-plan-grid .panel-sub { display: block; margin-top: 5px; font-size: 11px; }
+.journal-plan-grid .goal-wrap { flex-wrap: nowrap; gap: 22px; }
+.journal-plan-grid .goal-pie { width: 120px; filter: none; }
+.journal-plan-grid .goal-pie svg { display: block; width: 100%; height: auto; }
+.journal-plan-grid .goal-meta { min-width: 0; flex: 1; }
+.journal-plan-grid .goal-amount { font-size: clamp(25px, 2.5vw, 34px); overflow-wrap: anywhere; }
+.journal-plan-grid .goal-pct { font-size: 12px; color: var(--text-secondary); }
+.journal-plan-grid .goal-note { margin-top: 6px; font-size: 11px; }
+.journal-plan-grid .goal-daily-target { color: var(--text-primary); font-size: 12px; }
+.goal-secondary-actions { margin-top: 18px; }
+.plan-disclosure { border-top: 1px solid var(--border); }
+.plan-disclosure > summary { padding: 12px 0; cursor: pointer; color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+.plan-disclosure > summary:hover { color: var(--text-primary); }
+.plan-disclosure > summary:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; border-radius: 3px; }
+.journal-plan-grid .goal-settings-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 4px 0 16px; padding: 0; border: 0; }
+.journal-plan-grid .goal-settings-form label { min-width: 0; }
+.journal-plan-grid .goal-settings-form input { width: 100%; }
+.journal-plan-grid .goal-settings-form .btn { justify-self: end; }
+.journal-plan-grid .goal-plan-help, .journal-plan-grid .goal-save-status { grid-column: 1 / -1; line-height: 1.5; }
+.journal-plan-grid .goal-daily-preview output { font-size: 18px; overflow-wrap: anywhere; }
+.journal-plan-grid .goal-rewards { margin: 4px 0 14px; }
+.journal-plan-grid .why-eyebrow { color: var(--text-secondary); }
+.journal-plan-grid .why-headline { font-size: 24px; line-height: 1.3; margin-top: 10px; }
+.journal-plan-grid .why-reasons { gap: 0; margin: 16px 0; }
+.journal-plan-grid .why-reason { padding: 9px 0; font-size: 12px; line-height: 1.5; }
+.journal-plan-grid .why-reason + .why-reason { border-top: 1px solid var(--border-subtle); }
+.journal-plan-grid .why-reason b { color: var(--text-primary); font-weight: 600; }
+.journal-plan-grid .why-reason-num { color: var(--text-secondary); }
+.journal-plan-grid .why-goal { font-family: var(--font-mono); font-size: 24px; color: var(--text-primary); }
+.journal-plan-grid .why-goal span { font-size: 12px; color: var(--text-secondary); }
+.journal-plan-grid .why-compound { margin-top: 12px; background: var(--bg-card); border-color: var(--border-subtle); }
+.journal-plan-grid .why-compound-label, .journal-plan-grid .why-gold { color: var(--text-secondary); }
 .journal-plan-grid .why-cstep-num { overflow-wrap: anywhere; }
+.journal-plan-grid .why-gate { background: transparent; border: 0; padding: 0; font-size: 12px; color: var(--text-secondary); }
 @media (min-width: 1024px) {
   .journal-plan-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
-  .journal-plan-grid .goal-settings-form {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px 16px;
-    padding-bottom: 14px;
-    margin-bottom: 18px;
-  }
-  .journal-plan-grid .goal-settings-form input { width: 100%; }
-  .journal-plan-grid .goal-settings-form label { min-width: 0; }
-  .journal-plan-grid .goal-plan-help,
-  .journal-plan-grid .goal-save-status { grid-column: 1 / -1; }
-  .journal-plan-grid .goal-settings-form .btn { justify-self: end; }
-  .journal-plan-grid .goal-daily-preview output { font-size: 18px; overflow-wrap: anywhere; }
-  .journal-plan-grid .goal-wrap { flex-wrap: nowrap; gap: 20px; }
-  .journal-plan-grid .goal-pie { width: 180px; }
-  .journal-plan-grid .goal-pie svg { display: block; width: 100%; height: auto; }
-  .journal-plan-grid .goal-meta { flex: 1; }
-  .journal-plan-grid .goal-amount { font-size: clamp(28px, 2.6vw, 40px); overflow-wrap: anywhere; }
-  .journal-plan-grid .why-headline { font-size: clamp(20px, 1.8vw, 26px); }
+}
+@media (max-width: 480px) {
+  .journal-plan-grid > .panel { padding: 18px; }
+  .journal-plan-grid .goal-wrap { gap: 14px; }
+  .journal-plan-grid .goal-pie { width: 88px; }
+  .journal-plan-grid .goal-settings-form { grid-template-columns: minmax(0, 1fr); }
+  .journal-plan-grid .goal-settings-form .btn { justify-self: stretch; }
 }

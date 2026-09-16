@@ -403,7 +403,7 @@ async function saveGoalSettings(event) {
 
 function renderGoalPlan() {
   const target = state.monthlyTarget, days = state.tradingDays, daily = target / days;
-  $("goalSub").textContent = `${goalMoney(target)} monthly target · progress resets on the 1st`;
+  $("goalSub").textContent = "Progress resets on the 1st";
   $("goalOf").textContent = `of ${goalMoney(target)} this month`;
   $("goalDailyTarget").textContent = `${goalMoney(daily)} daily target · ${days} planned trading days`;
   $("whyMonthlyTarget").textContent = goalMoney(target);
