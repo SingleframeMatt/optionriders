@@ -212,3 +212,49 @@ saves display an error and keep the previous plan. The target persists across
 months; monthly profit progress resets each month as before.
 
 Run the target regression checks with `node tests/journal-goal.cjs`.
+
+## Intraday screening quality
+
+Top Trade Today shows up to four qualifying **watchlist** setups; it no longer
+adds filler trades. Setup points are heuristic ranking points, not a calibrated
+success probability. The ranking weights have not been optimized or validated
+against future returns. Existing daily-horizon backtest statistics elsewhere in
+the dashboard do not validate this intraday options screen.
+
+Screening now requires aligned, finite, completed OHLCV rows with timestamps,
+21 bars of history on the 2-minute and 15-minute frames, and current-session
+candles. Their latest starts must be no more than one candle duration plus eight
+minutes old. Hourly bars use regular hours. The derived four-hour context uses
+only complete 09:30–13:30 blocks; it never combines adjacent trading days and
+omits shortened sessions.
+
+The option quote must match the selected call/put side, have a positive bid and
+non-crossed ask, a non-expired date, and a spread no greater than 10% of midpoint.
+The 10% ceiling is a conservative screening policy, not a statistically optimized
+value. Source snapshots older than 15 minutes are excluded. Cards use the actual
+ATM contract returned by the feed instead of constructing a strike and Friday
+expiry. The feed's retrieval timestamp does not establish quote freshness;
+exchange quote timestamps and delta remain unavailable and must be checked in
+a broker quote before execution.
+
+Stops must be on the loss side of the entry and profit targets strictly beyond
+it. Missing levels exclude a setup instead of generating ATR-based targets.
+Displayed reward/risk is the first **underlying-price** target distance divided
+by stop distance; it is not the option contract's expected return. ATR is labelled
+as historical daily range, and relative strength as a five-day measure.
+
+The scan uses the [published NYSE equity-session calendar](https://www.nyse.com/trade/hours-calendars)
+for 2026–2028, including holidays and early closes. Extend the calendar before
+2029; unknown years fail closed. Unscheduled exchange closures are not encoded,
+so current-session data checks remain necessary. Scanning ends at the underlying
+regular-session close even where some options trade later.
+
+The visible page checks for a new scan every five minutes; requests are guarded
+against overlap and failed requests have a five-minute retry interval. Refresh
+picks starts a manual refresh. Missing data and stale results are identified.
+
+Validation: `python3 -m unittest discover -s tests -p 'test_*.py'` and
+`node tests/top-trade-ui.cjs`. These verify correctness, not trading performance.
+A performance study should preserve point-in-time input snapshots and compare
+subsequent outcomes on held-out sessions, including bid/ask costs and slippage,
+before changing weights or presenting a measured success rate.

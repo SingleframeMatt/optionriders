@@ -1,0 +1,18 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert'),path=require('path');
+const src=fs.readFileSync(process.argv[2]||path.join(__dirname,'..','app.js'),'utf8');
+const elements=Object.fromEntries(['topTradeSummary','topTradeGrid','topTradeMeta'].map(id=>[id,{innerHTML:'',textContent:''}]));
+const escapeHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+const state={generatedAt:Date.now()/1000,marketDate:'2026-09-16',sessionLabel:'Regular session',dataWarnings:['missing <quote>'],picks:[{ticker:'SPY',direction:'Put',score:60,status:'Watch for confirmation',barAsOf:Date.now()/1000-120,profitTargets:[99,98],rewardRisk:1.5,spreadPct:3,bestContractIdea:{strike:'100 Put',expiry:'2026-09-18'}}]};
+const context=vm.createContext({document:{getElementById:id=>elements[id]},TOP_TRADE_TODAY:state,Intl,Date,Number,Math,escapeHtml});
+vm.runInContext(src.slice(src.indexOf('function getTopTradeHighlightStyle'),src.indexOf('function startTopTradeLoadingProgress')),context);
+const render=()=>vm.runInContext('renderTopTradeToday()',context);
+render();
+assert.match(elements.topTradeGrid.innerHTML,/Setup points/);
+assert.doesNotMatch(elements.topTradeGrid.innerHTML,/Confidence|Best Contract|Delta \/ Risk/);
+assert.match(elements.topTradeGrid.innerHTML,/1.50 : 1 underlying reward\/risk/);
+assert.match(elements.topTradeGrid.innerHTML,/100 Put/);
+assert.match(elements.topTradeSummary.innerHTML,/missing &lt;quote&gt;/);
+state.generatedAt=Date.now()/1000-400;render();assert.match(elements.topTradeSummary.innerHTML,/over five minutes old/);
+state.picks=[];state.summary='No qualifying setups';render();assert.match(elements.topTradeGrid.innerHTML,/No qualifying setups/);
+assert.doesNotMatch(elements.topTradeGrid.innerHTML,/top-trade-card/);
+console.log('Passed: honest score/contract labels, reward-risk display, stale warnings, escaped provider text, empty-board rendering.');

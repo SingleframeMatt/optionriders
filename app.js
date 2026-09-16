@@ -1675,9 +1675,8 @@ function renderMarketRadar() {
 
 function getTopTradeHighlightStyle(pick = {}) {
   const score = Number(pick.score || 0);
-  const confidence = Number(pick.confidence || 0);
-  const normalized = Math.max(0, Math.min(1, ((score / 100) * 0.7) + ((confidence / 10) * 0.3)));
-  const useGoldPalette = confidence >= 9;
+  const normalized = Math.max(0, Math.min(1, score / 100));
+  const useGoldPalette = score >= 80;
 
   const borderAlpha = (0.12 + normalized * 0.42).toFixed(3);
   const glowAlpha = (0.06 + normalized * 0.28).toFixed(3);
@@ -1750,14 +1749,14 @@ function renderTopTradeToday() {
 
   const avoidText = TOP_TRADE_TODAY.namesToAvoid?.length
     ? TOP_TRADE_TODAY.namesToAvoid.join(', ')
-    : 'None with clear liquidity issues yet';
+    : 'None flagged in the available quotes';
   const macroText = TOP_TRADE_TODAY.macroRisks?.length
     ? TOP_TRADE_TODAY.macroRisks.slice(0, 2).join(' · ')
-    : 'No major scheduled macro risk in the feed';
+    : 'Calendar data unavailable or no high-impact events returned';
 
   summary.innerHTML = `
     <div class="top-trade-summary-card top-trade-summary-card-best">
-      <span class="top-trade-summary-label">Best Overall</span>
+      <span class="top-trade-summary-label">Highest-ranked watch</span>
       <div class="top-trade-summary-value">${escapeHtml(TOP_TRADE_TODAY.bestOverallPick || 'No trade')}</div>
       <span class="top-trade-summary-star" aria-hidden="true">★</span>
     </div>
@@ -1770,7 +1769,7 @@ function renderTopTradeToday() {
       <div class="top-trade-summary-value ${TOP_TRADE_TODAY.choppyDayWarning ? 'warning' : ''}">${TOP_TRADE_TODAY.choppyDayWarning ? 'Yes' : 'No'}</div>
     </div>
     <div class="top-trade-summary-card top-trade-summary-card-danger">
-      <span class="top-trade-summary-label">Names To Avoid</span>
+      <span class="top-trade-summary-label">Wide option spreads</span>
       <div class="top-trade-summary-value">${escapeHtml(avoidText)}</div>
     </div>
     <div class="top-trade-summary-card" style="grid-column: 1 / -1;">
@@ -1778,6 +1777,14 @@ function renderTopTradeToday() {
       <div class="top-trade-summary-value">${escapeHtml(macroText)}</div>
     </div>
   `;
+
+  const dataWarnings = TOP_TRADE_TODAY.dataWarnings || [];
+  const stale = TOP_TRADE_TODAY.generatedAt && Date.now() / 1000 - TOP_TRADE_TODAY.generatedAt > 300;
+  summary.innerHTML += `<div class="top-trade-summary-card" style="grid-column:1 / -1;">
+    <span class="top-trade-summary-label">Screening quality</span>
+    <div class="top-trade-summary-value">${escapeHtml(TOP_TRADE_TODAY.scoreMethod || 'Heuristic ranking points; success rate unmeasured.')}
+    ${stale ? '<br>Results are over five minutes old. Refresh before using this watchlist.' : ''}
+    ${dataWarnings.length ? '<br>' + dataWarnings.map(escapeHtml).join('<br>') : ''}</div></div>`;
 
   if (!TOP_TRADE_TODAY.picks?.length) {
     grid.innerHTML = `<div class="top-trade-empty">${escapeHtml(TOP_TRADE_TODAY.summary || 'No clean setups right now. Do not force trades.')}</div>`;
@@ -1795,12 +1802,17 @@ function renderTopTradeToday() {
       : 'Trail once paid';
     const directionClass = String(pick.direction || '').toLowerCase();
     const highlightStyle = getTopTradeHighlightStyle(pick);
+    const candleTime = pick.barAsOf ? new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York', timeZoneName: 'short'
+    }).format(new Date(pick.barAsOf * 1000)) : 'Unavailable';
+    const spreadLabel = Number.isFinite(pick.spreadPct) ? `${pick.spreadPct.toFixed(1)}% of mid` : 'Unverified';
+    const rewardRiskLabel = Number.isFinite(pick.rewardRisk) ? `${pick.rewardRisk.toFixed(2)} : 1 underlying reward/risk` : 'Unavailable';
     const bottomLine = pick.bottomLine || pick.summary || pick.why || '—';
 
     return `
       <article class="top-trade-card top-trade-card-highlight" style="${highlightStyle}" tabindex="0">
         <div class="top-trade-rank-row">
-          <span class="top-trade-rank-badge ${index === 0 ? 'is-top' : ''}">${index === 0 ? 'Top Pick #1' : `Top Pick #${index + 1}`}</span>
+          <span class="top-trade-rank-badge ${index === 0 ? 'is-top' : ''}">Watch #${index + 1}</span>
         </div>
         <div class="top-trade-card-header">
           <div class="top-trade-card-left">
@@ -1809,11 +1821,12 @@ function renderTopTradeToday() {
             <span class="top-trade-setup">${escapeHtml(pick.setupType || 'Setup')}</span>
           </div>
           <div class="top-trade-confidence">
-            <span class="top-trade-confidence-score">${escapeHtml(String(pick.confidence || '—'))}/10</span>
-            <span class="top-trade-confidence-label">Confidence</span>
+            <span class="top-trade-confidence-score">${escapeHtml(String(pick.score ?? '—'))}</span>
+            <span class="top-trade-confidence-label">Setup points</span>
           </div>
         </div>
         <div class="top-trade-body">
+          <p class="top-trade-copy">${escapeHtml(pick.status || 'Watch for confirmation')} · completed 2m candle ${escapeHtml(candleTime)}</p>
           <p class="top-trade-copy">${escapeHtml(pick.why || '')}</p>
           <div class="top-trade-level-grid">
             <div class="top-trade-level">
@@ -1828,15 +1841,15 @@ function renderTopTradeToday() {
           <div class="top-trade-contract-grid">
             <div class="top-trade-contract">
               <span class="top-trade-contract-label">Targets</span>
-              <div class="top-trade-contract-value">${escapeHtml(targets)}</div>
+              <div class="top-trade-contract-value">${escapeHtml(targets)}<br>${escapeHtml(rewardRiskLabel)}</div>
             </div>
             <div class="top-trade-contract">
-              <span class="top-trade-contract-label">Best Contract</span>
+              <span class="top-trade-contract-label">Indicative ATM contract</span>
               <div class="top-trade-contract-value">${escapeHtml(pick.bestContractIdea?.strike || '—')}<br>${escapeHtml(pick.bestContractIdea?.expiry || '—')}</div>
             </div>
             <div class="top-trade-contract">
-              <span class="top-trade-contract-label">Delta / Risk</span>
-              <div class="top-trade-contract-value">${escapeHtml(pick.bestContractIdea?.deltaPreference || '—')}<br>${escapeHtml(pick.riskLevel || '—')}</div>
+              <span class="top-trade-contract-label">Quoted spread</span>
+              <div class="top-trade-contract-value">${escapeHtml(spreadLabel)}<br>Confirm live bid/ask</div>
             </div>
           </div>
           <div class="top-trade-footer-grid">
@@ -2791,6 +2804,8 @@ function applyTopWatchPayload(payload) {
 }
 
 function applyTopTradePayload(payload) {
+  TOP_TRADE_TODAY.dataWarnings = payload?.dataWarnings || [];
+  TOP_TRADE_TODAY.scoreMethod = payload?.scoreMethod || '';
   TOP_TRADE_TODAY.picks = payload?.picks || [];
   TOP_TRADE_TODAY.bestOverallPick = payload?.bestOverallPick || '';
   TOP_TRADE_TODAY.namesToAvoid = payload?.namesToAvoid || [];
@@ -2827,7 +2842,12 @@ async function maybeRunMarketOpenRefresh() {
 function initMarketOpenRefreshMonitor() {
   if (_marketOpenMonitor) clearInterval(_marketOpenMonitor);
   _marketOpenMonitor = window.setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
     maybeRunMarketOpenRefresh();
+    if (!TOP_TRADE_TODAY.loading && Date.now() / 1000 - (TOP_TRADE_TODAY.lastAttemptAt || 0) >= 300) {
+      fetchTopTradeToday();
+    }
+    renderTopTradeToday();
   }, 60 * 1000);
 }
 
@@ -2856,6 +2876,8 @@ async function fetchTopWatch(forceFresh = false) {
 }
 
 async function fetchTopTradeToday(forceFresh = false) {
+  if (TOP_TRADE_TODAY.loading && TOP_TRADE_TODAY.lastAttemptAt) return;
+  TOP_TRADE_TODAY.lastAttemptAt = Date.now() / 1000;
   TOP_TRADE_TODAY.loading = true;
   startTopTradeLoadingProgress();
   renderTopTradeToday();
@@ -2880,7 +2902,7 @@ async function fetchTopTradeToday(forceFresh = false) {
     TOP_TRADE_TODAY.choppyDayWarning = false;
     TOP_TRADE_TODAY.loading = false;
     stopTopTradeLoadingProgress();
-    TOP_TRADE_TODAY.error = 'Run the dashboard server to enable Top Trade Today.';
+    TOP_TRADE_TODAY.error = 'Market data is unavailable. No picks shown; try Refresh picks shortly.';
   }
 
   renderTopTradeToday();
@@ -3886,6 +3908,7 @@ async function init() {
   mergeOptionsFlowIntoScores();
   // Draw sparkline charts after DOM is ready (live data already merged above if available)
   requestAnimationFrame(() => initAllCharts());
+  document.getElementById('topTradeRefresh')?.addEventListener('click', () => fetchTopTradeToday(true));
   initMarketOpenRefreshMonitor();
 }
 

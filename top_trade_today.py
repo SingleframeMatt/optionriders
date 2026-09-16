@@ -2,7 +2,7 @@
 """
 top_trade_today.py — Daily options setup engine for Option Riders.
 
-Builds up to three high-conviction setups for the current U.S. trading session
+Builds up to four screened watchlist setups for the current U.S. trading session
 from live market data, macro events, options flow, and cross-source momentum.
 """
 
@@ -14,7 +14,7 @@ import threading
 import time
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Dict, Iterable, List, Optional
 from zoneinfo import ZoneInfo
 
@@ -25,10 +25,22 @@ from top_watch import fetch_top_watch
 
 
 CACHE_TTL_SECONDS = 300
+MAX_BAR_AGE_SECONDS = 600  # Last completed 2-minute candle; excludes stale sessions.
+MAX_SOURCE_AGE_SECONDS = 900
+MAX_OPTION_SPREAD_PCT = 10.0  # Screening policy, not an empirically optimized threshold.
 # Minimum current-session pre-market gap (vs prior close) for a name to survive
 # the pre-market scan. Below this it chops after the open — no move, no trade.
 PREMARKET_GAP_MIN = 0.5
 NY_TZ = ZoneInfo("America/New_York")
+# Published NYSE equity-session calendar, verified 2026-09-16:
+# https://www.nyse.com/trade/hours-calendars
+# Unknown years fail closed until the published schedule is updated.
+_SESSION_HOLIDAYS = {
+    2026: {"01-01", "01-19", "02-16", "04-03", "05-25", "06-19", "07-03", "09-07", "11-26", "12-25"},
+    2027: {"01-01", "01-18", "02-15", "03-26", "05-31", "06-18", "07-05", "09-06", "11-25", "12-24"},
+    2028: {"01-17", "02-21", "04-14", "05-29", "06-19", "07-04", "09-04", "11-23", "12-25"},
+}
+_EARLY_CLOSE_DATES = {"2026-11-27", "2026-12-24", "2027-11-26", "2028-07-03", "2028-11-24"}
 PRIMARY_UNIVERSE = ["SPY", "QQQ", "NVDA", "TSLA", "AMD", "SMCI", "META", "AAPL", "MSFT", "AMZN"]
 CALENDAR_SOURCES = [
     "https://api.allorigins.win/raw?url=https%3A%2F%2Fnfs.faireconomy.media%2Fff_calendar_thisweek.json",
@@ -64,11 +76,18 @@ def _session_key(now: datetime) -> str:
 
 
 def _market_session_label(now: datetime) -> str:
+    now = now.astimezone(NY_TZ)
+    if now.year not in _SESSION_HOLIDAYS:
+        return "Calendar unavailable"
+    if now.strftime("%m-%d") in _SESSION_HOLIDAYS[now.year]:
+        return "Market closed"
     open_dt = now.replace(hour=9, minute=30, second=0, microsecond=0)
-    close_dt = now.replace(hour=16, minute=0, second=0, microsecond=0)
+    close_dt = now.replace(hour=13 if now.date().isoformat() in _EARLY_CLOSE_DATES else 16, minute=0, second=0, microsecond=0)
+    if now.weekday() >= 5 or now.hour < 4:
+        return "Market closed"
     if now < open_dt:
         return "Pre-market"
-    if now <= close_dt:
+    if now < close_dt:
         return "Regular session"
     return "Post-close"
 
@@ -114,6 +133,7 @@ def _fetch_macro_events() -> Dict[str, List[dict]]:
                 continue
             event_dt = datetime.fromisoformat(str(event["date"]).replace("Z", "+00:00")).astimezone(NY_TZ)
             entry = {
+                "timestamp": int(event_dt.timestamp()),
                 "title": event.get("title") or "Unnamed event",
                 "time": event_dt.strftime("%-I:%M %p ET"),
                 "date": event_dt.date().isoformat(),
@@ -156,9 +176,8 @@ def _safe_pct_move(current: Optional[float], previous: Optional[float]) -> float
 def _parse_trigger_number(text: str) -> Optional[float]:
     if not text:
         return None
-    digits = []
     allowed = set("0123456789.")
-    for token in text.replace(",", " ").split():
+    for token in text.replace(",", "").split():
         cleaned = "".join(ch for ch in token if ch in allowed)
         if cleaned.count(".") <= 1 and cleaned and cleaned != ".":
             try:
@@ -168,6 +187,35 @@ def _parse_trigger_number(text: str) -> Optional[float]:
     return None
 
 
+def _frame_bars(frame, now: datetime, minutes: int) -> dict:
+    """Keep aligned OHLCV rows and their actual timestamps; omit forming bars."""
+    result = {key: [] for key in ("time", "open", "high", "low", "close", "volume")}
+    if frame is None or frame.empty:
+        return result
+    frame = frame.sort_index()
+    frame = frame[~frame.index.duplicated(keep="last")]
+    for stamp, row in frame.iterrows():
+        if stamp.tzinfo is None:
+            continue  # Intraday timezone must be known, not guessed.
+        ts = int(stamp.timestamp())
+        if ts + minutes * 60 > now.timestamp():
+            continue
+        try:
+            values = {field: float(row[field.title()]) for field in ("open", "high", "low", "close", "volume")}
+            if not all(math.isfinite(v) for v in values.values()):
+                continue
+            if min(values[k] for k in ("open", "high", "low", "close")) <= 0 or values["volume"] < 0:
+                continue
+            if values["low"] > min(values["open"], values["close"]) or values["high"] < max(values["open"], values["close"]):
+                continue
+        except (KeyError, TypeError, ValueError):
+            continue
+        result["time"].append(ts)
+        for field, value in values.items():
+            result[field].append(value)
+    return result
+
+
 def _download_multiframe(symbols: List[str]) -> Dict[str, dict]:
     if not symbols:
         return {}
@@ -175,75 +223,89 @@ def _download_multiframe(symbols: List[str]) -> Dict[str, dict]:
         import yfinance as yf
     except Exception:
         return {}
-
-    settings = {
-        "1h": {"period": "60d", "interval": "60m"},
-        "15m": {"period": "10d", "interval": "15m"},
-        "2m": {"period": "5d", "interval": "2m"},
-    }
+    settings = {"1h": ("60d", "60m", 60), "15m": ("10d", "15m", 15), "2m": ("5d", "2m", 2)}
     result = {symbol: {} for symbol in symbols}
-
-    for label, params in settings.items():
+    for label, (period, interval, minutes) in settings.items():
         try:
-            raw = yf.download(
-                symbols,
-                period=params["period"],
-                interval=params["interval"],
-                progress=False,
-                auto_adjust=True,
-                prepost=True,
-            )
+            raw = yf.download(symbols, period=period, interval=interval, progress=False,
+                              auto_adjust=True, prepost=(label != "1h"), timeout=10)
         except Exception:
             continue
-
-        def _series(field: str, symbol: str) -> List[float]:
-            try:
-                if hasattr(raw.columns, "levels"):
-                    return list(raw[field][symbol].dropna().astype(float))
-                return list(raw[field].dropna().astype(float))
-            except Exception:
-                return []
-
+        now = _now_ny()
         for symbol in symbols:
-            result[symbol][label] = {
-                "open": _series("Open", symbol),
-                "high": _series("High", symbol),
-                "low": _series("Low", symbol),
-                "close": _series("Close", symbol),
-                "volume": _series("Volume", symbol),
-            }
-
+            try:
+                frame = raw.xs(symbol, level=1, axis=1) if hasattr(raw.columns, "levels") else raw
+                result[symbol][label] = _frame_bars(frame, now, minutes)
+            except (KeyError, ValueError):
+                continue
     return result
 
 
 def _collapse_to_4h(one_hour: dict) -> dict:
-    closes = list(one_hour.get("close") or [])
-    highs = list(one_hour.get("high") or [])
-    lows = list(one_hour.get("low") or [])
-    opens = list(one_hour.get("open") or [])
-    volumes = list(one_hour.get("volume") or [])
-    if len(closes) < 8:
-        return {"open": [], "high": [], "low": [], "close": [], "volume": []}
-
-    result = {"open": [], "high": [], "low": [], "close": [], "volume": []}
-    for idx in range(0, len(closes), 4):
-        c_slice = closes[idx:idx + 4]
-        if len(c_slice) < 4:
+    # Only aggregate four contiguous RTH hours from one session, anchored at
+    # 09:30 ET. Never join the end of yesterday to the start of today.
+    result = {key: [] for key in ("time", "open", "high", "low", "close", "volume")}
+    times = one_hour.get("time") or []
+    for idx, ts in enumerate(times):
+        start = datetime.fromtimestamp(ts, NY_TZ)
+        if (start.hour, start.minute) != (9, 30) or start.date().isoformat() in _EARLY_CLOSE_DATES:
             continue
-        o_slice = opens[idx:idx + 4]
-        h_slice = highs[idx:idx + 4]
-        l_slice = lows[idx:idx + 4]
-        v_slice = volumes[idx:idx + 4]
-        result["open"].append(o_slice[0])
-        result["high"].append(max(h_slice))
-        result["low"].append(min(l_slice))
-        result["close"].append(c_slice[-1])
-        result["volume"].append(sum(v_slice) if v_slice else 0.0)
+        chunk = times[idx:idx + 4]
+        if chunk != [ts + n * 3600 for n in range(4)]:
+            continue
+        result["time"].append(ts)
+        result["open"].append(one_hour["open"][idx])
+        result["close"].append(one_hour["close"][idx + 3])
+        result["high"].append(max(one_hour["high"][idx:idx + 4]))
+        result["low"].append(min(one_hour["low"][idx:idx + 4]))
+        result["volume"].append(sum(one_hour["volume"][idx:idx + 4]))
     return result
 
 
+def _fresh_intraday(two_min: dict, now: datetime, minutes: int = 2) -> bool:
+    times = two_min.get("time") or []
+    if not times or len(two_min.get("close") or []) < 21:
+        return False
+    last = datetime.fromtimestamp(times[-1], NY_TZ)
+    return last.date() == now.date() and minutes * 60 <= now.timestamp() - times[-1] <= minutes * 60 + MAX_BAR_AGE_SECONDS - 120
+
+
+def _number(value) -> Optional[float]:
+    try:
+        number = float(str(value).replace("$", "").replace(",", ""))
+        return number if math.isfinite(number) else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _option_quote(row: Optional[dict], direction: str) -> Optional[dict]:
+    quote = (row or {}).get("call" if direction == "Call" else "put") or {}
+    bid, ask = _number(quote.get("bid")), _number(quote.get("ask"))
+    if bid is None or ask is None or bid <= 0 or ask < bid:
+        return None
+    mid = (bid + ask) / 2
+    return {**quote, "spread": ask - bid, "spreadPct": (ask - bid) / mid * 100}
+
+
+def _trade_levels(item: dict, direction: str) -> Optional[dict]:
+    trigger = _parse_trigger_number(str(item.get("bullTrigger" if direction == "Call" else "bearTrigger") or ""))
+    if trigger is None or not math.isfinite(trigger) or trigger <= 0:
+        return None
+    support = sorted({n for v in (item.get("support") or []) if (n := _number(v)) is not None and n > 0})
+    resistance = sorted({n for v in (item.get("resistance") or []) if (n := _number(v)) is not None and n > 0})
+    stops = [n for n in (support if direction == "Call" else resistance) if (n < trigger if direction == "Call" else n > trigger)]
+    targets = [n for n in (resistance if direction == "Call" else support) if (n > trigger if direction == "Call" else n < trigger)]
+    if not stops or not targets:
+        return None  # Do not manufacture profit targets from ATR.
+    stop = max(stops) if direction == "Call" else min(stops)
+    targets.sort(reverse=direction == "Put")
+    risk = abs(trigger - stop)
+    return {"trigger": trigger, "stop": stop, "targets": targets[:2],
+            "rewardRisk": round(abs(targets[0] - trigger) / risk, 2)}
+
+
 def _snapshot_from_closes(label: str, closes: List[float]) -> TimeframeSnapshot:
-    if len(closes) < 8:
+    if len(closes) < 21:
         return TimeframeSnapshot(label=label, direction="neutral", trend_score=0.0, momentum=0.0, above_fast=False, above_slow=False)
 
     fast = _sma(closes, 8)
@@ -287,40 +349,6 @@ def _build_timeframe_snapshots(symbol: str, intraday: Dict[str, dict]) -> Dict[s
     }
 
 
-def _next_friday(today: datetime) -> str:
-    days_until_friday = (4 - today.weekday()) % 7
-    if days_until_friday == 0 and today.hour >= 12:
-        days_until_friday = 7
-    expiry = today + timedelta(days=days_until_friday)
-    return expiry.strftime("%b %-d, %Y")
-
-
-def _round_strike(price: float, direction: str) -> float:
-    if price >= 500:
-        step = 5
-    elif price >= 200:
-        step = 2.5
-    elif price >= 50:
-        step = 1
-    else:
-        step = 0.5
-    if direction == "Call":
-        return math.ceil(price / step) * step
-    return math.floor(price / step) * step
-
-
-def _format_strike(value: float) -> str:
-    return str(int(value)) if float(value).is_integer() else f"{value:.1f}"
-
-
-def _quality_bucket(score: float) -> str:
-    if score >= 72:
-        return "Low"
-    if score >= 56:
-        return "Medium"
-    return "High"
-
-
 def _build_setup_type(direction: str, item: dict, tf: Dict[str, TimeframeSnapshot]) -> str:
     bias = str(item.get("bias") or "")
     signal_score = item.get("signalScore") or 0
@@ -348,12 +376,12 @@ def _summarize_why(symbol: str, direction: str, item: dict, top_watch_item: Opti
     if rel is not None:
         label = "relative strength" if rel > 0 else "relative weakness"
         if direction == "Call" and rel > 0:
-            parts.append(f"{rel:+.1f}% {label} vs SPY")
+            parts.append(f"{rel:+.1f}% five-day {label} vs SPY")
         elif direction == "Put" and rel < 0:
-            parts.append(f"{rel:+.1f}% {label} vs SPY")
+            parts.append(f"{rel:+.1f}% five-day {label} vs SPY")
     move_pct = item.get("_expectedMovePct") or 0
     if move_pct:
-        parts.append(f"{move_pct:.1f}% expected move")
+        parts.append(f"{move_pct:.1f}% historical daily ATR")
     if top_watch_item and top_watch_item.get("sourceCount", 0) >= 2:
         parts.append(f"cross-source interest ({top_watch_item['sourceCount']}/4)")
     if unusual_bias:
@@ -445,14 +473,11 @@ def _score_candidate(symbol: str, item: dict, atm_spread_row: Optional[dict], to
     signal_score = float(item.get("signalScore") or 0.0)
     rel_strength = float(item.get("relStrength") or 0.0)
     expected_move_pct = float(item.get("_expectedMovePct") or 0.0)
-    spread = None
+    if not all(math.isfinite(v) for v in (price, signal_score, rel_strength, expected_move_pct)):
+        return None
     ratio = None
     leader = "balanced"
     if atm_spread_row:
-        call_spread = (((atm_spread_row.get("call") or {}).get("spread")) if isinstance(atm_spread_row.get("call"), dict) else None)
-        put_spread = (((atm_spread_row.get("put") or {}).get("spread")) if isinstance(atm_spread_row.get("put"), dict) else None)
-        values = [value for value in (call_spread, put_spread) if isinstance(value, (int, float))]
-        spread = min(values) if values else None
         ratio = ((atm_spread_row.get("putCallRatio") or {}).get("ratio")) if isinstance(atm_spread_row.get("putCallRatio"), dict) else None
         leader = ((atm_spread_row.get("putCallRatio") or {}).get("leader")) if isinstance(atm_spread_row.get("putCallRatio"), dict) else "balanced"
 
@@ -486,17 +511,12 @@ def _score_candidate(symbol: str, item: dict, atm_spread_row: Optional[dict], to
         call_score += 4.0
     elif leader == "puts":
         put_score += 4.0
-    if spread is not None:
-        penalty = 0.0 if spread <= 0.08 else 4.0 if spread <= 0.15 else 12.0
-        call_score -= penalty
-        put_score -= penalty
     if session.get("choppy"):
         call_score -= 3.0
         put_score -= 3.0
 
     # ── Current-session pre-market gap filter ──────────────────────────────
-    # Only gates during the actual pre-market window and only when the feed is
-    # fresh (bars stamped today). Yahoo zeroes 1-min pre-market volume, so the
+    # Requires current-session pre-market data. Yahoo zeroes 1-min volume, so the
     # confirmation is gap magnitude + presence of today's pre-market bars, not
     # reported volume.
     gap_pct = float((pm or {}).get("gapPct") or 0.0)
@@ -504,27 +524,25 @@ def _score_candidate(symbol: str, item: dict, atm_spread_row: Optional[dict], to
     has_pm = bool((pm or {}).get("hasPremarket"))
     pm_stale = bool((pm or {}).get("stale"))
 
-    if is_premarket and pm and not pm_stale:
-        # Gap direction pushes the call/put lean.
+    if is_premarket:
+        if not pm or pm_stale or not has_pm or abs_gap < PREMARKET_GAP_MIN:
+            return None
         if gap_pct > 0:
             call_score += min(abs_gap, 4.0) * 4.0
             put_score -= min(abs_gap, 4.0) * 2.0
-        elif gap_pct < 0:
+        else:
             put_score += min(abs_gap, 4.0) * 4.0
             call_score -= min(abs_gap, 4.0) * 2.0
 
-        # STRONG FILTER: no real pre-market move this morning = bury it.
-        if abs_gap < PREMARKET_GAP_MIN or not has_pm:
-            call_score -= 40.0
-            put_score -= 40.0
-
-        # MSFT weak-gap chop trap: never surface MSFT on a sub-0.5% pre-market
-        # gap — it chops and dies after the open drive.
-        if symbol == "MSFT" and abs_gap < PREMARKET_GAP_MIN:
-            return None
-
+    if call_score == put_score:
+        return None
     direction = "Call" if call_score >= put_score else "Put"
-    best_score = max(call_score, put_score)
+    quote = _option_quote(atm_spread_row, direction)
+    if quote is None or quote["spreadPct"] > MAX_OPTION_SPREAD_PCT:
+        return None
+    spread = quote["spread"]
+    penalty = 0.0 if spread <= 0.08 else 4.0 if spread <= 0.15 else 12.0
+    best_score = max(call_score, put_score) - penalty
     if best_score < 26:
         return None
 
@@ -538,7 +556,7 @@ def _score_candidate(symbol: str, item: dict, atm_spread_row: Optional[dict], to
         "ticker": symbol,
         "direction": direction,
         "score": round(best_score, 1),
-        "confidence": round(min(9.6, max(4.8, 5.0 + (best_score / 18.0))), 1),
+        "quote": quote,
         "spread": spread,
         "putCallRatio": ratio,
         "putCallLeader": leader,
@@ -550,17 +568,38 @@ def _score_candidate(symbol: str, item: dict, atm_spread_row: Optional[dict], to
 
 def fetch_top_trade_today(force_refresh: bool = False) -> dict:
     now = _now_ny()
-    today_key = _session_key(now)
+    today_key = f"{_session_key(now)}:{_market_session_label(now)}"
 
     if not force_refresh:
         with _cache_lock:
             if _cache["payload"] and _cache["expires_at"] > time.time() and _cache["session_key"] == today_key:
                 return _cache["payload"]
 
+    session_label = _market_session_label(now)
+    if session_label in {"Market closed", "Post-close", "Calendar unavailable"}:
+        return {"marketDate": now.date().isoformat(), "generatedAt": int(now.timestamp()),
+                "sessionLabel": session_label, "sessionType": "Outside scan hours", "picks": [],
+                "bestOverallPick": "", "summary": "Intraday screening resumes during the next weekday session. No active picks outside verified scan hours.",
+                "liveData": False, "dataWarnings": ["Update the exchange calendar before screening this year."] if session_label == "Calendar unavailable" else []}
+    warnings = []
     market_payload = fetch_market_data(force_refresh=force_refresh)
-    flow_payload = fetch_options_activity(force_refresh=force_refresh)
-    top_watch_payload = fetch_top_watch(force_refresh=force_refresh)
+    try:
+        flow_payload = fetch_options_activity(force_refresh=force_refresh)
+    except Exception:
+        flow_payload = {}
+        warnings.append("Options quotes unavailable; no contract-qualified picks.")
+    try:
+        top_watch_payload = fetch_top_watch(force_refresh=force_refresh)
+    except Exception:
+        top_watch_payload = {}
+        warnings.append("Cross-source interest unavailable.")
     macro_events = _fetch_macro_events()
+    # A refresh timestamp is not a quote timestamp. Reject old source snapshots
+    # and disclose the absence of exchange quote timestamps on the cards.
+    flow_age = _now_ny().timestamp() - (_number(flow_payload.get("updatedAt")) or 0)
+    if not 0 <= flow_age <= MAX_SOURCE_AGE_SECONDS:
+        flow_payload = {}
+        warnings.append("Options snapshot missing or stale; refresh required.")
     session = _classify_session(market_payload, macro_events)
 
     candidate_symbols = _build_candidate_universe(market_payload, flow_payload, top_watch_payload)
@@ -575,18 +614,33 @@ def fetch_top_trade_today(force_refresh: bool = False) -> dict:
         if symbol:
             unusual_by_symbol.setdefault(symbol, []).append(row)
 
+    # Avoid downloading symbols we cannot score from the market payload.
+    candidate_symbols = [symbol for symbol in candidate_symbols if symbol in ticker_lookup or symbol in index_lookup]
+    market_age = _now_ny().timestamp() - (_number(market_payload.get("updatedAt")) or 0)
+    if not 0 <= market_age <= MAX_SOURCE_AGE_SECONDS:
+        candidate_symbols = []
+        warnings.append("Market snapshot missing or stale; refresh required.")
     intraday = _download_multiframe(candidate_symbols)
+    now = _now_ny()
     is_premarket = _market_session_label(now) == "Pre-market"
+    if _market_session_label(now) in {"Market closed", "Post-close", "Calendar unavailable"}:
+        return fetch_top_trade_today(force_refresh=True)
     premarket_snaps = fetch_premarket(candidate_symbols, now)
     picks = []
+    excluded = {"staleBars": 0, "screening": 0, "invalidLevels": 0, "expiredContract": 0}
 
     for symbol in candidate_symbols:
         market_item = ticker_lookup.get(symbol) or index_lookup.get(symbol)
         if not market_item:
             continue
 
+        two_min = intraday.get(symbol, {}).get("2m", {})
+        if not _fresh_intraday(two_min, now) or not _fresh_intraday(intraday.get(symbol, {}).get("15m", {}), now, 15):
+            excluded["staleBars"] += 1
+            continue
         item = dict(market_item)
         item.update(watch_lookup.get(symbol) or {})
+        item["price"] = two_min["close"][-1]
         item["_expectedMovePct"] = 0.0
         expected_move = str(item.get("expectedMove") or "")
         if "(" in expected_move and "%" in expected_move:
@@ -605,6 +659,7 @@ def fetch_top_trade_today(force_refresh: bool = False) -> dict:
         item["_gapPct"] = float((pm_dict or {}).get("gapPct") or 0.0)
         scored = _score_candidate(symbol, item, atm_row, top_watch_item, unusual_by_symbol.get(symbol, []), tf, session, pm_dict, is_premarket)
         if not scored:
+            excluded["screening"] += 1
             continue
 
         direction = scored["direction"]
@@ -613,18 +668,20 @@ def fetch_top_trade_today(force_refresh: bool = False) -> dict:
         resistance = list(item.get("resistance") or [])
         bull_trigger = str(item.get("bullTrigger") or "")
         bear_trigger = str(item.get("bearTrigger") or "")
-        price = float(item.get("price") or 0.0)
-        trigger_level = _parse_trigger_number(bull_trigger if direction == "Call" else bear_trigger)
-        stop_level = support[0] if direction == "Call" and support else resistance[0] if resistance else None
-        if direction == "Put":
-            stop_level = resistance[0] if resistance else None
-        targets = resistance[:2] if direction == "Call" else support[:2]
-        if not targets:
-            atr = float(item.get("atr") or 0.0)
-            targets = [round(price + atr, 2)] if direction == "Call" else [round(price - atr, 2)]
-
-        strike_basis = trigger_level or price
-        strike = _round_strike(strike_basis, direction)
+        levels = _trade_levels(item, direction)
+        if not levels:
+            excluded["invalidLevels"] += 1
+            continue
+        trigger_level, stop_level, targets = levels["trigger"], levels["stop"], levels["targets"]
+        quote = scored["quote"]
+        try:
+            expiry_date = datetime.fromisoformat(str(quote.get("expirationDate"))).date()
+        except (ValueError, TypeError):
+            excluded["expiredContract"] += 1
+            continue
+        if expiry_date < now.date():
+            excluded["expiredContract"] += 1
+            continue
         spread_value = scored["spread"]
         item["_spreadDollars"] = spread_value
 
@@ -645,12 +702,15 @@ def fetch_top_trade_today(force_refresh: bool = False) -> dict:
             "stopInvalidation": f"Back through {stop_level}" if stop_level is not None else "Failed break back inside range",
             "profitTargets": targets,
             "bestContractIdea": {
-                "strike": f"{_format_strike(strike)}{'C' if direction == 'Call' else 'P'}",
-                "expiry": _next_friday(now),
-                "deltaPreference": "0.35 to 0.50",
+                "strike": quote.get("contract") or "Unavailable",
+                "expiry": quote.get("expirationDate"),
             },
-            "riskLevel": _quality_bucket(scored["score"]),
-            "confidence": scored["confidence"],
+            "spreadPct": round(quote["spreadPct"], 2),
+            "rewardRisk": levels["rewardRisk"],
+            "barAsOf": two_min["time"][-1],
+            "quoteFetchedAt": flow_payload.get("updatedAt"),
+            "status": "Pre-market watch" if is_premarket else "Watch for confirmation",
+            "bottomLine": "Watchlist setup only. Confirm the trigger and live option bid/ask; source quote timestamps and delta are unavailable.",
             "ruinRisk": _build_risk_line(symbol, direction, item, macro_events, scored["unusualBias"]),
             "score": scored["score"],
             "expectedMovePct": round(item["_expectedMovePct"], 1),
@@ -665,102 +725,32 @@ def fetch_top_trade_today(force_refresh: bool = False) -> dict:
         }
         picks.append(pick)
 
-    picks.sort(key=lambda item: (-item["score"], -item["confidence"], item["ticker"]))
-
-    confidence_floor = 6.3 if session["choppy"] else 6.0
-    preferred_picks = [pick for pick in picks if pick["confidence"] >= confidence_floor]
-    fallback_picks = [pick for pick in picks if pick["confidence"] < confidence_floor]
-    picks = (preferred_picks + fallback_picks)[:4]
-
-    # During pre-market, don't pad the board — a dead tape should show an honest
-    # short/empty list, not "least-bad" filler that skipped the gap gate.
-    if not picks and candidate_symbols and not is_premarket:
-        fallback_symbol = next((symbol for symbol in PRIMARY_UNIVERSE if symbol in ticker_lookup), None)
-        if fallback_symbol:
-            item = ticker_lookup[fallback_symbol]
-            picks = [{
-                "ticker": fallback_symbol,
-                "direction": "Call" if (item.get("signalScore") or 0) >= 0 else "Put",
-                "setupType": "Wait for confirmation",
-                "why": "Nothing is clean enough yet. This is only the least-bad liquid name on the board.",
-                "keyLevels": {
-                    "support": list(item.get("support") or [])[:2],
-                    "resistance": list(item.get("resistance") or [])[:2],
-                    "trigger": _parse_trigger_number(str(item.get("bullTrigger") or item.get("bearTrigger") or "")),
-                },
-                "triggerToEnter": str(item.get("bullTrigger") or item.get("bearTrigger") or "Wait for range break"),
-                "stopInvalidation": "Stand aside if the trigger does not confirm",
-                "profitTargets": list(item.get("resistance") or item.get("support") or [])[:2],
-                "bestContractIdea": {
-                    "strike": f"{_format_strike(_round_strike(float(item.get('price') or 0.0), 'Call'))}C",
-                    "expiry": _next_friday(now),
-                    "deltaPreference": "0.30 to 0.40",
-                },
-                "riskLevel": "High",
-                "confidence": 5.4,
-                "ruinRisk": "choppy tape and no clean confirmation",
-                "score": 24.0,
-                "expectedMovePct": round(float(item.get("atrPct") or 0.0), 1),
-                "spread": None,
-                "sessionAlignment": {},
-                "earningsDate": item.get("earningsDate"),
-            }]
-
-    if 0 < len(picks) < 4 and not is_premarket:
-        existing = {pick["ticker"] for pick in picks}
-        for symbol in candidate_symbols:
-            if len(picks) >= 4:
-                break
-            if symbol in existing or symbol not in ticker_lookup:
-                continue
-            item = ticker_lookup[symbol]
-            direction = "Call" if (item.get("signalScore") or 0) >= 0 else "Put"
-            picks.append({
-                "ticker": symbol,
-                "direction": direction,
-                "setupType": "Wait for confirmation",
-                "why": "This is a lower-conviction filler idea added to keep the board full. Wait for clean confirmation before acting.",
-                "keyLevels": {
-                    "support": list(item.get("support") or [])[:2],
-                    "resistance": list(item.get("resistance") or [])[:2],
-                    "trigger": _parse_trigger_number(str(item.get("bullTrigger") or item.get("bearTrigger") or "")),
-                },
-                "triggerToEnter": str(item.get("bullTrigger") or item.get("bearTrigger") or "Wait for range break"),
-                "stopInvalidation": "Stand aside if the trigger does not confirm",
-                "profitTargets": list(item.get("resistance") or item.get("support") or [])[:2],
-                "bestContractIdea": {
-                    "strike": f"{_format_strike(_round_strike(float(item.get('price') or 0.0), direction))}{'C' if direction == 'Call' else 'P'}",
-                    "expiry": _next_friday(now),
-                    "deltaPreference": "0.30 to 0.40",
-                },
-                "riskLevel": "High",
-                "confidence": 5.2,
-                "ruinRisk": "choppy tape and no clean confirmation",
-                "score": 20.0,
-                "expectedMovePct": round(float(item.get("atrPct") or 0.0), 1),
-                "spread": None,
-                "sessionAlignment": {},
-                "earningsDate": item.get("earningsDate"),
-            })
-            existing.add(symbol)
+    picks.sort(key=lambda item: (-item["score"], item["spreadPct"], item["ticker"]))
+    picks = picks[:4]  # Never pad the board with candidates that failed screening.
+    if excluded["staleBars"]:
+        warnings.append(f"{excluded['staleBars']} symbols excluded: missing or stale completed intraday candles.")
+    if excluded["screening"]:
+        warnings.append(f"{excluded['screening']} candidates excluded by direction, quote, spread or score checks.")
+    if excluded["expiredContract"]:
+        warnings.append(f"{excluded['expiredContract']} contracts excluded: missing or expired expiry dates.")
+    if excluded["invalidLevels"]:
+        warnings.append(f"{excluded['invalidLevels']} setups excluded: no valid stop or target beyond the entry.")
 
     avoid = []
     for symbol, row in atm_lookup.items():
-        call_spread = (((row.get("call") or {}).get("spread")) if isinstance(row.get("call"), dict) else None)
-        put_spread = (((row.get("put") or {}).get("spread")) if isinstance(row.get("put"), dict) else None)
-        worst = max(value for value in (call_spread, put_spread) if isinstance(value, (int, float))) if any(isinstance(value, (int, float)) for value in (call_spread, put_spread)) else None
-        if worst is not None and worst > 0.20:
-            avoid.append(symbol)
-    avoid = sorted(dict.fromkeys(avoid))[:5]
+        for direction in ("Call", "Put"):
+            quote = _option_quote(row, direction)
+            if quote and quote["spreadPct"] > MAX_OPTION_SPREAD_PCT:
+                avoid.append(f"{symbol} {direction}")
+    avoid = sorted(set(avoid))[:5]
 
     best_pick = picks[0]["ticker"] if picks else ""
     summary = (
-        f"If I only take one trade today, it should be {picks[0]['ticker']} {picks[0]['direction']} "
-        f"because it has the cleanest alignment between technicals, liquidity, and catalyst pressure."
-    ) if picks else "No trade. The board is not clean enough yet."
+        f"{best_pick} ranks highest among the screened watchlist setups. Confirm entry conditions before considering a trade."
+    ) if picks else "No qualifying setups right now. Missing data or failed screening does not produce a fallback trade."
 
     payload = {
-        "marketDate": today_key,
+        "marketDate": now.date().isoformat(),
         "generatedAt": int(time.time()),
         "sessionType": session["label"],
         "sessionLabel": _market_session_label(now),
@@ -771,7 +761,10 @@ def fetch_top_trade_today(force_refresh: bool = False) -> dict:
         "namesToAvoid": avoid,
         "summary": summary,
         "picks": picks[:4],
-        "liveData": True,
+        "liveData": bool(picks),
+        "dataWarnings": warnings,
+        "excluded": excluded,
+        "scoreMethod": "Heuristic ranking points; success rate unmeasured.",
     }
 
     with _cache_lock:
