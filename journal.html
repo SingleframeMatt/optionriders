@@ -93,13 +93,26 @@
   <section class="panel panel-goal">
     <div class="panel-head">
       <h2>Monthly Target</h2>
-      <span class="panel-sub" id="goalSub">£5,000 salary goal · resets on the 1st</span>
+      <span class="panel-sub" id="goalSub">Your monthly plan · progress resets on the 1st</span>
     </div>
+    <form id="goalSettingsForm" class="goal-settings-form">
+      <label><span id="goalCurrencyLabel">Monthly target (GBP)</span>
+        <input id="goalMonthlyInput" type="number" min="0.01" max="999999999.99" step="0.01" inputmode="decimal" required value="5000">
+      </label>
+      <label><span>Trading days / month</span>
+        <input id="goalDaysInput" type="number" min="1" max="31" step="1" inputmode="numeric" required value="20" aria-describedby="goalPlanHelp">
+      </label>
+      <div class="goal-daily-preview"><span>Daily target</span><output id="goalDailyPreview" for="goalMonthlyInput goalDaysInput" aria-live="polite">—</output></div>
+      <button id="goalSaveButton" class="btn btn-primary btn-sm" type="submit">Save target</button>
+      <p id="goalPlanHelp" class="goal-plan-help">Monthly target ÷ planned trading days. Starts at 20 days; adjust for your schedule.</p>
+      <p id="goalSaveStatus" class="goal-save-status" role="status"></p>
+    </form>
     <div class="goal-wrap">
-      <div class="goal-pie" id="goalPie" role="img" aria-label="Monthly profit progress toward £5,000"></div>
+      <div class="goal-pie" id="goalPie" role="img" aria-label="Monthly profit progress"></div>
       <div class="goal-meta">
         <div class="goal-amount" id="goalAmount">—</div>
-        <div class="goal-of">of £5,000 this month</div>
+        <div class="goal-of" id="goalOf">—</div>
+        <div class="goal-daily-target" id="goalDailyTarget">—</div>
         <div class="goal-pct" id="goalPct">—</div>
         <div class="goal-note" id="goalNote"></div>
         <div class="goal-rewards" id="goalRewards"></div>
@@ -110,7 +123,7 @@
   <section class="panel panel-why">
     <div class="why-eyebrow">Why I Trade</div>
     <h2 class="why-headline">Small, every day. That's the whole plan.</h2>
-    <div class="why-goal">&pound;5,000<span>/ month</span></div>
+    <div class="why-goal"><strong id="whyMonthlyTarget">—</strong><span>/ month</span></div>
 
     <div class="why-reasons">
       <div class="why-reason"><span class="why-reason-num">01</span><span><b>Freedom</b> to choose how I spend my time</span></div>
@@ -119,17 +132,17 @@
     </div>
 
     <div class="why-compound">
-      <div class="why-compound-label">Same plan, compounding</div>
+      <div class="why-compound-label">Your target, broken down</div>
       <div class="why-compound-row">
-        <div class="why-cstep"><div class="why-cstep-period">Day</div><div class="why-cstep-num">&pound;250</div></div>
-        <div class="why-cstep"><div class="why-cstep-period">Week</div><div class="why-cstep-num">&pound;1,250</div></div>
-        <div class="why-cstep"><div class="why-cstep-period">Month</div><div class="why-cstep-num">&pound;5,000</div></div>
-        <div class="why-cstep"><div class="why-cstep-period">Year</div><div class="why-cstep-num why-gold">&pound;60,000</div></div>
+        <div class="why-cstep"><div class="why-cstep-period">Day</div><div class="why-cstep-num" id="whyDailyTarget">—</div></div>
+        <div class="why-cstep"><div class="why-cstep-period">Week</div><div class="why-cstep-num" id="whyWeeklyTarget">—</div></div>
+        <div class="why-cstep"><div class="why-cstep-period">Month</div><div class="why-cstep-num" id="whyMonthTarget">—</div></div>
+        <div class="why-cstep"><div class="why-cstep-period">Year</div><div class="why-cstep-num why-gold" id="whyYearTarget">—</div></div>
       </div>
-      <p class="why-compound-note">&pound;250 a day, five days a week, twenty days a month. Nothing here needs a hero trade — just the same small number, on repeat.</p>
+      <p class="why-compound-note" id="whyPlanNote"></p>
     </div>
 
-    <div class="why-gate">Sized to the plan? &pound;250 today is a whole day well spent.</div>
+    <div class="why-gate" id="whyDailyGate"></div>
   </section>
 
   <section class="main-grid">

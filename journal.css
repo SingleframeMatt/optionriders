@@ -1330,3 +1330,19 @@ body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-ev
 .trade-chart-exit { color: #ef4444; }
 body.is-light .trade-chart-entry { color: #047857; }
 body.is-light .trade-chart-exit { color: #b91c1c; }
+
+/* Personal monthly plan */
+.goal-settings-form { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid var(--border-subtle); }
+.goal-settings-form label, .goal-daily-preview { display: flex; flex-direction: column; gap: 7px; font-size: 12px; color: var(--text-secondary); }
+.goal-settings-form input { width: 180px; max-width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary); font: inherit; font-size: 15px; }
+.goal-settings-form input:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.goal-daily-preview output { color: var(--green); font-family: var(--font-mono); font-size: 20px; padding: 6px 0; }
+.goal-plan-help, .goal-save-status { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--text-secondary); }
+.goal-save-status:empty { display: none; }
+.goal-daily-target { margin-top: 8px; color: var(--green); font-size: 13px; }
+.why-goal strong { font-weight: inherit; }
+@media (max-width: 640px) {
+  .goal-settings-form label { flex: 1 1 140px; }
+  .goal-settings-form input { width: 100%; }
+  .goal-daily-preview { flex: 1 1 180px; }
+}

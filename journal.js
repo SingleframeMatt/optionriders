@@ -17,9 +17,17 @@ async function initAuth() {
       _supabase = window.supabase.createClient(url, anon);
       const { data } = await _supabase.auth.getSession();
       _session = data.session || null;
+      if (_session) {
+        const { data: fresh } = await _supabase.auth.getUser();
+        if (fresh?.user) _session.user = fresh.user;
+      }
       _supabase.auth.onAuthStateChange((_e, session) => {
+        const changedUser = _session?.user?.id !== session?.user?.id;
         _session = session;
+        if (changedUser) state.lastGoalPnl = null;
+        loadGoalSettings();
         applyAuthGate();
+        if (changedUser && session) setTimeout(refresh, 0);
       });
     }
   } catch { /* local dev — no Supabase config, stays open */ }
@@ -58,6 +66,11 @@ const state = {
   viewMode: localStorage.getItem("journal_view_mode") || "day",  // "day" | "week"
   noteSaveTimer: null,
   activeNoteKey: null,
+  monthlyTarget: 5000,
+  tradingDays: 20,
+  lastGoalPnl: null,
+  goalSettingsVersion: null,
+  goalSaving: false,
 };
 
 const currencySymbol = { USD: "$", GBP: "£", EUR: "€" };
@@ -246,6 +259,7 @@ async function api(path, opts = {}) {
 }
 
 async function refresh() {
+  const userId = _session?.user?.id;
   const qs = buildQuery();
   $("statusLine").textContent = "Loading…";
   try {
@@ -271,6 +285,7 @@ async function refresh() {
       goalIsCurrentCal ? Promise.resolve(null)
                        : api(`/api/journal/calendar?${goalQs.toString()}`),
     ]);
+    if (_session?.user?.id !== userId) return;
     state.baseAlreadyApplied = !!stats.base_currency_applied;
     await ensureFxRate();
     state.lastEquity = equity;
@@ -304,23 +319,110 @@ function zellaScore(s) {
   return Math.round((win * 0.3 + pf * 0.3 + exp * 0.2 + wl * 0.2) * 10) / 10;
 }
 
-/* ---------- Monthly Target pie (fill to £5k, resets monthly) ---------- */
+/* ---------- Personal monthly target ---------- */
 
-const GOAL_TARGET = 5000;
-
-// The Wall — one brick every £250 of monthly profit (a single clean day's
-// target). 5 bricks lays a row (one trading week, £1,250); 4 rows tops the
-// wall out at the £5k goal. Profit past the goal keeps laying bricks in gold.
-const BRICK_VALUE = 250;
+const DEFAULT_GOAL = { monthlyTarget: 5000, tradingDays: 20 };
 const BRICKS_PER_ROW = 5;
-const WALL_ROWS = 4;                        // 20 bricks = £5,000
-const WALL_BRICKS = BRICKS_PER_ROW * WALL_ROWS;
+
+function validGoalSettings(value) {
+  if (!value || typeof value.monthlyTarget !== "number" || typeof value.tradingDays !== "number") return null;
+  const { monthlyTarget, tradingDays } = value;
+  if (!Number.isFinite(monthlyTarget) || monthlyTarget < 0.01 || monthlyTarget > 999999999.99
+      || !Number.isInteger(tradingDays) || tradingDays < 1 || tradingDays > 31) return null;
+  return { monthlyTarget: Math.round(monthlyTarget * 100) / 100, tradingDays };
+}
+
+function goalMoney(value) {
+  // Targets are entered in the display currency, not in the feed's base currency.
+  return `${currencySymbol[state.currency] || "$"}${fmt.num(value, Number.isInteger(value) ? 0 : 2)}`;
+}
+
+function goalMetadataKey() { return `journal_goal_${state.currency}`; }
+
+function loadGoalSettings() {
+  let saved = _session?.user?.user_metadata?.[goalMetadataKey()];
+  if (!_supabase) {
+    try { saved = JSON.parse(localStorage.getItem(`journal_goal_local:${state.currency}`)); } catch (_) {}
+  }
+  const prefs = validGoalSettings(saved) || DEFAULT_GOAL;
+  const version = JSON.stringify([_session?.user?.id || "local", state.currency, prefs]);
+  if (state.goalSettingsVersion === version) return; // Token refresh must not erase an unsaved edit.
+  state.goalSettingsVersion = version;
+  state.monthlyTarget = prefs.monthlyTarget;
+  state.tradingDays = prefs.tradingDays;
+  $("goalMonthlyInput").value = prefs.monthlyTarget;
+  $("goalDaysInput").value = prefs.tradingDays;
+  $("goalCurrencyLabel").textContent = `Monthly target (${state.currency})`;
+  $("goalSaveStatus").textContent = "";
+  previewDailyTarget();
+  renderGoalPlan();
+  renderGoalPie(state.lastGoalPnl);
+}
+
+function previewDailyTarget() {
+  const prefs = validGoalSettings({ monthlyTarget: Number($("goalMonthlyInput").value),
+    tradingDays: Number($("goalDaysInput").value) });
+  $("goalDailyPreview").textContent = prefs ? `${goalMoney(prefs.monthlyTarget / prefs.tradingDays)} / day` : "Enter a positive target and 1–31 trading days";
+}
+
+async function saveGoalSettings(event) {
+  event.preventDefault();
+  if (state.goalSaving || !$("goalSettingsForm").reportValidity()) return;
+  const prefs = validGoalSettings({ monthlyTarget: Number($("goalMonthlyInput").value),
+    tradingDays: Number($("goalDaysInput").value) });
+  const status = $("goalSaveStatus");
+  if (!prefs) { status.textContent = "Enter a positive target and 1–31 whole trading days."; return; }
+  const userId = _session?.user?.id;
+  const currency = state.currency;
+  const metadataKey = goalMetadataKey();
+  state.goalSaving = true;
+  $("goalSaveButton").disabled = true;
+  $("goalMonthlyInput").disabled = $("goalDaysInput").disabled = true;
+  status.textContent = "Saving…";
+  try {
+    if (_supabase) {
+      if (!userId) throw new Error("Sign in to save your target.");
+      const { data, error } = await _supabase.auth.updateUser({ data: { [metadataKey]: prefs } });
+      if (error) throw error;
+      if (_session?.user?.id !== userId || state.currency !== currency) return;
+      _session.user = data.user;
+    } else {
+      localStorage.setItem(`journal_goal_local:${currency}`, JSON.stringify(prefs));
+    }
+    state.goalSettingsVersion = null;
+    loadGoalSettings();
+    status.textContent = _supabase ? "Target saved to your account." : "Target saved in this browser.";
+  } catch (error) {
+    if (_session?.user?.id === userId && state.currency === currency) status.textContent = `Not saved: ${error.message}`;
+  } finally {
+    state.goalSaving = false;
+    $("goalSaveButton").disabled = false;
+    $("goalMonthlyInput").disabled = $("goalDaysInput").disabled = false;
+  }
+}
+
+function renderGoalPlan() {
+  const target = state.monthlyTarget, days = state.tradingDays, daily = target / days;
+  $("goalSub").textContent = `${goalMoney(target)} monthly target · progress resets on the 1st`;
+  $("goalOf").textContent = `of ${goalMoney(target)} this month`;
+  $("goalDailyTarget").textContent = `${goalMoney(daily)} daily target · ${days} planned trading days`;
+  $("whyMonthlyTarget").textContent = goalMoney(target);
+  $("whyDailyTarget").textContent = goalMoney(daily);
+  $("whyWeeklyTarget").textContent = goalMoney(daily * 5);
+  $("whyMonthTarget").textContent = goalMoney(target);
+  $("whyYearTarget").textContent = goalMoney(target * 12);
+  $("whyPlanNote").textContent = `${goalMoney(daily)} a day across ${days} planned trading days per month. Week assumes five trading days; year assumes twelve months. These are targets, not forecasts.`;
+  $("whyDailyGate").textContent = `Sized to the plan? ${goalMoney(daily)} today is a whole day well spent.`;
+}
 
 function renderGoalRewards(pnl) {
   const el = $("goalRewards");
   if (!el) return;
   pnl = Math.max(0, pnl || 0);
-  const laid = Math.floor(pnl / BRICK_VALUE);
+  const BRICK_VALUE = state.monthlyTarget / state.tradingDays;
+  const WALL_BRICKS = state.tradingDays;
+  const WALL_ROWS = Math.ceil(WALL_BRICKS / BRICKS_PER_ROW);
+  const laid = Math.floor(pnl / state.monthlyTarget * WALL_BRICKS + 1e-9);
   const wallLaid = Math.min(laid, WALL_BRICKS);
   const overLaid = Math.max(0, laid - WALL_BRICKS);
 
@@ -330,6 +432,7 @@ function renderGoalRewards(pnl) {
     let row = "";
     for (let c = 0; c < BRICKS_PER_ROW; c++) {
       const idx = r * BRICKS_PER_ROW + c;
+      if (idx >= WALL_BRICKS) continue;
       row += `<span class="brick${idx < wallLaid ? " brick-laid" : ""}"></span>`;
     }
     rows += `<div class="brick-row">${row}</div>`;
@@ -346,10 +449,10 @@ function renderGoalRewards(pnl) {
 
   const toNext = (laid + 1) * BRICK_VALUE - pnl;
   const label = wallLaid === 0
-    ? "THE WALL · first brick at £250"
+    ? `THE WALL · first brick at ${goalMoney(BRICK_VALUE)}`
     : wallLaid === WALL_BRICKS
       ? `THE WALL · topped out${overLaid ? ` · +${overLaid} gold` : ""} 🏗️`
-      : `THE WALL · ${wallLaid}/${WALL_BRICKS} bricks · next in £${fmt.num(toNext, 0)}`;
+      : `THE WALL · ${wallLaid}/${WALL_BRICKS} bricks · next in ${goalMoney(toNext)}`;
 
   el.innerHTML =
     `<div class="goal-rewards-label">${label}</div>`
@@ -370,8 +473,12 @@ function goalWedge(cx, cy, r, deg) {
 function renderGoalPie(pnl) {
   const el = $("goalPie");
   if (!el) return;
-  pnl = pnl || 0;
+  state.lastGoalPnl = pnl;
+  const rawPnl = pnl;
+  pnl = (pnl || 0) * state.fxRate;
+  const GOAL_TARGET = state.monthlyTarget;
   const frac = pnl / GOAL_TARGET;
+  el.setAttribute("aria-label", `Monthly profit ${goalMoney(pnl)} toward ${goalMoney(GOAL_TARGET)}`);
   const mainDeg = Math.max(0, Math.min(1, frac)) * 360;
   const overDeg = frac > 1 ? Math.min(1, frac - 1) * 360 : 0;
 
@@ -395,19 +502,24 @@ function renderGoalPie(pnl) {
   el.innerHTML = svg;
 
   const amt = $("goalAmount");
-  amt.textContent = fmt.money(pnl);
+  amt.textContent = fmt.money(rawPnl);
   amt.className = "goal-amount " + signClass(pnl);
   $("goalPct").textContent = `${Math.round(frac * 100)}% of goal`;
 
   const note = $("goalNote");
-  if (pnl <= 0) {
+  if (rawPnl == null) {
+    note.textContent = "Monthly progress will appear when your trades load.";
+    $("goalPct").textContent = "—";
+  } else if (pnl === 0) {
+    note.textContent = `Start with your ${goalMoney(GOAL_TARGET / state.tradingDays)} daily target.`;
+  } else if (pnl < 0) {
     note.textContent = "Down month — get back to break even first.";
   } else if (frac >= 1) {
-    note.textContent = `Goal smashed — £${fmt.num(pnl - GOAL_TARGET, 0)} over target. 🟢`;
+    note.textContent = `Goal smashed — ${goalMoney(pnl - GOAL_TARGET)} over target. 🟢`;
   } else {
     const remain = GOAL_TARGET - pnl;
-    const days = Math.max(1, Math.ceil(remain / 1000));
-    note.textContent = `£${fmt.num(remain, 0)} to go — about ${days} clean £1k day${days === 1 ? "" : "s"}.`;
+    const days = Math.max(1, Math.ceil(remain / (GOAL_TARGET / state.tradingDays)));
+    note.textContent = `${goalMoney(remain)} to go — ${days} day${days === 1 ? "" : "s"} at your planned daily target.`;
   }
 
   renderGoalRewards(pnl);
@@ -1817,6 +1929,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     localStorage.removeItem("journal_ibkr_query_id");
   } catch (_) {}
   await initAuth();
+  loadGoalSettings();
+  $("goalSettingsForm").addEventListener("submit", saveGoalSettings);
+  $("goalMonthlyInput").addEventListener("input", previewDailyTarget);
+  $("goalDaysInput").addEventListener("input", previewDailyTarget);
   $("authGateSignInBtn")?.addEventListener("click", signInWithGoogle);
   $("csvFile").addEventListener("change", (e) => importCsv(e.target.files?.[0]));
   $("refreshBtn").addEventListener("click", refresh);

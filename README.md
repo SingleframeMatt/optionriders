@@ -196,3 +196,19 @@ Regression checks:
 node tests/journal-chart.cjs
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
+
+## Personal monthly target
+
+The Monthly Target panel lets each user set a monthly amount and planned trading
+days (20 by default). Daily target = monthly target / planned trading days. The
+progress pie, daily target, brick wall and Why I Trade breakdown all use the saved
+plan. One brick represents one planned day's target; the wall is complete when
+the monthly target is reached. Targets use the journal's display currency.
+
+Signed-in users save preferences in their own Supabase user metadata, separately
+for each display currency, so the plan loads across devices without a database
+migration. Local mode without Supabase saves in that browser. Failed account
+saves display an error and keep the previous plan. The target persists across
+months; monthly profit progress resets each month as before.
+
+Run the target regression checks with `node tests/journal-goal.cjs`.
