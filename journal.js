@@ -26,6 +26,8 @@ async function initAuth() {
         _session = session;
         if (changedUser) state.lastGoalPnl = null;
         loadGoalSettings();
+        renderRuleStars();
+        if (changedUser) closeDayModal();
         applyAuthGate();
         if (changedUser && session) setTimeout(refresh, 0);
       });
@@ -71,6 +73,9 @@ const state = {
   lastGoalPnl: null,
   goalSettingsVersion: null,
   goalSaving: false,
+  rulesDate: null,
+  rulesSaving: false,
+  dayRequest: 0,
 };
 
 const currencySymbol = { USD: "$", GBP: "£", EUR: "€" };
@@ -843,6 +848,49 @@ function renderFills(rows) {
   if (!rows.length) tbody.innerHTML = `<tr><td colspan="10" class="muted">No fills to show.</td></tr>`;
 }
 
+/* Self-reported discipline awards, independent of P&L. */
+function validRulesDate(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) return false;
+  const d = new Date(`${date}T12:00:00Z`), now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === date && date <= today;
+}
+function followedRules(date) {
+  if (!validRulesDate(date)) return false;
+  const key = `journal_rules_${date}`;
+  if (_supabase) return _session?.user?.user_metadata?.[key] === true;
+  try { return localStorage.getItem(key) === "true"; } catch (_) { return false; }
+}
+function renderRuleStars() {
+  document.querySelectorAll("[data-rule-date]").forEach(star => { star.hidden = !followedRules(star.dataset.ruleDate); });
+  const button = $("dayRulesButton");
+  if (!button) return;
+  const earned = followedRules(state.rulesDate);
+  button.setAttribute("aria-pressed", String(earned));
+  button.textContent = earned ? "★ Rules followed · undo" : "☆ I followed my rules";
+  button.disabled = state.rulesSaving || !validRulesDate(state.rulesDate) || Boolean(_supabase && !_session);
+}
+async function toggleDayRules() {
+  const date = state.rulesDate, userId = _session?.user?.id;
+  if (state.rulesSaving || !validRulesDate(date) || (_supabase && !userId)) return;
+  const earned = !followedRules(date), key = `journal_rules_${date}`;
+  state.rulesSaving = true;
+  $("dayRulesStatus").textContent = "Saving…";
+  renderRuleStars();
+  try {
+    if (_supabase) {
+      const { error } = await _supabase.auth.updateUser({ data: { [key]: earned } });
+      if (error) throw error;
+      if (_session?.user?.id !== userId) return;
+      _session.user.user_metadata = { ..._session.user.user_metadata, [key]: earned };
+    } else { localStorage.setItem(key, String(earned)); }
+    if (state.rulesDate === date && _session?.user?.id === userId) $("dayRulesStatus").textContent = earned
+      ? (_supabase ? "Gold star saved to your account." : "Gold star saved in this browser.") : "Gold star removed.";
+  } catch (error) {
+    if (state.rulesDate === date && _session?.user?.id === userId) $("dayRulesStatus").textContent = `Not saved: ${error.message}`;
+  } finally { state.rulesSaving = false; renderRuleStars(); }
+}
+
 /* ---------- calendar ---------- */
 
 function renderCalendar(data) {
@@ -920,7 +968,15 @@ function renderCalendar(data) {
     cell.className = "cal-cell";
     if (d.trades > 0) {
       cell.classList.add(d.pnl > 0 ? "cal-pos" : d.pnl < 0 ? "cal-neg" : "cal-neutral");
+    }
+    if (validRulesDate(d.date)) {
       cell.classList.add("cal-clickable");
+      cell.tabIndex = 0;
+      cell.setAttribute("role", "button");
+      cell.setAttribute("aria-label", `Review ${d.date}`);
+      cell.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); cell.click(); }
+      });
       cell.addEventListener("click", () => {
         if (state.viewMode === "week") {
           openWeekModal(weekStartFor(d.date));
@@ -935,6 +991,15 @@ function renderCalendar(data) {
          <div class="cal-cell-sub">${fmt.pct(d.win_rate)}</div>`
       : "";
     cell.innerHTML = `<div class="cal-cell-day">${d.day}</div>${pnlLine}`;
+    const star = document.createElement("span");
+    star.className = "cal-rule-star";
+    star.dataset.ruleDate = d.date;
+    star.textContent = "★";
+    star.setAttribute("role", "img");
+    star.setAttribute("aria-label", "Followed my rules");
+    star.title = "Followed my rules";
+    star.hidden = !followedRules(d.date);
+    cell.querySelector(".cal-cell-day").appendChild(star);
     grid.appendChild(cell);
     dayColIndex++;
     maybeCloseRow();
@@ -958,6 +1023,11 @@ function renderCalendar(data) {
 /* ---------- day-detail modal ---------- */
 
 async function openDayModal(dateIso) {
+  const request = ++state.dayRequest, userId = _session?.user?.id;
+  state.rulesDate = dateIso;
+  $("dayRulesStatus").textContent = "";
+  renderRuleStars();
+  $("dayModalTitle").textContent = dateIso;
   const modal = $("dayModal");
   const body = document.querySelector("#dayModalTable tbody");
   body.innerHTML = `<tr><td colspan="6" class="muted">Loading…</td></tr>`;
@@ -966,6 +1036,7 @@ async function openDayModal(dateIso) {
 
   try {
     const d = await api(`/api/journal/day?date=${encodeURIComponent(dateIso)}`);
+    if (request !== state.dayRequest || _session?.user?.id !== userId) return;
     const dateObj = new Date(dateIso + "T00:00:00");
     const heading = dateObj.toLocaleDateString(undefined, {
       weekday: "short", year: "numeric", month: "short", day: "2-digit",
@@ -987,11 +1058,14 @@ async function openDayModal(dateIso) {
     drawIntraday(d.intraday);
     renderDayTrades(d.trades);
   } catch (err) {
+    if (request !== state.dayRequest || _session?.user?.id !== userId) return;
     body.innerHTML = `<tr><td colspan="6" class="muted">Error: ${err.message}</td></tr>`;
   }
 }
 
 function closeDayModal() {
+  state.dayRequest++;
+  state.rulesDate = null;
   $("dayModal").hidden = true;
   document.body.style.overflow = "";
 }
@@ -1070,7 +1144,13 @@ function renderWeekDayStrip(days) {
       <div class="wd-label">${d.weekday} ${d.day}</div>
       <div class="wd-pnl ${d.trades ? signClass(d.pnl) : "muted"}">${d.trades ? fmt.money(d.pnl, { compact: true }) : "—"}</div>
       <div class="wd-sub">${d.trades ? `${d.trades} trade${d.trades === 1 ? "" : "s"}` : ""}</div>`;
-    if (d.trades > 0) {
+    if (validRulesDate(d.date)) {
+      card.tabIndex = 0;
+      card.setAttribute("role", "button");
+      card.setAttribute("aria-label", `Review ${d.date}`);
+      card.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); card.click(); }
+      });
       card.style.cursor = "pointer";
       card.addEventListener("click", () => {
         closeWeekModal();
@@ -1985,6 +2065,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     });
   });
+  $("dayRulesButton").addEventListener("click", toggleDayRules);
   $("dayModalClose").addEventListener("click", closeDayModal);
   $("dayModalBackdrop").addEventListener("click", closeDayModal);
   $("weekModalClose").addEventListener("click", closeWeekModal);

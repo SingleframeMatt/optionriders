@@ -1,0 +1,22 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert'),path=require('path');
+const elements=new Map(),storage=new Map(),stars=[{dataset:{ruleDate:'2025-01-10'},hidden:true}];
+const element=id=>{if(!elements.has(id))elements.set(id,{textContent:'',disabled:false,setAttribute(k,v){this[k]=v}});return elements.get(id)};
+const ctx=vm.createContext({console,Date,Intl,Math,Number,JSON,setTimeout,window:{},document:{getElementById:element,querySelectorAll:()=>stars},localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)}});
+vm.runInContext(fs.readFileSync(process.argv[2]||path.join(__dirname,'..','journal.js'),'utf8').split('document.addEventListener("DOMContentLoaded", async () => {')[0],ctx);
+const run=s=>vm.runInContext(s,ctx);
+(async()=>{
+ run("state.rulesDate='2025-01-10'");
+ await run('toggleDayRules()');assert.equal(run("followedRules('2025-01-10')"),true);assert.equal(stars[0].hidden,false);
+ await run('toggleDayRules()');assert.equal(stars[0].hidden,true);
+ for(const d of ['2025-02-30','2099-01-01','bad',null])assert.equal(run(`validRulesDate(${JSON.stringify(d)})`),false);
+ run("_supabase={auth:{updateUser:async({data})=>{globalThis.saved=data;return {error:null}}}};_session={user:{id:'alice',user_metadata:{other:'keep'}}}");
+ await run('toggleDayRules()');assert.equal(run('saved["journal_rules_2025-01-10"]'),true);assert.equal(run('_session.user.user_metadata.other'),'keep');
+ run("_session={user:{id:'bob',user_metadata:{}}};renderRuleStars()");assert.equal(stars[0].hidden,true);
+ run("_supabase.auth.updateUser=async()=>({error:new Error('offline')})");await run('toggleDayRules()');assert.equal(stars[0].hidden,true);assert.match(element('dayRulesStatus').textContent,/Not saved/);
+ run("_supabase.auth.updateUser=()=>new Promise(r=>globalThis.resolveSave=r)");
+ const pending=run('toggleDayRules()');assert.equal(element('dayRulesButton').disabled,true);
+ run("_session={user:{id:'carol',user_metadata:{}}};resolveSave({error:null})");await pending;assert.equal(run('_session.user.user_metadata["journal_rules_2025-01-10"]'),undefined);
+ assert.equal(stars[0].hidden,true);
+ run("_session=null");await run('toggleDayRules()');assert.equal(run("followedRules('2025-01-10')"),false);
+ console.log('Passed: award/undo, calendar star updates, persistence, valid dates, account isolation, failed saves, account change during save.');
+})().catch(e=>{console.error(e);process.exit(1)});

@@ -1417,3 +1417,14 @@ body.is-light .trade-chart-exit { color: #b91c1c; }
   .journal-plan-grid .goal-settings-form { grid-template-columns: minmax(0, 1fr); }
   .journal-plan-grid .goal-settings-form .btn { justify-self: stretch; }
 }
+
+/* Discipline stars are independent of P&L. */
+.cal-rule-star { color: #e8b339; font-size: 15px; margin-left: 5px; }
+.cal-rule-star[hidden] { display: none; }
+.journal-body.is-light .cal-rule-star { color: #926800; }
+.cal-clickable:focus-visible { outline: 2px solid var(--text-secondary); outline-offset: -2px; }
+.day-rules-check { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.day-rules-check p, #dayRulesStatus { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.day-rules-check p { margin: 8px 0 4px; }
+#dayRulesButton[aria-pressed="true"] { color: #e8b339; border-color: currentColor; }
+.journal-body.is-light #dayRulesButton[aria-pressed="true"] { color: #926800; }
