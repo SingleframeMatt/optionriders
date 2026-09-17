@@ -2,10 +2,25 @@
   "version": 2,
   "functions": {
     "api/journal.py": {
-      "includeFiles": "{journal_cloud,journal_chart,trade_journal,alpha_vantage}.py"
+      "includeFiles": "{journal_cloud,journal_chart,journal_security,trade_journal,alpha_vantage}.py"
     }
   },
   "routes": [
+    {
+      "src": "/(?:\\..*|(?:tests|supabase|docs|output|__pycache__)/.*|.*\\.(?:db|sqlite|sql|pine|md)|[^/]+\\.py)$",
+      "status": 404
+    },
+    {
+      "src": "/journal(?:\\.html)?",
+      "headers": {
+        "Content-Security-Policy": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://open.er-api.com https://api.frankfurter.app; frame-src https://s.tradingview.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+      },
+      "continue": true
+    },
     {
       "src": "/api/alpha-vantage",
       "dest": "/api/alpha-vantage.py"
@@ -50,7 +65,10 @@
       "src": "/api/stripe-portal",
       "dest": "/api/stripe-portal.py"
     },
-    { "src": "/api/journal/([^/?]+).*", "dest": "/api/journal.py?action=$1" },
+    {
+      "src": "/api/journal/([^/?]+).*",
+      "dest": "/api/journal.py?action=$1"
+    },
     {
       "src": "/crypto-bot",
       "dest": "/crypto-bot.html"

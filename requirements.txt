@@ -1,3 +1,4 @@
 yfinance
 requests
 stripe
+cryptography>=46.0.7,<47

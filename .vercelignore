@@ -1,0 +1,15 @@
+.env*
+.venv/
+.logo-venv/
+.git/
+.vscode/
+.playwright-cli/
+__pycache__/
+*.db
+*.sqlite
+*.sqlite3
+*.pine
+output/
+tests/
+supabase/
+docs/

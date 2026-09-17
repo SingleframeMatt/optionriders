@@ -10,22 +10,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="journal.css">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js" integrity="sha384-iLddHTLokph6Omwoyid4XKxHaWa6w41BnoEj0q5oOrzmYPpHIKt1wyjReA7s//pP" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js" integrity="sha384-OK7vELvjHdhUFi31JYioPIcRHTROLdcDa6ZsNWgvgLaKj+9JqhU0Ad8g4wz3CXjA" crossorigin="anonymous"></script>
 </head>
 <body class="journal-body">
-  <script>
-    // Apply saved theme synchronously so the page doesn't flash the wrong
-    // palette before journal.js runs. Matches getStoredTheme() / applyTheme()
-    // in journal.js.
-    (function () {
-      try {
-        if (localStorage.getItem("journal_theme") === "light") {
-          document.body.classList.add("is-light");
-        }
-      } catch (_) { /* storage disabled — stay on default dark */ }
-    })();
-  </script>
+  <script src="journal-bootstrap.js"></script>
   <!-- Sign-in gate -->
   <div class="auth-gate" id="authGate" hidden>
     <div class="auth-gate-card">
@@ -33,7 +22,7 @@
       <h2 class="auth-gate-title">Sign in to access your trade journal</h2>
       <p class="auth-gate-copy">Continue with Google to sync your IBKR account and see your trades, stats, and calendar.</p>
       <button class="btn btn-primary" type="button" id="authGateSignInBtn">Continue with Google</button>
-      <span class="auth-gate-note" id="authGateNote">Your IBKR credentials stay in your browser only.</span>
+      <span class="auth-gate-note" id="authGateNote">Your trade history is private to your account.</span>
     </div>
   </div>
   <header class="journal-header">
@@ -45,6 +34,7 @@
       </div>
     </a>
     <div class="journal-header-actions">
+      <button class="btn btn-ghost" id="privacyToggle" type="button" aria-pressed="false" title="Hide financial figures and charts on this device">Hide P&amp;L</button>
       <button class="btn btn-primary" id="syncBtn" type="button" title="Fetch latest trades from IBKR Flex Web Service">
         <span class="sync-dot" id="syncDot"></span>
         Sync IBKR
@@ -76,17 +66,17 @@
   </div>
 
   <section class="stat-grid">
-    <div class="stat-card"><span class="stat-label">Net P&amp;L</span><span class="stat-value" id="netPnl">—</span></div>
+    <div class="stat-card"><span class="stat-label">Net P&amp;L</span><span class="stat-value" id="netPnl" data-private>—</span></div>
     <div class="stat-card">
       <span class="stat-label">Zella Score</span>
-      <span class="stat-value" id="zellaScore">—</span>
-      <div class="score-bar"><div class="score-bar-fill" id="scoreBarFill"></div><div class="score-bar-knob" id="scoreBarKnob"></div></div>
+      <span class="stat-value" id="zellaScore" data-private>—</span>
+      <div class="score-bar" data-private><div class="score-bar-fill" id="scoreBarFill"></div><div class="score-bar-knob" id="scoreBarKnob"></div></div>
     </div>
-    <div class="stat-card"><span class="stat-label">Win Rate</span><span class="stat-value" id="winRate">—</span></div>
-    <div class="stat-card"><span class="stat-label">Profit Factor</span><span class="stat-value" id="profitFactor">—</span></div>
-    <div class="stat-card"><span class="stat-label">Expectancy</span><span class="stat-value" id="expectancy">—</span></div>
-    <div class="stat-card"><span class="stat-label">Avg Win / Loss</span><span class="stat-value" id="avgWinLoss">—</span></div>
-    <div class="stat-card"><span class="stat-label">Best / Worst</span><span class="stat-value" id="bestWorst">—</span></div>
+    <div class="stat-card"><span class="stat-label">Win Rate</span><span class="stat-value" id="winRate" data-private>—</span></div>
+    <div class="stat-card"><span class="stat-label">Profit Factor</span><span class="stat-value" id="profitFactor" data-private>—</span></div>
+    <div class="stat-card"><span class="stat-label">Expectancy</span><span class="stat-value" id="expectancy" data-private>—</span></div>
+    <div class="stat-card"><span class="stat-label">Avg Win / Loss</span><span class="stat-value" id="avgWinLoss" data-private>—</span></div>
+    <div class="stat-card"><span class="stat-label">Best / Worst</span><span class="stat-value" id="bestWorst" data-private>—</span></div>
     <div class="stat-card"><span class="stat-label">Trades / Closes</span><span class="stat-value" id="tradeCount">—</span></div>
   </section>
 
@@ -94,12 +84,12 @@
     <section class="panel panel-goal">
       <div class="panel-head">
         <h2>Monthly Target</h2>
-        <span class="panel-sub" id="goalSub">Your monthly plan · progress resets on the 1st</span>
+        <span class="panel-sub" id="goalSub" data-private>Your monthly plan · progress resets on the 1st</span>
       </div>
 
       <div class="goal-wrap">
 
-        <div class="goal-meta">
+        <div class="goal-meta" data-private>
           <div class="goal-amount" id="goalAmount">—</div>
           <div class="goal-of" id="goalOf">—</div>
           <div class="goal-daily-target" id="goalDailyTarget">—</div>
@@ -108,14 +98,14 @@
 
         </div>
         <div class="goal-path-block">
-          <div class="goal-path" id="goalPath" role="img" aria-label="Monthly target path"></div>
-          <p class="goal-path-caption" id="goalPathCaption"></p>
+          <div class="goal-path" id="goalPath" data-private role="img" aria-label="Monthly target path"></div>
+          <p class="goal-path-caption" id="goalPathCaption" data-private></p>
         </div>
       </div>
       <div class="goal-secondary-actions">
         <details class="plan-disclosure">
           <summary>Edit target</summary>
-      <form id="goalSettingsForm" class="goal-settings-form">
+      <form id="goalSettingsForm" data-private class="goal-settings-form">
         <label><span id="goalCurrencyLabel">Monthly target (GBP)</span>
           <input id="goalMonthlyInput" type="number" min="0.01" max="999999999.99" step="0.01" inputmode="decimal" required value="5000">
         </label>
@@ -133,8 +123,8 @@
 
     <section class="panel panel-why">
       <h2 class="why-eyebrow">The Bigger Picture</h2>
-      <div class="why-goal"><strong id="whyMonthlyTarget">—</strong><span>/ month</span></div>
-      <div class="why-compound">
+      <div class="why-goal" data-private><strong id="whyMonthlyTarget">—</strong><span>/ month</span></div>
+      <div class="why-compound" data-private>
         <div class="why-compound-label">Your target, broken down</div>
         <div class="why-compound-row">
           <div class="why-cstep"><div class="why-cstep-period">Day</div><div class="why-cstep-num" id="whyDailyTarget">—</div></div>
@@ -145,7 +135,7 @@
         <p class="why-compound-note" id="whyPlanNote"></p>
       </div>
 
-      <div class="why-gate" id="whyDailyGate"></div>
+      <div class="why-gate" data-private id="whyDailyGate"></div>
 
       <details class="plan-disclosure why-plan-details">
         <summary>Why I Trade</summary>
@@ -187,7 +177,7 @@
         </div>
         <div class="calendar-stats">
           <span class="cal-stat-label">Monthly stats:</span>
-          <span class="cal-stat-chip pos" id="calMonthPnl">—</span>
+          <span class="cal-stat-chip pos" id="calMonthPnl" data-private>—</span>
           <span class="cal-stat-sub" id="calActiveDays">— days</span>
         </div>
       </div>
@@ -199,9 +189,9 @@
   <section class="panel panel-collapsible is-collapsed" id="equityPanel">
     <button class="panel-head panel-toggle" type="button" id="equityToggle" aria-expanded="false" aria-controls="equityBody">
       <span class="panel-toggle-left"><span class="panel-chevron" aria-hidden="true">▸</span><h2>Equity Curve</h2></span>
-      <span class="panel-sub" id="equitySub"></span>
+      <span class="panel-sub" id="equitySub" data-private></span>
     </button>
-    <div class="panel-body" id="equityBody">
+    <div class="panel-body" id="equityBody" data-private>
       <canvas id="equityChart" height="260"></canvas>
     </div>
   </section>
@@ -255,7 +245,7 @@
       <h2>The Build</h2>
       <span class="panel-sub" id="kingdomSub">Build it up with clean profit</span>
     </div>
-    <div class="kingdom-wrap">
+    <div class="kingdom-wrap" data-private>
       <div class="kingdom-stage" id="kingdomStage"></div>
       <div class="kingdom-side">
         <div class="kingdom-rank" id="kingdomRank">—</div>
@@ -279,10 +269,7 @@
       <li>In IBKR Client Portal → <strong>Performance &amp; Reports</strong> → <strong>Flex Queries</strong> → create a <strong>Custom Flex Query</strong>. Section: <strong>Trades</strong>. Format: XML or CSV (both supported).</li>
       <li>Include: Symbol, AssetClass, DateTime, TradeDate, Quantity, TradePrice, Proceeds, IBCommission, FifoPnlRealized, Open/CloseIndicator, Buy/Sell.</li>
       <li>Enable <strong>Flex Web Service</strong> under Reports → Settings → Flex Web Service. Generate a <strong>token</strong>.</li>
-      <li>Add to your <code>.env</code>:
-        <pre class="env-block">IBKR_FLEX_TOKEN=your_token_here
-IBKR_FLEX_QUERY_ID=123456</pre>
-      </li>
+      <li>Open <strong>Settings</strong> and enter your Flex reporting token and query ID. Never enter your broker password.</li>
       <li>Click <strong>Sync IBKR</strong> — or flip the <strong>Auto</strong> toggle to poll every 15 min while this tab is open.</li>
       <li>Or for a one-off: click <strong>Import File</strong> and upload the CSV/XML you downloaded manually.</li>
     </ol>
@@ -295,7 +282,7 @@ IBKR_FLEX_QUERY_ID=123456</pre>
       <button class="day-modal-close" id="settingsClose" type="button" aria-label="Close">×</button>
       <header class="day-modal-head">
         <h3 id="settingsTitle">IBKR Settings</h3>
-        <span class="day-modal-subtitle">Stored locally in your browser only — never sent to any server except IBKR's. <a href="journal-setup.html" style="color:var(--cyan);text-decoration:underline;">New here? See the setup guide.</a></span>
+        <span class="day-modal-subtitle">Your reporting token is sent securely through our server to IBKR. With secure storage enabled it is encrypted on the server; otherwise it stays only in this tab until you close or reload it. <a href="journal-setup.html" style="color:var(--cyan);text-decoration:underline;">New here? See the setup guide.</a></span>
       </header>
       <form id="settingsForm" class="settings-form">
         <label>
@@ -335,7 +322,7 @@ IBKR_FLEX_QUERY_ID=123456</pre>
       <header class="day-modal-head">
         <div>
           <h3 id="dayModalTitle">—</h3>
-          <span class="day-modal-subtitle">Net P&amp;L <span id="dayModalPnl">—</span></span>
+          <span class="day-modal-subtitle">Net P&amp;L <span id="dayModalPnl" data-private>—</span></span>
         </div>
       </header>
 
@@ -383,7 +370,7 @@ IBKR_FLEX_QUERY_ID=123456</pre>
       <header class="day-modal-head">
         <div>
           <h3 id="weekModalTitle">—</h3>
-          <span class="day-modal-subtitle">Net P&amp;L <span id="weekModalPnl">—</span></span>
+          <span class="day-modal-subtitle">Net P&amp;L <span id="weekModalPnl" data-private>—</span></span>
         </div>
       </header>
 
@@ -402,7 +389,7 @@ IBKR_FLEX_QUERY_ID=123456</pre>
         </div>
       </div>
 
-      <div class="zella-scale" id="weekZellaScale">
+      <div class="zella-scale" id="weekZellaScale" data-private>
         <div class="zella-scale-label">Zella Scale</div>
         <div class="zella-scale-bar">
           <span class="zella-scale-loss" id="weekMaxLoss">—</span>
@@ -439,10 +426,10 @@ IBKR_FLEX_QUERY_ID=123456</pre>
         <div>
           <div class="trade-detail-kicker">
             <span class="ticker-pill" id="tradeDetailTicker">—</span>
-            <span id="tradeDetailInstrument" class="trade-detail-instrument">—</span>
+            <span id="tradeDetailInstrument" data-private class="trade-detail-instrument">—</span>
             <span id="tradeDetailDate" class="muted"></span>
           </div>
-          <h3 id="tradeDetailTitle">Net P&amp;L <span id="tradeDetailPnl">—</span></h3>
+          <h3 id="tradeDetailTitle">Net P&amp;L <span id="tradeDetailPnl" data-private>—</span></h3>
         </div>
         <div class="trade-detail-side-wrap">
           <span id="tradeDetailSideBadge" class="side-badge">—</span>
@@ -451,7 +438,7 @@ IBKR_FLEX_QUERY_ID=123456</pre>
       </header>
 
       <div class="trade-detail-body">
-        <aside class="trade-detail-stats">
+        <aside class="trade-detail-stats" data-private>
           <div class="trade-stat-row" id="tdRightRow" hidden><span>Right</span><span id="tdRight">—</span></div>
           <div class="trade-stat-row" id="tdStrikeRow" hidden><span>Strike</span><span id="tdStrike">—</span></div>
           <div class="trade-stat-row" id="tdExpiryRow" hidden><span>Expiry</span><span id="tdExpiry">—</span></div>
@@ -472,7 +459,7 @@ IBKR_FLEX_QUERY_ID=123456</pre>
         </aside>
 
         <div class="trade-detail-right">
-          <div class="trade-detail-chart" id="tradeDetailChartWrap"></div>
+          <div class="trade-detail-chart" id="tradeDetailChartWrap" data-private></div>
           <div class="trade-detail-notes-wrap">
             <div class="trade-detail-notes-head">
               <span>Notes</span>

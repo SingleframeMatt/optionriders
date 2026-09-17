@@ -6,7 +6,7 @@ import urllib.request
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, unquote
 
 import importlib.util
 
@@ -56,6 +56,17 @@ def load_dotenv(dotenv_path=".env"):
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
+    def send_head(self):
+        # Shared by GET and HEAD: never expose private files or listings.
+        requested = unquote(urlparse(self.path).path)
+        parts = Path(requested).parts
+        suffix = Path(requested).suffix.lower()
+        public_suffixes = {".html", ".css", ".js", ".png", ".jpg", ".jpeg", ".svg", ".webp", ".ico", ".woff", ".woff2"}
+        if any(part.startswith(".") for part in parts) or (requested not in ("/", "/version.json") and suffix not in public_suffixes):
+            self.send_error(404)
+            return None
+        return super().send_head()
+
     def do_GET(self):
         if self.path in {"/", "/?"}:
             self.path = "/index.html"
@@ -359,14 +370,16 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         Falls back to a dev user when running locally without auth.
         """
         auth = self.headers.get("Authorization", "")
-        if not auth.startswith("Bearer "):
-            # Local dev fallback — single-user mode.
-            return os.environ.get("LOCAL_DEV_USER_ID", "local")
-        token = auth[7:]
         supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        anon_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_ANON_KEY", "")
+        anon_key = os.environ.get("SUPABASE_ANON_KEY", "")
+        local_dev = (os.environ.get("ALLOW_LOCAL_JOURNAL") == "1"
+                     and not os.environ.get("VERCEL")
+                     and self.client_address[0] in ("127.0.0.1", "::1"))
+        if not auth.startswith("Bearer "):
+            return os.environ.get("LOCAL_DEV_USER_ID", "local") if local_dev else None
+        token = auth[7:]
         if not supabase_url or not anon_key:
-            return os.environ.get("LOCAL_DEV_USER_ID", "local")
+            return None
         try:
             req = urllib.request.Request(
                 f"{supabase_url}/auth/v1/user",
@@ -396,7 +409,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 self._json({"error": "unauthorized"}, status=401); return
             path = urlparse(self.path).path
             filters = self._journal_filters(user_id=user_id)
-            if path == "/api/journal/stats":
+            if path in ("/api/journal/profile", "/api/journal/connection"):
+                self._json({"enabled": False, "connected": False})
+            elif path == "/api/journal/stats":
                 self._json(trade_journal.compute_stats(filters))
             elif path == "/api/journal/fills":
                 params = parse_qs(urlparse(self.path).query)

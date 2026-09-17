@@ -277,7 +277,7 @@
     <section class="setup-hero">
       <span class="setup-kicker">Takes about 5 minutes</span>
       <h1>Connect your IBKR account</h1>
-      <p>Option Riders reads your trades directly from Interactive Brokers using a feature called <strong>Flex Web Service</strong>. Nothing is shared with us — the credentials stay in your browser, and IBKR serves the report straight to your journal. Follow these three parts in order.</p>
+      <p>Option Riders reads your trades directly from Interactive Brokers using a feature called <strong>Flex Web Service</strong>. The journal server uses your reporting token to request your trade report from IBKR. It does not need your broker password or trading permissions. Follow these three parts in order.</p>
     </section>
 
     <nav class="setup-toc">
@@ -414,7 +414,7 @@
     <section id="part3" class="setup-section">
       <div class="setup-section-label">Part 03</div>
       <h2>Paste them into Option Riders</h2>
-      <p>Your token and query ID stay in this browser only — they never touch our servers. Sync requests go directly from your browser to IBKR.</p>
+      <p>Sync requests pass securely through the journal server to IBKR. When secure storage is enabled, reporting credentials are encrypted on the server. Otherwise, they remain only in the open tab until it closes or reloads.</p>
 
       <ol class="setup-steps">
         <li>
@@ -433,7 +433,7 @@
         </li>
         <li>
           <h3>Save</h3>
-          <div class="body">Click <strong>Save</strong>. The modal closes and the inputs are stored locally.</div>
+          <div class="body">Click <strong>Save</strong>. The status confirms whether your token was saved encrypted or is available only for the current tab.</div>
         </li>
         <li>
           <h3>Sync your trades</h3>

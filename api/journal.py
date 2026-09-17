@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import journal_cloud as jc
+import journal_security as security
 
 
 def _bearer(h) -> str:
@@ -41,7 +42,10 @@ def _param(path: str, name: str, default: str = "") -> str:
 
 
 def _cors(h):
-    h.send_header("Access-Control-Allow-Origin", "*")
+    origin = h.headers.get("Origin", "")
+    if origin and security.trusted_origin(origin):
+        h.send_header("Access-Control-Allow-Origin", origin)
+    h.send_header("Vary", "Origin")
     h.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
     h.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
 
@@ -51,23 +55,34 @@ def _respond(h, code: int, data):
     h.send_response(code); _cors(h)
     h.send_header("Content-Type", "application/json; charset=utf-8")
     h.send_header("Cache-Control", "no-store")
+    h.send_header("X-Content-Type-Options", "nosniff")
+    if code == 429: h.send_header("Retry-After", "60")
     h.send_header("Content-Length", str(len(body)))
     h.end_headers()
     h.wfile.write(body)
 
 
 def _read_body(h) -> bytes:
-    length = int(h.headers.get("Content-Length", 0))
+    try:
+        length = int(h.headers.get("Content-Length", 0))
+    except ValueError:
+        raise security.SecurityError("Invalid request size.") from None
+    if length < 0 or length > security.MAX_BODY:
+        raise security.SecurityError("Import must be no larger than 2 MB.", 413)
     return h.rfile.read(length) if length else b""
 
 
 class handler(BaseHTTPRequestHandler):
     # ------ CORS preflight ------
     def do_OPTIONS(self):
+        if not security.trusted_origin(self.headers.get("Origin", "")):
+            return _respond(self, 403, {"error": "Origin not allowed."})
         self.send_response(204); _cors(self); self.end_headers()
 
     # ------ GET endpoints ------
     def do_GET(self):
+        if not security.trusted_origin(self.headers.get("Origin", "")):
+            return _respond(self, 403, {"error": "Origin not allowed."})
         action = _param(self.path, "action", "")
         # Fallback: also honor the literal path (for local dev without rewrites).
         if not action:
@@ -80,15 +95,21 @@ class handler(BaseHTTPRequestHandler):
             return _respond(self, 200, {"at": None, "result": None})
 
         token = _bearer(self)
-        if not token or not jc.verify_user(token):
+        user_id = jc.verify_user(token) if token else None
+        if not user_id:
             return _respond(self, 401, {"error": "unauthorized"})
 
         try:
+            security.rate_limit(user_id, "read", token)
             filters = _query_filters(self.path)
-            if action == "stats":
+            if action == "connection":
+                _respond(self, 200, security.connection(user_id))
+            elif action == "profile":
+                _respond(self, 200, security.read_profile(token, user_id))
+            elif action == "stats":
                 _respond(self, 200, jc.compute_stats(token, filters))
             elif action == "fills":
-                limit = int(_param(self.path, "limit", "500") or 500)
+                limit = max(1, min(2000, int(_param(self.path, "limit", "500") or 500)))
                 _respond(self, 200, jc.fetch_user_fills(token, filters, limit=limit))
             elif action == "equity":
                 _respond(self, 200, jc.equity_curve(token, filters))
@@ -98,12 +119,12 @@ class handler(BaseHTTPRequestHandler):
                 month = int(_param(self.path, "month", str(now.month)))
                 _respond(self, 200, jc.calendar_month(token, year, month, filters))
             elif action == "day":
-                date = _param(self.path, "date")
+                date = security.valid_date(_param(self.path, "date"))
                 if not date:
                     return _respond(self, 400, {"error": "missing date"})
                 _respond(self, 200, jc.day_detail(token, date))
             elif action == "week":
-                start = _param(self.path, "start")
+                start = security.valid_date(_param(self.path, "start"))
                 if not start:
                     return _respond(self, 400, {"error": "missing start"})
                 _respond(self, 200, jc.week_detail(token, start))
@@ -120,16 +141,24 @@ class handler(BaseHTTPRequestHandler):
                 symbol = (_param(self.path, "symbol", "") or "").upper().strip()
                 date = _param(self.path, "date", "")
                 interval = _param(self.path, "interval", "5min") or "5min"
-                if not symbol or not date:
-                    return _respond(self, 400, {"error": "symbol and date required"})
+                import re
+                security.valid_date(date)
+                if not re.fullmatch(r"[A-Z0-9.^=-]{1,32}", symbol) or interval not in ("1min", "5min", "15min", "30min", "60min"):
+                    raise security.SecurityError("Invalid chart request.")
                 _respond(self, 200, jc.intraday_bars(symbol, date, interval))
             else:
                 _respond(self, 404, {"error": f"unknown action: {action}"})
-        except Exception as exc:
-            _respond(self, 500, {"error": str(exc)})
+        except security.SecurityError as exc:
+            _respond(self, exc.status, {"error": str(exc)})
+        except (ValueError, TypeError):
+            _respond(self, 400, {"error": "Invalid request."})
+        except Exception:
+            _respond(self, 500, {"error": "Unable to load journal data. Please try again."})
 
     # ------ POST endpoints ------
     def do_POST(self):
+        if not security.trusted_origin(self.headers.get("Origin", "")):
+            return _respond(self, 403, {"error": "Origin not allowed."})
         action = _param(self.path, "action", "")
         if not action:
             segs = [s for s in urlparse(self.path).path.split("/") if s]
@@ -141,24 +170,20 @@ class handler(BaseHTTPRequestHandler):
         if not user_id:
             return _respond(self, 401, {"error": "unauthorized"})
 
-        body = _read_body(self)
         try:
-            if action == "sync":
-                payload = {}
-                if body:
-                    try:
-                        payload = json.loads(body)
-                    except json.JSONDecodeError:
-                        payload = {}
-                ibkr_token = (payload.get("token") or "").strip()
-                ibkr_qid = (payload.get("query_id") or "").strip()
-                diagnose = bool(payload.get("diagnose"))
-                if not ibkr_token or not ibkr_qid:
-                    return _respond(self, 400, {
-                        "ok": False,
-                        "error": "Open Settings and paste your IBKR Flex token and query ID.",
-                    })
-                _respond(self, 200, jc.sync_from_ibkr(token, user_id, ibkr_token, ibkr_qid, diagnose=diagnose))
+            security.rate_limit(user_id, action, token)
+            body = _read_body(self)
+            if action == "connection":
+                _respond(self, 200, security.save_connection(user_id, security.json_payload(body)))
+            elif action == "profile":
+                _respond(self, 200, security.write_profile(token, user_id, security.json_payload(body)))
+            elif action == "sync":
+                payload = security.json_payload(body)
+                creds = security.credentials(payload) if payload.get("token") or payload.get("query_id") else security.load_connection(user_id)
+                result = jc.sync_from_ibkr(token, user_id, creds["token"], creds["query_id"])
+                if not result.get("ok"):
+                    result = {"ok": False, "error": "IBKR sync failed. Check your Flex token and query ID, then retry."}
+                _respond(self, 200, result)
             elif action == "import-flex":
                 text = body.decode("utf-8", errors="replace")
                 if text.lstrip().startswith("{") and not text.lstrip().startswith("<"):
@@ -166,7 +191,11 @@ class handler(BaseHTTPRequestHandler):
                         text = json.loads(text).get("csv", text)
                     except json.JSONDecodeError:
                         pass
+                if not isinstance(text, str) or "<!DOCTYPE" in text.upper() or "<!ENTITY" in text.upper():
+                    raise security.SecurityError("Unsupported import format.")
                 rows = jc._parse_flex_and_normalize(text, user_id)
+                if len(rows) > 20000:
+                    raise security.SecurityError("Import at most 20,000 fills at a time.", 413)
                 result = jc.insert_fills(token, user_id, rows)
                 _respond(self, 200, {"ok": True, **result,
                                      "format": "xml" if text.lstrip().startswith("<") else "csv"})
@@ -174,14 +203,14 @@ class handler(BaseHTTPRequestHandler):
                 n = jc.delete_all_user_fills(token, user_id)
                 _respond(self, 200, {"ok": True, "deleted": n})
             elif action == "trade-note":
-                try:
-                    payload = json.loads(body or b"{}")
-                except json.JSONDecodeError:
-                    payload = {}
+                payload = security.json_payload(body)
                 symbol = (payload.get("symbol") or "").strip()
                 close_dt = (payload.get("close_datetime") or "").strip()
                 body_text = payload.get("body") or ""
                 trade_date = payload.get("trade_date") or None
+                if not isinstance(body_text, str) or len(body_text) > 20000 or len(symbol) > 200 or len(close_dt) > 80:
+                    raise security.SecurityError("Trade note is too large or invalid.")
+                if trade_date: security.valid_date(trade_date)
                 if not symbol or not close_dt:
                     return _respond(self, 400, {"error": "missing symbol or close_datetime"})
                 _respond(self, 200, jc.set_trade_note(
@@ -189,5 +218,9 @@ class handler(BaseHTTPRequestHandler):
                 ))
             else:
                 _respond(self, 404, {"error": f"unknown action: {action}"})
-        except Exception as exc:
-            _respond(self, 500, {"ok": False, "error": str(exc)})
+        except security.SecurityError as exc:
+            _respond(self, exc.status, {"ok": False, "error": str(exc)})
+        except (ValueError, TypeError, AttributeError):
+            _respond(self, 400, {"ok": False, "error": "Invalid request."})
+        except Exception:
+            _respond(self, 500, {"ok": False, "error": "Unable to save journal data. Please try again."})

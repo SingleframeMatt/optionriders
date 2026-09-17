@@ -1356,4 +1356,4 @@ def sync_from_ibkr(bearer_token: str, user_id: str,
             out["sections_found"] = _enumerate_flex_sections(report)
         return out
     except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": "IBKR sync failed. Check your reporting credentials and try again."}

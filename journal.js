@@ -7,6 +7,41 @@ const BASE_CURRENCY = "USD"; // IBKR account currency for our data
 
 let _supabase = null;
 let _session = null;
+let _memoryCreds = null;
+let _journalProfile = null;
+let _profileError = false;
+async function loadJournalProfile() {
+  const userId = _session?.user?.id;
+  if (!userId) return;
+  try {
+    const result = await api("/api/journal/profile");
+    if (_session?.user?.id !== userId) return;
+    _journalProfile = result;
+    _profileError = false;
+    state.goalSettingsVersion = null;
+    loadGoalSettings();
+    renderRuleStars();
+  } catch (_) {
+    if (_session?.user?.id === userId) _profileError = true;
+  }
+}
+
+let _connection = { enabled: false, connected: false };
+
+function applyPrivacy(hidden) {
+  document.body.classList.toggle("is-private", hidden);
+  const button = $("privacyToggle");
+  if (button) {
+    button.textContent = hidden ? "Show P&L" : "Hide P&L";
+    button.setAttribute("aria-pressed", String(hidden));
+  }
+}
+function togglePrivacy() {
+  const hidden = !document.body.classList.contains("is-private");
+  applyPrivacy(hidden);
+  try { localStorage.setItem("journal_hide_pnl", String(hidden)); } catch (_) {}
+}
+
 
 async function initAuth() {
   try {
@@ -24,23 +59,36 @@ async function initAuth() {
       _supabase.auth.onAuthStateChange((_e, session) => {
         const changedUser = _session?.user?.id !== session?.user?.id;
         _session = session;
-        if (changedUser) state.lastGoalPnl = null;
+        if (changedUser) {
+          state.lastGoalPnl = null;
+          document.body.classList.add("is-account-loading");
+          state.activeNoteKey = null;
+          closeTradeDetail();
+          closeWeekModal();
+          _memoryCreds = null;
+          _journalProfile = null;
+          _profileError = false;
+          _connection = { enabled: false, connected: false };
+          setAutoSync(false);
+          $("settingsToken").value = $("settingsQueryId").value = "";
+        }
         loadGoalSettings();
         renderRuleStars();
         if (changedUser) closeDayModal();
         applyAuthGate();
-        if (changedUser && session) setTimeout(refresh, 0);
+        if (changedUser && session) setTimeout(async () => { await Promise.all([loadJournalProfile(), loadConnection()]); refresh(); }, 0);
       });
     }
-  } catch { /* local dev — no Supabase config, stays open */ }
+  } catch { /* Hosted pages remain gated on configuration failures. */ }
   applyAuthGate();
 }
 
 function applyAuthGate() {
   const gate = $("authGate");
   if (!gate) return;
-  // Only gate when Supabase is configured; otherwise (local dev) pass through.
-  if (_supabase && !_session) {
+  // Hosted pages fail closed when authentication configuration cannot load.
+  const isLocal = ["localhost", "127.0.0.1", "::1"].includes(window.location?.hostname);
+  if ((_supabase && !_session) || (!_supabase && !isLocal)) {
     gate.hidden = false;
     document.body.classList.add("is-gated");
   } else {
@@ -241,9 +289,9 @@ function formatSymbol(r) {
       if (y) exp = `${parseInt(m, 10)}/${parseInt(d, 10)}/${y.slice(2)}`;
     }
     const strikeStr = strike ? `$${strike}${pc}` : pc;
-    return `<span class="sym-base">${base}</span> <span class="sym-opt">${strikeStr}</span><span class="sym-exp">${exp ? ` ${exp}` : ""}</span>`;
+    return `<span class="sym-base">${escapeHtml(base)}</span> <span class="sym-opt">${escapeHtml(strikeStr)}</span><span class="sym-exp">${escapeHtml(exp ? ` ${exp}` : "")}</span>`;
   }
-  return `<span class="sym-base">${base}</span>`;
+  return `<span class="sym-base">${escapeHtml(base)}</span>`;
 }
 
 function buildQuery() {
@@ -254,13 +302,16 @@ function buildQuery() {
 }
 
 async function api(path, opts = {}) {
+  const userId = _session?.user?.id;
   const headers = new Headers(opts.headers || {});
   if (_session?.access_token) {
     headers.set("Authorization", `Bearer ${_session.access_token}`);
   }
   const res = await fetch(path, { ...opts, headers });
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
-  return res.json();
+  const result = await res.json();
+  if (_session?.user?.id !== userId) throw new Error("Account changed. Please retry.");
+  return result;
 }
 
 async function refresh() {
@@ -273,7 +324,7 @@ async function refresh() {
     calQs.set("year", state.calYear);
     calQs.set("month", state.calMonth);
 
-    // The Monthly Target pie always tracks the CURRENT month, independent of
+    // The Monthly Target path always tracks the CURRENT month, independent of
     // wherever the calendar has been navigated to.
     const now = new Date();
     const goalQs = new URLSearchParams(qs);
@@ -293,6 +344,7 @@ async function refresh() {
     if (_session?.user?.id !== userId) return;
     state.baseAlreadyApplied = !!stats.base_currency_applied;
     await ensureFxRate();
+    if (_session?.user?.id !== userId) return;
     state.lastEquity = equity;
     renderStats(stats);
     renderGoalPath((goalCal || calendar).month_pnl || 0);
@@ -302,12 +354,13 @@ async function refresh() {
     renderRecentTrades(fills);
     renderFills(fills);
     renderCalendar(calendar);
+    document.body.classList.remove("is-account-loading");
     drawEquity(equity);
     $("statusLine").textContent = stats.trade_count === 0
       ? "No trades yet — import a Flex CSV to begin."
       : `${stats.trade_count} fills · ${stats.close_count} closed trades · updated ${new Date().toLocaleTimeString()}`;
   } catch (err) {
-    $("statusLine").textContent = `Error: ${err.message}`;
+    $("statusLine").textContent = `Error: ${escapeHtml(err.message)}`;
   }
 }
 
@@ -345,7 +398,7 @@ function goalMoney(value) {
 function goalMetadataKey() { return `journal_goal_${state.currency}`; }
 
 function loadGoalSettings() {
-  let saved = _session?.user?.user_metadata?.[goalMetadataKey()];
+  let saved = _journalProfile?.enabled ? _journalProfile.goals?.[state.currency] : _session?.user?.user_metadata?.[goalMetadataKey()];
   if (!_supabase) {
     try { saved = JSON.parse(localStorage.getItem(`journal_goal_local:${state.currency}`)); } catch (_) {}
   }
@@ -387,10 +440,18 @@ async function saveGoalSettings(event) {
   try {
     if (_supabase) {
       if (!userId) throw new Error("Sign in to save your target.");
-      const { data, error } = await _supabase.auth.updateUser({ data: { [metadataKey]: prefs } });
-      if (error) throw error;
-      if (_session?.user?.id !== userId || state.currency !== currency) return;
-      _session.user = data.user;
+      if (_profileError) throw new Error("Could not load your saved plan. Refresh and retry.");
+      if (_journalProfile?.enabled) {
+        await api("/api/journal/profile", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({kind:"goal", currency, ...prefs})});
+        if (_session?.user?.id !== userId) return;
+        _journalProfile.goals[currency] = prefs;
+        if (state.currency !== currency) return;
+      } else {
+        const { data, error } = await _supabase.auth.updateUser({ data: { [metadataKey]: prefs } });
+        if (error) throw error;
+        if (_session?.user?.id !== userId || state.currency !== currency) return;
+        _session.user = data.user;
+      }
     } else {
       localStorage.setItem(`journal_goal_local:${currency}`, JSON.stringify(prefs));
     }
@@ -690,7 +751,7 @@ async function loadOpenPositions() {
     const data = await api("/api/journal/open-positions");
     renderOpenPositions(data.positions || []);
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="3" class="muted">Error: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="3" class="muted">Error: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -755,7 +816,7 @@ function formatOpenPositionInstrument(p) {
     const strikeNum = Number(p.strike);
     const strikeStr = Number.isInteger(strikeNum) ? String(strikeNum) : strikeNum.toFixed(2).replace(/\.?0+$/, "");
     const pc = p.put_call === "P" ? "PUT" : p.put_call === "C" ? "CALL" : "";
-    return `${m}-${d}-${y} ${strikeStr} ${pc}`.trim();
+    return `${m}-${d}-${y} ${escapeHtml(strikeStr)} ${pc}`.trim();
   }
   return p.underlying || p.symbol || "";
 }
@@ -767,7 +828,7 @@ function renderSymbolTable(rows) {
     const tr = document.createElement("tr");
     const winPct = r.count ? (r.wins / r.count * 100) : 0;
     tr.innerHTML = `
-      <td>${r.symbol}</td>
+      <td>${escapeHtml(r.symbol)}</td>
       <td class="num ${signClass(r.pnl)}">${fmt.money(r.pnl)}</td>
       <td class="num">${r.count}</td>
       <td class="num">${fmt.pct(winPct)}</td>`;
@@ -781,7 +842,7 @@ function renderDayTable(rows) {
   tbody.innerHTML = "";
   rows.slice().reverse().slice(0, 30).forEach(r => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${r.date}</td><td class="num ${signClass(r.pnl)}">${fmt.money(r.pnl)}</td>`;
+    tr.innerHTML = `<td>${escapeHtml(r.date)}</td><td class="num ${signClass(r.pnl)}">${fmt.money(r.pnl)}</td>`;
     tbody.appendChild(tr);
   });
   if (!rows.length) tbody.innerHTML = `<tr><td colspan="2" class="muted">No days yet.</td></tr>`;
@@ -798,14 +859,14 @@ function renderFills(rows) {
     tr.innerHTML = `
       <td>${dt}</td>
       <td class="sym">${formatSymbol(r)}</td>
-      <td>${r.asset_class || ""}</td>
-      <td>${r.buy_sell || ""}</td>
+      <td>${escapeHtml(r.asset_class || "")}</td>
+      <td>${escapeHtml(r.buy_sell || "")}</td>
       <td class="num">${fmt.num(r.quantity, 0)}</td>
       <td class="num">${fmt.num(r.trade_price, 4)}</td>
       <td class="num">${fmt.money(r.proceeds, { sign: false })}</td>
       <td class="num">${fmt.money(r.commission, { sign: false })}</td>
       <td class="num ${signClass(r.realized_pnl)}">${r.realized_pnl ? fmt.money(r.realized_pnl) : "—"}</td>
-      <td>${r.open_close || ""}</td>`;
+      <td>${escapeHtml(r.open_close || "")}</td>`;
     tbody.appendChild(tr);
   });
   $("fillsSub").textContent = `${rows.length} fills shown`;
@@ -822,7 +883,7 @@ function validRulesDate(date) {
 function followedRules(date) {
   if (!validRulesDate(date)) return false;
   const key = `journal_rules_${date}`;
-  if (_supabase) return _session?.user?.user_metadata?.[key] === true;
+  if (_supabase) return _journalProfile?.enabled ? _journalProfile.rules?.[date] === true : _session?.user?.user_metadata?.[key] === true;
   try { return localStorage.getItem(key) === "true"; } catch (_) { return false; }
 }
 function renderRuleStars() {
@@ -843,10 +904,17 @@ async function toggleDayRules() {
   renderRuleStars();
   try {
     if (_supabase) {
-      const { error } = await _supabase.auth.updateUser({ data: { [key]: earned } });
-      if (error) throw error;
-      if (_session?.user?.id !== userId) return;
-      _session.user.user_metadata = { ..._session.user.user_metadata, [key]: earned };
+      if (_profileError) throw new Error("Could not load your daily reviews. Refresh and retry.");
+      if (_journalProfile?.enabled) {
+        await api("/api/journal/profile", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({kind:"rules",day:date,followed:earned})});
+        if (_session?.user?.id !== userId) return;
+        _journalProfile.rules[date] = earned;
+      } else {
+        const { error } = await _supabase.auth.updateUser({ data: { [key]: earned } });
+        if (error) throw error;
+        if (_session?.user?.id !== userId) return;
+        _session.user.user_metadata = { ..._session.user.user_metadata, [key]: earned };
+      }
     } else { localStorage.setItem(key, String(earned)); }
     if (state.rulesDate === date && _session?.user?.id === userId) $("dayRulesStatus").textContent = earned
       ? (_supabase ? "Gold star saved to your account." : "Gold star saved in this browser.") : "Gold star removed.";
@@ -954,7 +1022,7 @@ function renderCalendar(data) {
          <div class="cal-cell-sub">${d.trades} trade${d.trades === 1 ? "" : "s"}</div>
          <div class="cal-cell-sub">${fmt.pct(d.win_rate)}</div>`
       : "";
-    cell.innerHTML = `<div class="cal-cell-day">${d.day}</div>${pnlLine}`;
+    cell.innerHTML = `<div class="cal-cell-day">${escapeHtml(d.day)}</div>${pnlLine}`;
     const star = document.createElement("span");
     star.className = "cal-rule-star";
     star.dataset.ruleDate = d.date;
@@ -1023,7 +1091,7 @@ async function openDayModal(dateIso) {
     renderDayTrades(d.trades);
   } catch (err) {
     if (request !== state.dayRequest || _session?.user?.id !== userId) return;
-    body.innerHTML = `<tr><td colspan="6" class="muted">Error: ${err.message}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" class="muted">Error: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -1085,7 +1153,7 @@ async function openWeekModal(startIso) {
     renderZellaScale(w);
     renderWeekTrades(w.days, w.trades);
   } catch (err) {
-    body.innerHTML = `<tr><td colspan="7" class="muted">Error: ${err.message}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="muted">Error: ${escapeHtml(err.message)}</td></tr>`;
   }
 }
 
@@ -1105,7 +1173,7 @@ function renderWeekDayStrip(days) {
     const cls = d.trades > 0 ? (d.pnl > 0 ? "pos" : d.pnl < 0 ? "neg" : "") : "empty";
     card.className = `week-day-card ${cls}`;
     card.innerHTML = `
-      <div class="wd-label">${d.weekday} ${d.day}</div>
+      <div class="wd-label">${escapeHtml(d.weekday)} ${escapeHtml(d.day)}</div>
       <div class="wd-pnl ${d.trades ? signClass(d.pnl) : "muted"}">${d.trades ? fmt.money(d.pnl, { compact: true }) : "—"}</div>
       <div class="wd-sub">${d.trades ? `${d.trades} trade${d.trades === 1 ? "" : "s"}` : ""}</div>`;
     if (validRulesDate(d.date)) {
@@ -1203,7 +1271,7 @@ function ruleBadges(t) {
   const flags = (t && t.rule_flags) || [];
   if (!flags.length) return "";
   return " " + flags.map(f =>
-    `<span class="rule-badge" title="${RULE_LABELS[f] || f}">${f}</span>`
+    `<span class="rule-badge" title="${escapeHtml(RULE_LABELS[f] || f)}">${escapeHtml(f)}</span>`
   ).join("");
 }
 
@@ -1214,7 +1282,7 @@ function renderWeekTrades(days, trades) {
     tbody.innerHTML = `<tr><td colspan="7" class="muted">No closed trades this week.</td></tr>`;
     return;
   }
-  const weekdayByDate = new Map(days.map(d => [d.date, `${d.weekday} ${d.day}`]));
+  const weekdayByDate = new Map(days.map(d => [d.date, `${escapeHtml(d.weekday)} ${escapeHtml(d.day)}`]));
   trades.forEach(t => {
     const tr = document.createElement("tr");
     const sideClass = t.side === "C" || t.side === "CALL" || t.side === "BUY" ? "side-call" :
@@ -1229,11 +1297,11 @@ function renderWeekTrades(days, trades) {
       openTradeDetail(t);
     });
     tr.innerHTML = `
-      <td class="week-cell-day">${dayLabel}</td>
-      <td>${t.time || ""}</td>
-      <td><span class="ticker-pill">${t.ticker || ""}</span></td>
-      <td class="${sideClass}">${sideLabel || ""}</td>
-      <td>${t.instrument || ""}${ruleBadges(t)}</td>
+      <td class="week-cell-day">${escapeHtml(dayLabel)}</td>
+      <td>${escapeHtml(t.time || "")}</td>
+      <td><span class="ticker-pill">${escapeHtml(t.ticker || "")}</span></td>
+      <td class="${sideClass}">${escapeHtml(sideLabel || "")}</td>
+      <td>${escapeHtml(t.instrument || "")}${ruleBadges(t)}</td>
       <td class="num ${signClass(t.net_pnl)}">${fmt.money(t.net_pnl)}</td>
       <td class="num ${signClass(t.net_roi)}">${roi}</td>`;
     tbody.appendChild(tr);
@@ -1254,15 +1322,15 @@ function renderDayTrades(trades) {
     const sideLabel = t.side === "C" ? "CALL" : t.side === "P" ? "PUT" : t.side;
     const roi = t.net_roi != null ? (t.net_roi >= 0 ? `${t.net_roi.toFixed(2)}%` : `(${Math.abs(t.net_roi).toFixed(2)}%)`) : "—";
     const openTag = t.is_open ? `<span class="muted" style="font-size:11px;margin-left:6px;">(open)</span>` : "";
-    const timeCell = `${t.time || ""}${openTag}`;
+    const timeCell = `${escapeHtml(t.time || "")}${openTag}`;
     tr.classList.add("cal-clickable");
     tr.style.cursor = "pointer";
     tr.addEventListener("click", () => openTradeDetail(t));
     tr.innerHTML = `
       <td>${timeCell}</td>
-      <td><span class="ticker-pill">${t.ticker || ""}</span></td>
-      <td class="${sideClass}">${sideLabel || ""}</td>
-      <td>${t.instrument || ""}${ruleBadges(t)}</td>
+      <td><span class="ticker-pill">${escapeHtml(t.ticker || "")}</span></td>
+      <td class="${sideClass}">${escapeHtml(sideLabel || "")}</td>
+      <td>${escapeHtml(t.instrument || "")}${ruleBadges(t)}</td>
       <td class="num ${signClass(t.net_pnl)}">${fmt.money(t.net_pnl)}</td>
       <td class="num ${signClass(t.net_roi)}">${roi}</td>`;
     tbody.appendChild(tr);
@@ -1437,7 +1505,7 @@ async function loadTradeNote(trade) {
     textarea.disabled = false;
     status.textContent = n.updated_at ? `Saved · ${new Date(n.updated_at).toLocaleString()}` : "";
   } catch (err) {
-    status.textContent = `Error: ${err.message}`;
+    status.textContent = `Error: ${escapeHtml(err.message)}`;
     textarea.disabled = false;
   }
 }
@@ -1463,7 +1531,7 @@ async function saveTradeNote() {
       ? `Saved · ${new Date(r.updated_at).toLocaleString()}`
       : body.trim() ? "Saved" : "";
   } catch (err) {
-    status.textContent = `Error: ${err.message}`;
+    status.textContent = `Error: ${escapeHtml(err.message)}`;
   }
 }
 
@@ -1764,6 +1832,7 @@ function drawEquity(points) {
 /* ---------- import / clear ---------- */
 
 async function importCsv(file) {
+  if (file && file.size > 2 * 1024 * 1024) { $("statusLine").textContent = "Import files up to 2 MB at a time."; return; }
   if (!file) return;
   $("statusLine").textContent = `Importing ${file.name}…`;
   try {
@@ -1777,45 +1846,45 @@ async function importCsv(file) {
     $("statusLine").textContent = `Imported ${data.inserted} new · ${data.skipped} skipped.`;
     await refresh();
   } catch (err) {
-    $("statusLine").textContent = `Import failed: ${err.message}`;
+    $("statusLine").textContent = `Import failed: ${escapeHtml(err.message)}`;
   }
 }
 
-// IBKR credentials are per-Supabase-user so multiple accounts on the same
-// browser don't leak into each other. Legacy unscoped keys are ignored.
-function _credKeys() {
-  const uid = _session?.user?.id;
-  if (!uid) return null;
-  return {
-    token: `journal_ibkr_token:${uid}`,
-    queryId: `journal_ibkr_query_id:${uid}`,
-  };
-}
-
+// Never persist plaintext broker tokens in browser storage.
 function getStoredCreds() {
-  const k = _credKeys();
-  if (!k) return { token: "", query_id: "" };
-  return {
-    token: localStorage.getItem(k.token) || "",
-    query_id: localStorage.getItem(k.queryId) || "",
-  };
+  return _memoryCreds?.userId === (_session?.user?.id || "local")
+    ? { token: _memoryCreds.token, query_id: _memoryCreds.query_id } : { token: "", query_id: "" };
 }
-
-function saveCreds(token, queryId) {
-  const k = _credKeys();
-  if (!k) return;
-  localStorage.setItem(k.token, token);
-  localStorage.setItem(k.queryId, queryId);
+function purgeLegacyCreds() {
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (/^journal_ibkr_(token|query_id)(:|$)/.test(key)) localStorage.removeItem(key);
+    }
+  } catch (_) {}
 }
-
-function clearCreds() {
-  const k = _credKeys();
-  if (!k) return;
-  localStorage.removeItem(k.token);
-  localStorage.removeItem(k.queryId);
-  // Also wipe legacy unscoped keys left behind by older builds.
-  localStorage.removeItem("journal_ibkr_token");
-  localStorage.removeItem("journal_ibkr_query_id");
+async function loadConnection() {
+  const userId = _session?.user?.id;
+  if (!userId) return;
+  try {
+    const result = await api("/api/journal/connection");
+    if (_session?.user?.id === userId) _connection = result;
+  } catch (_) { /* secure storage may not be provisioned yet; tab-only mode */ }
+}
+async function saveCreds(token, queryId) {
+  const userId = _session?.user?.id || "local";
+  if (_connection.enabled) {
+    await api("/api/journal/connection", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({token, query_id: queryId}) });
+    if ((_session?.user?.id || "local") !== userId) return;
+    _connection.connected = true;
+    _memoryCreds = null;
+  } else { _memoryCreds = {userId, token, query_id: queryId}; }
+  purgeLegacyCreds();
+}
+async function clearCreds() {
+  if (_connection.enabled) await api("/api/journal/connection", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({disconnect:true})});
+  _memoryCreds = null;
+  _connection.connected = false;
+  purgeLegacyCreds();
 }
 
 function getStoredTheme() {
@@ -1837,7 +1906,7 @@ async function syncIbkr({ silent = false } = {}) {
   const btn = $("syncBtn");
   const dot = $("syncDot");
   const creds = getStoredCreds();
-  if (!creds.token || !creds.query_id) {
+  if (!_connection.connected && (!creds.token || !creds.query_id)) {
     $("statusLine").textContent = "No IBKR credentials saved — click ⚙ Settings to add yours.";
     openSettings();
     return;
@@ -1851,7 +1920,7 @@ async function syncIbkr({ silent = false } = {}) {
       data = await api("/api/journal/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(creds),
+        body: JSON.stringify(_connection.connected ? {} : creds),
       });
     } catch (e) {
       data = { ok: false, error: e.message };
@@ -1868,7 +1937,7 @@ async function syncIbkr({ silent = false } = {}) {
     await refresh();
     await loadLastSync();
   } catch (err) {
-    $("statusLine").textContent = `Sync error: ${err.message}`;
+    $("statusLine").textContent = `Sync error: ${escapeHtml(err.message)}`;
     dot.classList.remove("is-syncing");
     dot.classList.add("is-error");
   } finally {
@@ -1891,22 +1960,24 @@ async function loadLastSync() {
   }
 }
 
-function openSettings() {
+async function openSettings() {
+  await loadConnection();
   const creds = getStoredCreds();
   $("settingsToken").value = creds.token;
   $("settingsQueryId").value = creds.query_id;
   $("settingsTheme").value = getStoredTheme();
-  $("settingsStatus").textContent = "";
+  $("settingsStatus").textContent = _connection.connected ? "IBKR is connected. Enter a token only to replace it." : (_connection.enabled ? "Your reporting token will be stored encrypted." : "Secure storage is not configured yet. Credentials last only for this tab.");
   $("settingsModal").hidden = false;
   document.body.style.overflow = "hidden";
 }
 
 function closeSettings() {
   $("settingsModal").hidden = true;
+  $("settingsToken").value = "";
   document.body.style.overflow = "";
 }
 
-function handleSettingsSubmit(e) {
+async function handleSettingsSubmit(e) {
   e.preventDefault();
   const token = $("settingsToken").value.trim();
   const queryId = $("settingsQueryId").value.trim();
@@ -1914,15 +1985,17 @@ function handleSettingsSubmit(e) {
     $("settingsStatus").textContent = "Both fields are required.";
     return;
   }
-  saveCreds(token, queryId);
-  saveTheme($("settingsTheme").value);
-  $("settingsStatus").textContent = "Saved. Click Sync IBKR to pull your trades.";
-  setTimeout(closeSettings, 600);
+  try {
+    await saveCreds(token, queryId);
+    saveTheme($("settingsTheme").value);
+    $("settingsToken").value = "";
+    $("settingsStatus").textContent = _connection.enabled ? "Saved encrypted. Click Sync IBKR." : "Ready for this tab. Click Sync IBKR. Reloading clears the token.";
+  } catch (_) { $("settingsStatus").textContent = "Could not save credentials. Please try again."; }
 }
 
-function handleSettingsClear() {
-  if (!confirm("Remove saved IBKR credentials from this browser?")) return;
-  clearCreds();
+async function handleSettingsClear() {
+  if (!confirm("Disconnect IBKR and remove its saved reporting credentials?")) return;
+  try { await clearCreds(); } catch (_) { $("settingsStatus").textContent = "Could not disconnect. Please try again."; return; }
   $("settingsToken").value = "";
   $("settingsQueryId").value = "";
   $("settingsStatus").textContent = "Credentials removed.";
@@ -1949,7 +2022,7 @@ async function clearAll() {
     $("statusLine").textContent = `Cleared ${data.deleted} fills.`;
     await refresh();
   } catch (err) {
-    $("statusLine").textContent = `Clear failed: ${err.message}`;
+    $("statusLine").textContent = `Clear failed: ${escapeHtml(err.message)}`;
   }
 }
 
@@ -1972,7 +2045,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     localStorage.removeItem("journal_ibkr_token");
     localStorage.removeItem("journal_ibkr_query_id");
   } catch (_) {}
+  applyPrivacy(document.body.classList.contains("is-private"));
+  $("privacyToggle").addEventListener("click", togglePrivacy);
+  window.addEventListener("storage", event => { if (event.key === "journal_hide_pnl") applyPrivacy(event.newValue === "true"); });
+  window.addEventListener("pageshow", () => { try { applyPrivacy(localStorage.getItem("journal_hide_pnl") === "true"); } catch (_) {} });
   await initAuth();
+  // Existing browser tokens are removed; users reconnect explicitly in Settings.
+  purgeLegacyCreds();
+  await Promise.all([loadConnection(), loadJournalProfile()]);
   loadGoalSettings();
   $("goalSettingsForm").addEventListener("submit", saveGoalSettings);
   $("goalMonthlyInput").addEventListener("input", previewDailyTarget);
