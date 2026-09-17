@@ -12,7 +12,7 @@
 
 1. In Supabase, confirm you have a recent database backup and a documented way to restore it. A backup existing is not proof a restore works: restore a copy into a separate test project before the paid beta.
 2. Open the SQL Editor for the correct Option Riders project.
-3. Run `supabase/migrations/20260917_journal_security.sql` from this repository. It creates the encrypted connection table, user-owned preferences and daily reviews, and the rate-limit function. It copies valid existing targets and stars without overwriting newer rows. It retains old metadata for rollback.
+3. Run `supabase/migrations/20260917_journal_security.sql` and then `supabase/migrations/20260917_journal_function_hardening.sql` from this repository. It creates the encrypted connection table, user-owned preferences and daily reviews, and the rate-limit function. It copies valid existing targets and stars without overwriting newer rows. It retains old metadata for rollback.
 4. Check Supabase Security Advisor. Confirm row-level security is enabled for `journal_fills`, `journal_notes`, `journal_preferences`, `journal_discipline`, and `journal_connections`.
 5. Do not grant `anon` or `authenticated` access to `journal_connections`. Only the backend service role can retrieve its ciphertext. Never expose the service-role key in the browser.
 
@@ -82,6 +82,7 @@ Local automated checks cover encryption/tampering/wrong-user decryption, input b
 - Passed an encrypted broker save/load/disconnect round trip against production storage using synthetic credentials, wrong-user decryption rejection, distributed sync throttling, and anonymous quota-RPC denial. The temporary account was removed. No broker request was sent.
 - Inspected the existing statistics function: it uses caller privileges rather than security-definer privileges. No public views were present.
 - Configured the encryption key as a production-only Vercel secret, plus the storage activation flag and production origin. A restricted local recovery copy of the key is kept outside the repository; transfer it to the owner's password manager. Never commit or display it.
+- Resolved the security advisor warnings for mutable function search paths. The remaining quota-function warning is intentional: it uses the authenticated caller ID and exposes no journal records. Leaked-password protection is disabled and remains an operator action.
 - Supabase reported no available backups and point-in-time recovery disabled. Backup setup and a restore rehearsal remain outstanding.
 - Browser interaction testing, an actual user IBKR reconnect/sync, and an independent security review remain outstanding. This is not a paid-launch security certification.
 
