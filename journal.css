@@ -1428,3 +1428,15 @@ body.is-light .trade-chart-exit { color: #b91c1c; }
 .day-rules-check p { margin: 8px 0 4px; }
 #dayRulesButton[aria-pressed="true"] { color: #e8b339; border-color: currentColor; }
 .journal-body.is-light #dayRulesButton[aria-pressed="true"] { color: #926800; }
+
+/* Monthly progress follows a segmented route to the trophy. */
+.goal-path { width: 100%; margin: 8px 0 0; }
+.goal-path svg { display: block; width: 100%; height: auto; }
+.goal-path-segment, .goal-path-fill { fill: none; stroke-width: 11; stroke-linecap: butt; stroke-linejoin: round; }
+.goal-path-segment { stroke: var(--border-highlight); }
+.goal-path-fill { stroke: var(--green); }
+.goal-path-trophy { fill: none; stroke: var(--text-secondary); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.goal-path-trophy.is-earned { stroke: var(--amber); }
+.goal-path-trophy text { fill: var(--text-secondary); stroke: none; font: 9px var(--font-mono); text-anchor: middle; letter-spacing: 1px; }
+.goal-path-caption { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; text-align: center; }
+.journal-plan-grid .panel-goal .goal-secondary-actions { margin-top: 12px; }

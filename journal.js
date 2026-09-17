@@ -295,7 +295,7 @@ async function refresh() {
     await ensureFxRate();
     state.lastEquity = equity;
     renderStats(stats);
-    renderGoalPie((goalCal || calendar).month_pnl || 0);
+    renderGoalPath((goalCal || calendar).month_pnl || 0);
     renderFarm(stats.net_pnl);
     renderSymbolTable(stats.by_symbol);
     renderDayTable(stats.by_day);
@@ -327,7 +327,7 @@ function zellaScore(s) {
 /* ---------- Personal monthly target ---------- */
 
 const DEFAULT_GOAL = { monthlyTarget: 5000, tradingDays: 20 };
-const BRICKS_PER_ROW = 5;
+
 
 function validGoalSettings(value) {
   if (!value || typeof value.monthlyTarget !== "number" || typeof value.tradingDays !== "number") return null;
@@ -361,7 +361,7 @@ function loadGoalSettings() {
   $("goalSaveStatus").textContent = "";
   previewDailyTarget();
   renderGoalPlan();
-  renderGoalPie(state.lastGoalPnl);
+  renderGoalPath(state.lastGoalPnl);
 }
 
 function previewDailyTarget() {
@@ -420,63 +420,29 @@ function renderGoalPlan() {
   $("whyDailyGate").textContent = `Sized to the plan? ${goalMoney(daily)} today is a whole day well spent.`;
 }
 
-function renderGoalRewards(pnl) {
-  const el = $("goalRewards");
-  if (!el) return;
-  pnl = Math.max(0, pnl || 0);
-  const BRICK_VALUE = state.monthlyTarget / state.tradingDays;
-  const WALL_BRICKS = state.tradingDays;
-  const WALL_ROWS = Math.ceil(WALL_BRICKS / BRICKS_PER_ROW);
-  const laid = Math.floor(pnl / state.monthlyTarget * WALL_BRICKS + 1e-9);
-  const wallLaid = Math.min(laid, WALL_BRICKS);
-  const overLaid = Math.max(0, laid - WALL_BRICKS);
-
-  // Built bottom-up, left-to-right within each row — an actual wall going up.
-  let rows = "";
-  for (let r = WALL_ROWS - 1; r >= 0; r--) {
-    let row = "";
-    for (let c = 0; c < BRICKS_PER_ROW; c++) {
-      const idx = r * BRICKS_PER_ROW + c;
-      if (idx >= WALL_BRICKS) continue;
-      row += `<span class="brick${idx < wallLaid ? " brick-laid" : ""}"></span>`;
-    }
-    rows += `<div class="brick-row">${row}</div>`;
+// Equal-distance pieces along a smooth curve keep every daily target the same size.
+function goalPathSegments(count) {
+  const points = [], lengths = [0];
+  for (let i = 0; i <= 600; i++) {
+    const t = i / 600;
+    points.push({ x: 24 + 384 * t, y: 86 + 44 * Math.sin(t * Math.PI * 2) });
+    if (i) lengths.push(lengths[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y));
   }
-
-  let overRow = "";
-  if (overLaid > 0) {
-    const shown = Math.min(overLaid, BRICKS_PER_ROW * 2);
-    let over = "";
-    for (let i = 0; i < shown; i++) over += `<span class="brick brick-gold"></span>`;
-    if (overLaid > shown) over += `<span class="brick-more">+${overLaid - shown}</span>`;
-    overRow = `<div class="brick-row brick-row-over">${over}</div>`;
+  const total = lengths[600], step = total / count;
+  function at(distance) {
+    let i = 1;
+    while (i < 600 && lengths[i] < distance) i++;
+    const f = (distance - lengths[i - 1]) / (lengths[i] - lengths[i - 1]);
+    return `${(points[i - 1].x + f * (points[i].x - points[i - 1].x)).toFixed(2)},${(points[i - 1].y + f * (points[i].y - points[i - 1].y)).toFixed(2)}`;
   }
-
-  const toNext = (laid + 1) * BRICK_VALUE - pnl;
-  const label = wallLaid === 0
-    ? `THE WALL · first brick at ${goalMoney(BRICK_VALUE)}`
-    : wallLaid === WALL_BRICKS
-      ? `THE WALL · topped out${overLaid ? ` · +${overLaid} gold` : ""} 🏗️`
-      : `THE WALL · ${wallLaid}/${WALL_BRICKS} bricks · next in ${goalMoney(toNext)}`;
-
-  el.innerHTML =
-    `<div class="goal-rewards-label">${label}</div>`
-    + `<div class="wall">${overRow}${rows}</div>`;
+  return Array.from({length: count}, (_, i) => {
+    const gap = Math.min(6, step * 0.24), start = i * step + gap / 2, end = (i + 1) * step - gap / 2;
+    return Array.from({length: 25}, (_, k) => `${k ? "L" : "M"}${at(start + (end - start) * k / 24)}`).join(" ");
+  });
 }
 
-// Filled pie wedge from 12 o'clock, sweeping `deg` degrees clockwise.
-function goalWedge(cx, cy, r, deg) {
-  if (deg <= 0) return "";
-  if (deg >= 360) deg = 359.999;
-  const rad = (deg - 90) * Math.PI / 180;   // -90° so 0 starts at the top
-  const x = cx + r * Math.cos(rad);
-  const y = cy + r * Math.sin(rad);
-  const large = deg > 180 ? 1 : 0;
-  return `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${large} 1 ${x.toFixed(2)} ${y.toFixed(2)} Z`;
-}
-
-function renderGoalPie(pnl) {
-  const el = $("goalPie");
+function renderGoalPath(pnl) {
+  const el = $("goalPath");
   if (!el) return;
   state.lastGoalPnl = pnl;
   const rawPnl = pnl;
@@ -484,27 +450,25 @@ function renderGoalPie(pnl) {
   const GOAL_TARGET = state.monthlyTarget;
   const frac = pnl / GOAL_TARGET;
   el.setAttribute("aria-label", `Monthly profit ${goalMoney(pnl)} toward ${goalMoney(GOAL_TARGET)}`);
-  const mainDeg = Math.max(0, Math.min(1, frac)) * 360;
-  const overDeg = frac > 1 ? Math.min(1, frac - 1) * 360 : 0;
-
-  const size = 220, cx = size / 2, cy = size / 2, r = size / 2 - 6;
-  let svg = `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">`;
-  // Empty track
-  svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="var(--bg-surface)" stroke="var(--border)" stroke-width="1.5"/>`;
-  // Green fill up to the goal (full circle once reached)
-  if (frac >= 1) {
-    svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="var(--green)" opacity="0.92"/>`;
-  } else if (mainDeg > 0) {
-    svg += `<path d="${goalWedge(cx, cy, r, mainDeg)}" fill="var(--green)" opacity="0.92"/>`;
-  }
-  // Overflow past the goal — an amber wedge overlapping the full green pie
-  if (overDeg > 0) {
-    svg += `<path d="${goalWedge(cx, cy, r, overDeg)}" fill="var(--amber)" opacity="0.9"/>`;
-  }
-  // Crisp rim on top
-  svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="1.5"/>`;
-  svg += `</svg>`;
+  const completed = Math.max(0, Math.min(state.tradingDays, frac * state.tradingDays));
+  const segments = goalPathSegments(state.tradingDays);
+  let svg = '<svg viewBox="0 0 480 170" aria-hidden="true" focusable="false">';
+  segments.forEach((d, i) => {
+    const fill = Math.max(0, Math.min(1, completed - i));
+    svg += `<path class="goal-path-segment" d="${d}"/>`;
+    if (fill > 0) svg += `<path class="goal-path-fill" data-complete="${fill >= 1 - 1e-9}" d="${d}" pathLength="100" stroke-dasharray="${fill * 100} 100"/>`;
+  });
+  // Code-native trophy: neutral until the monthly target is reached.
+  svg += `<g class="goal-path-trophy${frac >= 1 ? " is-earned" : ""}" transform="translate(430 56)">
+    <path d="M8 5 H34 V19 C34 36 8 36 8 19 Z M8 9 H1 V17 Q1 27 12 27 M34 9 H41 V17 Q41 27 30 27 M21 33 V44 M11 49 H31 M15 44 H27"/>
+    <text x="21" y="69">GOAL</text></g></svg>`;
   el.innerHTML = svg;
+  const finished = Math.min(state.tradingDays, Math.floor(completed + 1e-9));
+  $("goalPathCaption").textContent = rawPnl == null
+    ? `${state.tradingDays} segments · ${goalMoney(GOAL_TARGET / state.tradingDays)} each`
+    : `${finished} of ${state.tradingDays} segments complete · ${goalMoney(GOAL_TARGET / state.tradingDays)} each`;
+  el.setAttribute("aria-label", rawPnl == null ? "Monthly target path, awaiting trade data" :
+    `${goalMoney(pnl)} of ${goalMoney(GOAL_TARGET)}. ${finished} of ${state.tradingDays} daily target segments complete${frac >= 1 ? ". Trophy earned" : ""}.`);
 
   const amt = $("goalAmount");
   amt.textContent = fmt.money(rawPnl);
@@ -527,7 +491,7 @@ function renderGoalPie(pnl) {
     note.textContent = `${goalMoney(remain)} to go — ${days} day${days === 1 ? "" : "s"} at your planned daily target.`;
   }
 
-  renderGoalRewards(pnl);
+
 }
 
 /* ---------- The Build (all-time P&L brought to life: foundation → topped out) ---------- */
