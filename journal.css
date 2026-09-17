@@ -1430,8 +1430,8 @@ body.is-light .trade-chart-exit { color: #b91c1c; }
 .journal-body.is-light #dayRulesButton[aria-pressed="true"] { color: #926800; }
 
 /* Monthly progress follows a segmented route to the trophy. */
-.goal-path { width: 100%; margin: 8px 0 0; }
-.goal-path svg { display: block; width: 100%; height: auto; }
+.goal-path { width: 100%; max-width: 280px; margin: 0 auto; }
+.goal-path svg { display: block; width: 100%; height: auto; max-height: 100px; }
 .goal-path-segment, .goal-path-fill { fill: none; stroke-width: 11; stroke-linecap: butt; stroke-linejoin: round; }
 .goal-path-segment { stroke: var(--border-highlight); }
 .goal-path-fill { stroke: var(--green); }
@@ -1440,3 +1440,13 @@ body.is-light .trade-chart-exit { color: #b91c1c; }
 .goal-path-trophy text { fill: var(--text-secondary); stroke: none; font: 9px var(--font-mono); text-anchor: middle; letter-spacing: 1px; }
 .goal-path-caption { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; text-align: center; }
 .journal-plan-grid .panel-goal .goal-secondary-actions { margin-top: 12px; }
+
+/* Keep the route beside the totals instead of growing with the panel. */
+.goal-path-block { flex: 1 1 240px; min-width: 0; max-width: 280px; }
+.journal-plan-grid .panel-goal .goal-meta { flex: 1 1 180px; }
+.journal-plan-grid .panel-goal .panel-head { margin-bottom: 12px; }
+@media (max-width: 600px) {
+  .journal-plan-grid .panel-goal .goal-wrap { flex-direction: column; gap: 6px; }
+  .journal-plan-grid .panel-goal .goal-meta { flex: auto; }
+  .goal-path-block { flex: auto; width: 100%; max-width: 240px; }
+}
