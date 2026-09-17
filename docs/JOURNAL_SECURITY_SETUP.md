@@ -2,7 +2,7 @@
 
 ## What this release changes immediately
 
-- **Hide P&L** in the header hides financial totals, table amounts, financial charts, goal progress, and private trade notes. Calendar profit/loss colours are neutralised. The device remembers the choice before data renders, including on reload. This is shoulder-surfing protection, not an account lock or encryption of page data.
+- **Hide P&L** in the header hides only the headline Net P&L value. Other statistics, trade amounts, charts, goal progress, notes, and calendar colours remain visible. The device remembers the choice before data renders, including on reload. This is limited shoulder-surfing protection, not an account lock or encryption of page data.
 - Browser-persisted IBKR reporting tokens are removed. Reconnect in Settings. Until the vault is activated, a token exists only in that tab's memory and is sent over HTTPS through the journal server to IBKR. Reloading or closing the tab clears it. No broker trading password is needed.
 - Journal API requests verify identity, restrict browser origins, cap uploads at 2 MB and 20,000 fills, limit requests, reject XML entities, and return safe errors. Production pages fail closed if authentication configuration fails.
 - The journal has a Content Security Policy, pinned external scripts with integrity checks, and escaping of imported strings. Local development authentication requires an explicit loopback-only switch. Deployment excludes private files and blocks private/source-file URLs.
@@ -52,7 +52,7 @@ Also check the journal in two separate browser profiles: log in as A and B, add 
 
 ## 4. Verify the release with a browser
 
-- On desktop and mobile, hide P&L, reload, change months, open day/week/trade details, and sync. No financial amounts or financial-chart tooltips should appear. Show P&L restores the data. The preference is device-wide so a shared device stays private.
+- On desktop and mobile, hide P&L and reload. The headline Net P&L should remain hidden while every other statistic, trade amount, chart, goal, note, and calendar colour remains visible. Show P&L restores the headline value. The preference is device-wide.
 - Test Google sign-in, note editing, chart rendering/fallback, FX conversion, target saves and daily stars. Inspect the console for Content Security Policy errors.
 - Check oversized or malformed imports produce a friendly rejection without exposing internal errors.
 - With distributed storage enabled, repeated sync attempts should be throttled. Protect anonymous traffic and expensive public market-data endpoints separately with Vercel firewall/rate-limit rules and spending alerts. App-level user quotas do not replace infrastructure-level abuse controls.

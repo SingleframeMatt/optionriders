@@ -1451,19 +1451,11 @@ body.is-light .trade-chart-exit { color: #b91c1c; }
   .goal-path-block { flex: auto; width: 100%; max-width: 240px; }
 }
 
-/* Privacy is opaque (not a blur) and applies to future async renders too. */
-body.is-private :is([data-private], .stat-value, .journal-table td.num, .cal-cell-pnl, .cal-cell-sub,
- .week-pnl, .week-sub, .wd-pnl, .wd-sub, .day-modal canvas, .trade-notes, .trade-chart-caption, .trade-chart-events) {
+/* The privacy toggle only conceals the headline Net P&L value. */
+body.is-private #netPnl {
   visibility: hidden !important;
   pointer-events: none !important;
   user-select: none !important;
 }
-body.is-private :is(.cal-pos, .cal-neg, .cal-neutral, .week-card, .week-day-card) {
-  background: var(--bg-surface) !important;
-  border-color: var(--border-subtle) !important;
-}
-body.is-private .cal-cell-day { color: var(--text-secondary) !important; }
 #privacyToggle[aria-pressed="true"] { border-color: var(--text-secondary); }
-
-body.is-private :is(.trade-detail-notes-wrap, .rule-badge) { visibility: hidden !important; }
 body.is-account-loading > section, body.is-account-loading > .journal-plan-grid { visibility: hidden; }

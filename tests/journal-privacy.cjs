@@ -9,6 +9,9 @@ const ctx=vm.createContext({console,Date,Intl,Math,Number,JSON,setTimeout,window
 const run=s=>vm.runInContext(s,ctx);
 const bootstrap=fs.readFileSync(path.join(root,'journal-bootstrap.js'),'utf8');
 storage.journal_hide_pnl='true';run(bootstrap);assert(classes.has('is-private'));
+const privacyCss=fs.readFileSync(path.join(root,'journal.css'),'utf8');
+assert.match(privacyCss,/body\.is-private #netPnl\s*\{/);
+assert.doesNotMatch(privacyCss,/body\.is-private\s+:is\(/);
 run(fs.readFileSync(path.join(root,'journal.js'),'utf8').split('document.addEventListener("DOMContentLoaded", async () => {')[0]);
 (async()=>{
  run('applyPrivacy(true)');assert.equal(element('privacyToggle')['aria-pressed'],'true');
@@ -29,5 +32,5 @@ run(fs.readFileSync(path.join(root,'journal.js'),'utf8').split('document.addEven
  element('goalMonthlyInput').value='9000';element('goalDaysInput').value='18';await run('saveGoalSettings({preventDefault(){}})');
  assert.equal(run('savedProfile.monthlyTarget'),9000);assert.equal(run('_journalProfile.goals.GBP.monthlyTarget'),9000);
  run("state.rulesDate='2026-01-01'");await run('toggleDayRules()');assert.equal(run('_journalProfile.rules["2026-01-01"]'),false);
- console.log('Passed: privacy survives reload, toggle state, tab-only credentials, user isolation, old-token cleanup, markup escaping, database preferences and stars.');
+ console.log('Passed: privacy hides only Net P&L and survives reload, plus tab-only credentials, user isolation, old-token cleanup, escaping, preferences and stars.');
 })().catch(e=>{console.error(e);process.exit(1)});
