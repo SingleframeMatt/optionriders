@@ -6,7 +6,7 @@
 - Browser-persisted IBKR reporting tokens are removed. Reconnect in Settings. Until the vault is activated, a token exists only in that tab's memory and is sent over HTTPS through the journal server to IBKR. Reloading or closing the tab clears it. No broker trading password is needed.
 - Journal API requests verify identity, restrict browser origins, cap uploads at 2 MB and 20,000 fills, limit requests, reject XML entities, and return safe errors. Production pages fail closed if authentication configuration fails.
 - The journal has a Content Security Policy, pinned external scripts with integrity checks, and escaping of imported strings. Local development authentication requires an explicit loopback-only switch. Deployment excludes private files and blocks private/source-file URLs.
-- The code is ready for encrypted broker storage, database-backed preferences/stars, and distributed rate limits. These are **not active until the steps below are completed**. Before activation, preferences/stars retain the existing metadata storage and rate limits are per server process, not global.
+- The code is ready for encrypted broker storage, database-backed preferences/stars, and distributed rate limits. Production configuration was activated on 17 September 2026 after the migration and live isolation tests passed. Other environments require the steps below. Before activation, preferences/stars retain the existing metadata storage and rate limits are per server process, not global.
 
 ## 1. Back up and apply the database migration
 
@@ -75,6 +75,14 @@ For a functional rollback, prefer rolling back application code while retaining 
 
 ## Validation record
 
-Local automated checks cover encryption/tampering/wrong-user decryption, input boundaries, origin rejection, token-safe error responses, credential ownership, local/distributed quota behaviour, privacy persistence, browser-token cleanup, escaping and database-backed preferences. Production configuration, SQL execution, cross-account live isolation, backup restoration, and independent review remain unverified until the checklist above is completed.
+Local automated checks cover encryption/tampering/wrong-user decryption, input boundaries, origin rejection, token-safe error responses, credential ownership, local/distributed quota behaviour, privacy persistence, browser-token cleanup, escaping and database-backed preferences. Live verification on 17 September 2026:
+
+- Applied the additive migration to the verified production project; all seven public tables have row-level security enabled.
+- Passed two-user own-access, cross-account read/update/delete, forged ownership, ownership-transfer, anonymous-read, and blocked direct-vault-read checks. Temporary users and their fixtures were removed.
+- Passed an encrypted broker save/load/disconnect round trip against production storage using synthetic credentials, wrong-user decryption rejection, distributed sync throttling, and anonymous quota-RPC denial. The temporary account was removed. No broker request was sent.
+- Inspected the existing statistics function: it uses caller privileges rather than security-definer privileges. No public views were present.
+- Configured the encryption key as a production-only Vercel secret, plus the storage activation flag and production origin. A restricted local recovery copy of the key is kept outside the repository; transfer it to the owner's password manager. Never commit or display it.
+- Supabase reported no available backups and point-in-time recovery disabled. Backup setup and a restore rehearsal remain outstanding.
+- Browser interaction testing, an actual user IBKR reconnect/sync, and an independent security review remain outstanding. This is not a paid-launch security certification.
 
 References: [Supabase RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [OWASP browser storage](https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html), [Stripe webhook verification](https://docs.stripe.com/webhooks), [MDN CSP](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP).

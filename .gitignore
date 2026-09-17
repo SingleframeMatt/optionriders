@@ -6,3 +6,5 @@ __pycache__/
 .logo-venv/
 trade_journal.db
 .trade_journal_last_sync.json
+
+supabase/.temp/
