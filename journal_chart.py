@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 _NY = ZoneInfo("America/New_York")
 _cache = {}
-_INTERVALS = {"1min": "1m", "5min": "5m", "15min": "15m", "30min": "30m", "60min": "60m"}
+_INTERVALS = {"1min": "1m", "2min": "2m", "5min": "5m", "15min": "15m", "30min": "30m", "60min": "60m"}
 
 
 def _clean(bars):
@@ -24,6 +24,22 @@ def _clean(bars):
         except (ValueError, TypeError, KeyError, OverflowError):
             continue
     return [valid[t] for t in sorted(valid)]
+
+
+def _aggregate(bars, seconds):
+    """Combine clean smaller candles into aligned OHLC candles."""
+    grouped = {}
+    for bar in _clean(bars):
+        timestamp = bar["time"] - (bar["time"] % seconds)
+        candle = grouped.get(timestamp)
+        if candle is None:
+            grouped[timestamp] = {"time": timestamp, "open": bar["open"],
+                                  "high": bar["high"], "low": bar["low"], "close": bar["close"]}
+        else:
+            candle["high"] = max(candle["high"], bar["high"])
+            candle["low"] = min(candle["low"], bar["low"])
+            candle["close"] = bar["close"]
+    return [grouped[t] for t in sorted(grouped)]
 
 
 def intraday_bars(symbol: str, date_iso: str, interval: str = "5min") -> dict:
@@ -46,7 +62,8 @@ def intraday_bars(symbol: str, date_iso: str, interval: str = "5min") -> dict:
     source = "Alpha Vantage"
     try:
         import alpha_vantage as av
-        data = av.fetch_intraday(symbol, interval=interval, outputsize="full", month=day.strftime("%Y-%m"))
+        alpha_interval = "1min" if interval == "2min" else interval
+        data = av.fetch_intraday(symbol, interval=alpha_interval, outputsize="full", month=day.strftime("%Y-%m"))
         for b in data.get("bars", []):
             dt = datetime.fromisoformat(b["time"])
             if dt.tzinfo is None:
@@ -54,6 +71,9 @@ def intraday_bars(symbol: str, date_iso: str, interval: str = "5min") -> dict:
             if dt.astimezone(_NY).date() == day:
                 bars.append({**b, "time": int(dt.timestamp())})
         bars = _clean(bars)
+        if interval == "2min":
+            bars = _aggregate(bars, 120)
+            source = "Alpha Vantage (2-minute aggregation)"
     except Exception:
         bars = []
     if not bars and 0 <= (datetime.now(_NY).date() - day).days < (7 if interval == "1min" else 60):

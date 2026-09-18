@@ -4,11 +4,19 @@ const tz = src.slice(src.indexOf('const _IBKR_TZ'), src.indexOf('function fmtDis
 const funcs = src.slice(src.indexOf('const TRADE_CHART_INTERVALS'), src.indexOf('function closeTradeDetail'));
 vm.runInThisContext(tz + funcs);
 const html = fs.readFileSync(require('path').join(__dirname, '..', 'journal.html'), 'utf8');
-for (const interval of ['1min','5min','15min','30min','60min']) assert.match(html, new RegExp(`value="${interval}"`));
+for (const interval of ['1min','2min','5min','15min','30min','60min']) assert.match(html, new RegExp(`value="${interval}"`));
+assert.match(html,/id="tradeChartAutoSize"/);
 assert.equal(tradeChartConfig('1min').seconds,60);
+assert.equal(tradeChartConfig('2min').seconds,120);
 assert.equal(tradeChartConfig('15min').seconds,900);
 assert.equal(tradeChartConfig('60min').tradingView,'60');
 assert.equal(tradeChartConfig('invalid').seconds,300);
+let fitted=0, scaled;
+assert.equal(autoSizeTradeChart({
+  _lwChart:{timeScale:()=>({fitContent(){fitted++}})},
+  _lwCandles:{priceScale:()=>({applyOptions(value){scaled=value}})},
+}),true);
+assert.equal(fitted,1);assert.deepEqual(scaled,{autoScale:true});
 assert.equal(tradeTimestamp('2026-01-15T09:32:18'), Date.parse('2026-01-15T14:32:18Z')/1000);
 assert.equal(tradeTimestamp('2026-07-15T09:32:18'), Date.parse('2026-07-15T13:32:18Z')/1000);
 assert.equal(tradeTimestamp('2026-07-15T09:32:18-04:00'), tradeTimestamp('2026-07-15T09:32:18'));
@@ -32,5 +40,5 @@ let pending=renderTradeChart(container,'SPY',{open_datetime:'2026-07-15T09:32:00
 assert.match(requestedUrl,/interval=15min/);
 container._chartRequest=2; container.textContent='new trade'; resolve({bars}); await pending;
 assert.equal(container.textContent,'new trade');
-console.log('Passed: selectable chart intervals, interval-aware markers, EST/EDT, trade directions, candle boundaries and stale response protection.');
+console.log('Passed: 1/2/5/15/30/60-minute charts, Auto size, interval-aware markers, time zones and stale response protection.');
 })().catch(e=>{console.error(e);process.exit(1)});

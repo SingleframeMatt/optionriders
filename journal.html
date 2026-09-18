@@ -461,16 +461,20 @@
         <div class="trade-detail-right">
           <div class="trade-chart-toolbar">
             <span>Underlying chart</span>
-            <label for="tradeChartInterval">
-              Timeframe
-              <select id="tradeChartInterval">
-                <option value="1min">1 min</option>
-                <option value="5min" selected>5 min</option>
-                <option value="15min">15 min</option>
-                <option value="30min">30 min</option>
-                <option value="60min">1 hour</option>
-              </select>
-            </label>
+            <div class="trade-chart-controls">
+              <label for="tradeChartInterval">
+                Timeframe
+                <select id="tradeChartInterval">
+                  <option value="1min">1 min</option>
+                  <option value="2min">2 min</option>
+                  <option value="5min" selected>5 min</option>
+                  <option value="15min">15 min</option>
+                  <option value="30min">30 min</option>
+                  <option value="60min">1 hour</option>
+                </select>
+              </label>
+              <button class="trade-chart-auto-size" id="tradeChartAutoSize" type="button" title="Fit all candles and reset the price scale" disabled>Auto size</button>
+            </div>
           </div>
           <div class="trade-detail-chart" id="tradeDetailChartWrap" data-private></div>
           <div class="trade-detail-notes-wrap">

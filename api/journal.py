@@ -143,7 +143,7 @@ class handler(BaseHTTPRequestHandler):
                 interval = _param(self.path, "interval", "5min") or "5min"
                 import re
                 security.valid_date(date)
-                if not re.fullmatch(r"[A-Z0-9.^=-]{1,32}", symbol) or interval not in ("1min", "5min", "15min", "30min", "60min"):
+                if not re.fullmatch(r"[A-Z0-9.^=-]{1,32}", symbol) or interval not in ("1min", "2min", "5min", "15min", "30min", "60min"):
                     raise security.SecurityError("Invalid chart request.")
                 _respond(self, 200, jc.intraday_bars(symbol, date, interval))
             else:

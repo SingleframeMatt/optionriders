@@ -1341,6 +1341,7 @@ function renderDayTrades(trades) {
 
 const TRADE_CHART_INTERVALS = Object.freeze({
   "1min": { label: "1-minute", seconds: 60, tradingView: "1" },
+  "2min": { label: "2-minute", seconds: 120, tradingView: "2" },
   "5min": { label: "5-minute", seconds: 300, tradingView: "5" },
   "15min": { label: "15-minute", seconds: 900, tradingView: "15" },
   "30min": { label: "30-minute", seconds: 1800, tradingView: "30" },
@@ -1556,8 +1557,10 @@ function disposeTradeChart(container) {
   container._chartRequest = (container._chartRequest || 0) + 1;
   if (container._lwObserver) container._lwObserver.disconnect();
   if (container._lwChart) container._lwChart.remove();
-  container._lwObserver = container._lwChart = null;
+  container._lwObserver = container._lwChart = container._lwCandles = null;
   container.innerHTML = "";
+  const autoSize = $("tradeChartAutoSize");
+  if (autoSize) autoSize.disabled = true;
 }
 
 function tradeTimestamp(iso) {
@@ -1671,6 +1674,7 @@ async function renderTradeChart(container, symbol, trade, interval, request = co
     upColor: "#10b981", downColor: "#ef4444", borderUpColor: "#10b981", borderDownColor: "#ef4444",
     wickUpColor: "#10b981", wickDownColor: "#ef4444",
   });
+  container._lwCandles = candles;
   candles.setData(bars);
   const markers = tradeChartMarkers(events, bars, config.seconds);
   candles.setMarkers(markers);
@@ -1690,6 +1694,8 @@ async function renderTradeChart(container, symbol, trade, interval, request = co
   const resizeObserver = new ResizeObserver(() => chart.applyOptions({ width: container.clientWidth }));
   resizeObserver.observe(container);
   container._lwObserver = resizeObserver;
+  const autoSize = $("tradeChartAutoSize");
+  if (autoSize) autoSize.disabled = false;
 }
 
 function renderTradeChartFallback(container, symbol, trade, interval) {
@@ -1731,6 +1737,13 @@ function changeTradeChartInterval(event) {
   if (container?._chartSymbol && container._chartTrade) {
     loadTradeChart(container, container._chartSymbol, container._chartTrade);
   }
+}
+
+function autoSizeTradeChart(container = $("tradeDetailChartWrap")) {
+  if (!container?._lwChart) return false;
+  container._lwCandles?.priceScale().applyOptions({ autoScale: true });
+  container._lwChart.timeScale().fitContent();
+  return true;
 }
 
 function closeTradeDetail() {
@@ -2092,6 +2105,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   applyPrivacy(document.body.classList.contains("is-private"));
   $("privacyToggle").addEventListener("click", togglePrivacy);
   $("tradeChartInterval")?.addEventListener("change", changeTradeChartInterval);
+  $("tradeChartAutoSize")?.addEventListener("click", () => autoSizeTradeChart());
   window.addEventListener("storage", event => { if (event.key === "journal_hide_pnl") applyPrivacy(event.newValue === "true"); });
   window.addEventListener("pageshow", () => { try { applyPrivacy(localStorage.getItem("journal_hide_pnl") === "true"); } catch (_) {} });
   await initAuth();

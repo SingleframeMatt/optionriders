@@ -37,6 +37,20 @@ class JournalChartTests(unittest.TestCase):
     def test_clean_removes_bad_candles_and_sorts_unique_times(self):
         self.assertEqual([b['time'] for b in chart._clean([candle(2), candle(1), candle(2), candle(3, float('nan'))])], [1,2])
 
+    def test_two_minute_candles_aggregate_one_minute_provider_data(self):
+        provider_bars = [candle('2026-07-15 09:30:00', 600),
+                         candle('2026-07-15 09:31:00', 601),
+                         candle('2026-07-15 09:32:00', 603)]
+        with patch('alpha_vantage.fetch_intraday', return_value={"bars": provider_bars}) as fetch:
+            result = chart.intraday_bars('SPY', '2026-07-15', '2min')
+        self.assertEqual(fetch.call_args.kwargs['interval'], '1min')
+        self.assertEqual(len(result['bars']), 2)
+        self.assertEqual(result['bars'][0]['open'], 600)
+        self.assertEqual(result['bars'][0]['high'], 602)
+        self.assertEqual(result['bars'][0]['low'], 599)
+        self.assertEqual(result['bars'][0]['close'], 601)
+        self.assertEqual(result['source'], 'Alpha Vantage (2-minute aggregation)')
+
     def test_recent_fallback_after_provider_failure(self):
         day = datetime.now(chart._NY).date() - timedelta(days=1)
         dt = datetime.combine(day, datetime.min.time()).replace(hour=10, tzinfo=chart._NY)
