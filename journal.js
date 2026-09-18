@@ -1339,6 +1339,27 @@ function renderDayTrades(trades) {
 
 /* ---------- trade-detail modal ---------- */
 
+const TRADE_CHART_INTERVALS = Object.freeze({
+  "1min": { label: "1-minute", seconds: 60, tradingView: "1" },
+  "5min": { label: "5-minute", seconds: 300, tradingView: "5" },
+  "15min": { label: "15-minute", seconds: 900, tradingView: "15" },
+  "30min": { label: "30-minute", seconds: 1800, tradingView: "30" },
+  "60min": { label: "1-hour", seconds: 3600, tradingView: "60" },
+});
+
+function tradeChartConfig(interval) {
+  return TRADE_CHART_INTERVALS[interval] || TRADE_CHART_INTERVALS["5min"];
+}
+
+function storedTradeChartInterval() {
+  try {
+    const interval = localStorage.getItem("journal_chart_interval");
+    return TRADE_CHART_INTERVALS[interval] ? interval : "5min";
+  } catch (_) {
+    return "5min";
+  }
+}
+
 function openTradeDetail(trade) {
   const modal = $("tradeDetailModal");
   const isOpt = trade.asset_class === "OPT" || trade.asset_class === "FOP";
@@ -1452,15 +1473,11 @@ function openTradeDetail(trade) {
 
   // Chart with entry/exit markers for the underlying
   const chartWrap = $("tradeDetailChartWrap");
-  disposeTradeChart(chartWrap);
-  const request = chartWrap._chartRequest;
   const underlying = (trade.ticker || trade.symbol || "").trim();
   if (underlying) {
-    renderTradeChart(chartWrap, underlying, trade, request).catch(err => {
-      if (chartWrap._chartRequest !== request) return;
-      console.warn("[trade-chart] fallback to iframe", err);
-      renderTradeChartFallback(chartWrap, underlying, trade);
-    });
+    loadTradeChart(chartWrap, underlying, trade);
+  } else {
+    disposeTradeChart(chartWrap);
   }
 
   // Notes: load existing note for this trade
@@ -1606,7 +1623,8 @@ function appendTradeChartEvents(container, trade) {
   container.appendChild(list);
 }
 
-async function renderTradeChart(container, symbol, trade, request = container._chartRequest) {
+async function renderTradeChart(container, symbol, trade, interval, request = container._chartRequest) {
+  const config = tradeChartConfig(interval);
   container.textContent = `Loading ${symbol} trade chart…`;
   const events = tradeChartEvents(trade);
   const dateFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: _IBKR_TZ,
@@ -1614,7 +1632,7 @@ async function renderTradeChart(container, symbol, trade, request = container._c
   const dates = [...new Set(events.map(e => dateFormatter.format(new Date(e.time * 1000))))];
   if (!dates.length) throw new Error("No execution dates available");
   const results = await Promise.all(dates.map(date =>
-    api(`/api/journal/bars?symbol=${encodeURIComponent(symbol)}&date=${encodeURIComponent(date)}`)
+    api(`/api/journal/bars?symbol=${encodeURIComponent(symbol)}&date=${encodeURIComponent(date)}&interval=${encodeURIComponent(interval)}`)
       .catch(() => ({ bars: [] }))));
   if (container._chartRequest !== request) return;
   const bars = [...new Map(results.flatMap(d => d.bars || []).map(b => [b.time, b])).values()]
@@ -1625,7 +1643,7 @@ async function renderTradeChart(container, symbol, trade, request = container._c
   container.innerHTML = "";
   const caption = document.createElement("div");
   caption.className = "trade-chart-caption";
-  caption.textContent = `${symbol} underlying · 5-minute candles · London/Lisbon time. Arrows mark execution candles; labels show fill prices in USD. Sessions with executions shown.`;
+  caption.textContent = `${symbol} underlying · ${config.label} candles · London/Lisbon time. Arrows mark execution candles; labels show fill prices in USD. Sessions with executions shown.`;
   container.appendChild(caption);
   const plot = document.createElement("div");
   container.appendChild(plot);
@@ -1654,7 +1672,7 @@ async function renderTradeChart(container, symbol, trade, request = container._c
     wickUpColor: "#10b981", wickDownColor: "#ef4444",
   });
   candles.setData(bars);
-  const markers = tradeChartMarkers(events, bars);
+  const markers = tradeChartMarkers(events, bars, config.seconds);
   candles.setMarkers(markers);
   chart.timeScale().fitContent();
   if (markers.length) {
@@ -1674,7 +1692,8 @@ async function renderTradeChart(container, symbol, trade, request = container._c
   container._lwObserver = resizeObserver;
 }
 
-function renderTradeChartFallback(container, symbol, trade) {
+function renderTradeChartFallback(container, symbol, trade, interval) {
+  const config = tradeChartConfig(interval);
   disposeTradeChart(container);
   const msg = document.createElement("div");
   msg.className = "trade-chart-fallback-msg";
@@ -1683,10 +1702,35 @@ function renderTradeChartFallback(container, symbol, trade) {
   appendTradeChartEvents(container, trade);
   const iframe = document.createElement("iframe");
   iframe.title = `${symbol} live reference chart (not historical trade data)`;
-  iframe.src = `https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(symbol)}&interval=15&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=rgba(0,0,0,0)&studies=&theme=${document.body.classList.contains("is-light") ? "light" : "dark"}&style=1&timezone=Europe%2FLondon&locale=en`;
+  iframe.src = `https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(symbol)}&interval=${config.tradingView}&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=rgba(0,0,0,0)&studies=&theme=${document.body.classList.contains("is-light") ? "light" : "dark"}&style=1&timezone=Europe%2FLondon&locale=en`;
   iframe.style.height = "300px";
   iframe.allow = "fullscreen";
   container.appendChild(iframe);
+}
+
+function loadTradeChart(container, symbol, trade) {
+  disposeTradeChart(container);
+  container._chartSymbol = symbol;
+  container._chartTrade = trade;
+  const interval = storedTradeChartInterval();
+  const selector = $("tradeChartInterval");
+  if (selector) selector.value = interval;
+  const request = container._chartRequest;
+  renderTradeChart(container, symbol, trade, interval, request).catch(err => {
+    if (container._chartRequest !== request) return;
+    console.warn("[trade-chart] fallback to iframe", err);
+    renderTradeChartFallback(container, symbol, trade, interval);
+  });
+}
+
+function changeTradeChartInterval(event) {
+  const interval = event.target.value;
+  if (!TRADE_CHART_INTERVALS[interval]) return;
+  try { localStorage.setItem("journal_chart_interval", interval); } catch (_) {}
+  const container = $("tradeDetailChartWrap");
+  if (container?._chartSymbol && container._chartTrade) {
+    loadTradeChart(container, container._chartSymbol, container._chartTrade);
+  }
 }
 
 function closeTradeDetail() {
@@ -2047,6 +2091,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (_) {}
   applyPrivacy(document.body.classList.contains("is-private"));
   $("privacyToggle").addEventListener("click", togglePrivacy);
+  $("tradeChartInterval")?.addEventListener("change", changeTradeChartInterval);
   window.addEventListener("storage", event => { if (event.key === "journal_hide_pnl") applyPrivacy(event.newValue === "true"); });
   window.addEventListener("pageshow", () => { try { applyPrivacy(localStorage.getItem("journal_hide_pnl") === "true"); } catch (_) {} });
   await initAuth();

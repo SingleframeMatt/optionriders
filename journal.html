@@ -459,6 +459,19 @@
         </aside>
 
         <div class="trade-detail-right">
+          <div class="trade-chart-toolbar">
+            <span>Underlying chart</span>
+            <label for="tradeChartInterval">
+              Timeframe
+              <select id="tradeChartInterval">
+                <option value="1min">1 min</option>
+                <option value="5min" selected>5 min</option>
+                <option value="15min">15 min</option>
+                <option value="30min">30 min</option>
+                <option value="60min">1 hour</option>
+              </select>
+            </label>
+          </div>
           <div class="trade-detail-chart" id="tradeDetailChartWrap" data-private></div>
           <div class="trade-detail-notes-wrap">
             <div class="trade-detail-notes-head">

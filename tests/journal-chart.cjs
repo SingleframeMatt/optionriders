@@ -1,8 +1,14 @@
 const fs = require('fs'), vm = require('vm'), assert = require('assert');
 const src = fs.readFileSync(require('path').join(__dirname, '..', 'journal.js'), 'utf8');
 const tz = src.slice(src.indexOf('const _IBKR_TZ'), src.indexOf('function fmtDisplayTime'));
-const funcs = src.slice(src.indexOf('function disposeTradeChart'), src.indexOf('function closeTradeDetail'));
+const funcs = src.slice(src.indexOf('const TRADE_CHART_INTERVALS'), src.indexOf('function closeTradeDetail'));
 vm.runInThisContext(tz + funcs);
+const html = fs.readFileSync(require('path').join(__dirname, '..', 'journal.html'), 'utf8');
+for (const interval of ['1min','5min','15min','30min','60min']) assert.match(html, new RegExp(`value="${interval}"`));
+assert.equal(tradeChartConfig('1min').seconds,60);
+assert.equal(tradeChartConfig('15min').seconds,900);
+assert.equal(tradeChartConfig('60min').tradingView,'60');
+assert.equal(tradeChartConfig('invalid').seconds,300);
 assert.equal(tradeTimestamp('2026-01-15T09:32:18'), Date.parse('2026-01-15T14:32:18Z')/1000);
 assert.equal(tradeTimestamp('2026-07-15T09:32:18'), Date.parse('2026-07-15T13:32:18Z')/1000);
 assert.equal(tradeTimestamp('2026-07-15T09:32:18-04:00'), tradeTimestamp('2026-07-15T09:32:18'));
@@ -13,16 +19,18 @@ let bars=[{time:tradeTimestamp('2026-07-15T09:30:00')},{time:tradeTimestamp('202
 let markers=tradeChartMarkers(events,bars);
 assert.equal(markers.length,3); assert.equal(markers[0].time,bars[0].time); assert.equal(markers[2].time,bars[1].time);
 assert.equal(tradeChartMarkers([{time:bars[1].time+301}],bars).length,0);
+assert.equal(tradeChartMarkers([{time:bars[1].time+301}],bars,900).length,1);
 assert.equal(tradeChartMarkers([{time:bars[0].time-1}],bars).length,0);
 trade.fills.forEach(f=>f.quantity*=-1);
 assert.deepEqual(tradeChartEvents(trade).map(e=>e.exit),[false,true,true]);
 assert.equal(tradeChartEvents({open_datetime:'2026-07-15T09:32:00',close_datetime:'2026-07-15T10:00:00',is_open:true}).length,1);
 assert.equal(tradeChartEvents({open_datetime:'2026-07-15T09:32:00',close_datetime:'2026-07-16T10:00:00'}).length,2);
 (async()=>{
-let resolve; global.api=()=>new Promise(r=>resolve=r);
+let resolve, requestedUrl; global.api=url=>{requestedUrl=url;return new Promise(r=>resolve=r)};
 let container={_chartRequest:1,textContent:''};
-let pending=renderTradeChart(container,'SPY',{open_datetime:'2026-07-15T09:32:00',is_open:true},1);
+let pending=renderTradeChart(container,'SPY',{open_datetime:'2026-07-15T09:32:00',is_open:true},'15min',1);
+assert.match(requestedUrl,/interval=15min/);
 container._chartRequest=2; container.textContent='new trade'; resolve({bars}); await pending;
 assert.equal(container.textContent,'new trade');
-console.log('Passed: EST/EDT, explicit offsets, long puts, short trades, partial exits, candle boundaries, open/overnight trades, stale response protection.');
+console.log('Passed: selectable chart intervals, interval-aware markers, EST/EDT, trade directions, candle boundaries and stale response protection.');
 })().catch(e=>{console.error(e);process.exit(1)});
