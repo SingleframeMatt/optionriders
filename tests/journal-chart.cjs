@@ -3,6 +3,18 @@ const src = fs.readFileSync(require('path').join(__dirname, '..', 'journal.js'),
 const tz = src.slice(src.indexOf('const _IBKR_TZ'), src.indexOf('function fmtDisplayTime'));
 const funcs = src.slice(src.indexOf('const TRADE_CHART_INTERVALS'), src.indexOf('function closeTradeDetail'));
 vm.runInThisContext(tz + funcs);
+assert.equal(tradingViewTradeSymbol('SPX'), 'SP:SPX');
+assert.equal(tradingViewTradeSymbol('spxw'), 'SP:SPX');
+assert.equal(tradingViewTradeSymbol('SPY'), 'SPY');
+const grouped = groupedTradeChartEvents({fills:[
+  {datetime:'2026-09-22T13:29:29',quantity:3,trade_price:2.95},
+  {datetime:'2026-09-22T13:29:29',quantity:7,trade_price:2.95},
+  {datetime:'2026-09-22T13:32:39',quantity:-10,trade_price:2.25},
+]});
+assert.equal(grouped.length,2);
+assert.equal(grouped[0].quantity,10);
+assert.equal(grouped[0].fills,2);
+assert.equal(grouped[1].exit,true);
 const html = fs.readFileSync(require('path').join(__dirname, '..', 'journal.html'), 'utf8');
 for (const interval of ['1min','2min','5min','15min','30min','60min']) assert.match(html, new RegExp(`value="${interval}"`));
 assert.match(html,/id="tradeChartAutoSize"/);

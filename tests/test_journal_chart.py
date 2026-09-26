@@ -69,6 +69,17 @@ class JournalChartTests(unittest.TestCase):
         self.assertEqual(result['bars'], [])
         self.assertIn('error', result)
 
+    def test_spx_uses_index_symbol_and_skips_equity_provider(self):
+        day = datetime.now(chart._NY).date() - timedelta(days=1)
+        from unittest.mock import Mock
+        ticker = Mock()
+        ticker.history.return_value = SimpleNamespace(iterrows=lambda: [])
+        yf = SimpleNamespace(Ticker=Mock(return_value=ticker), set_tz_cache_location=lambda path: None)
+        with patch('alpha_vantage.fetch_intraday') as fetch, patch.dict(sys.modules, {'yfinance': yf}):
+            chart.intraday_bars('SPX', day.isoformat())
+        fetch.assert_not_called()
+        yf.Ticker.assert_called_once_with('^GSPC')
+
 
 if __name__ == '__main__':
     unittest.main()

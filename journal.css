@@ -1371,7 +1371,7 @@ body.is-gated > :not(.auth-gate) { filter: blur(8px) brightness(0.9); pointer-ev
 /* Historical trade executions */
 .trade-chart-caption, .trade-chart-events { padding: 10px 14px; font-size: 12px; line-height: 1.6; }
 .trade-chart-caption { color: var(--text-secondary); border-bottom: 1px solid var(--border-subtle); }
-.trade-chart-events { display: flex; flex-wrap: wrap; gap: 6px 18px; border-top: 1px solid var(--border-subtle); }
+.trade-chart-events { display: flex; flex-wrap: wrap; gap: 6px 18px; border-top: 1px solid var(--border-subtle); max-height: 100px; overflow-y: auto; }
 .trade-chart-entry { color: #10b981; }
 .trade-chart-exit { color: #ef4444; }
 body.is-light .trade-chart-entry { color: #047857; }

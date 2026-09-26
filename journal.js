@@ -1610,8 +1610,26 @@ function tradeChartMarkers(events, bars, intervalSeconds = 300) {
   }).sort((a, b) => a.time - b.time);
 }
 
+function groupedTradeChartEvents(trade) {
+  const grouped = new Map();
+  for (const event of tradeChartEvents(trade)) {
+    const key = JSON.stringify([event.time, event.exit, event.price]);
+    const previous = grouped.get(key);
+    if (previous) {
+      previous.quantity += Number(event.quantity) || 0;
+      previous.fills++;
+    } else grouped.set(key, { ...event, quantity: Number(event.quantity) || 0, fills: 1 });
+  }
+  return [...grouped.values()];
+}
+
+function tradingViewTradeSymbol(symbol) {
+  const normalized = symbol.trim().toUpperCase();
+  return ["SPX", "SPXW", "^GSPC"].includes(normalized) ? "SP:SPX" : normalized;
+}
+
 function appendTradeChartEvents(container, trade) {
-  const events = tradeChartEvents(trade);
+  const events = groupedTradeChartEvents(trade);
   const list = document.createElement("div");
   list.className = "trade-chart-events";
   for (const e of events) {
@@ -1620,7 +1638,7 @@ function appendTradeChartEvents(container, trade) {
     const time = new Date(e.time * 1000).toLocaleString("en-GB", {
       timeZone: _DISPLAY_TZ, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit",
     });
-    item.textContent = `${e.exit ? "↓ Exit" : "↑ Entry"} · ${time}${e.price != null ? ` · $${Number(e.price).toFixed(2)}` : ""}`;
+    item.textContent = `${e.exit ? "↓ Exit" : "↑ Entry"} · ${time}${e.price != null ? ` · $${Number(e.price).toFixed(2)}` : ""}${e.quantity ? ` · Qty ${e.quantity}` : ""}${e.fills > 1 ? ` (${e.fills} fills)` : ""}`;
     list.appendChild(item);
   }
   container.appendChild(list);
@@ -1654,7 +1672,7 @@ async function renderTradeChart(container, symbol, trade, interval, request = co
   const clock = t => new Date(t * 1000).toLocaleTimeString("en-GB", {
     hour: "2-digit", minute: "2-digit", timeZone: _DISPLAY_TZ, hourCycle: "h23" });
   const chart = LightweightCharts.createChart(plot, {
-    width: container.clientWidth, height: 340,
+    width: container.clientWidth, height: 480,
     layout: { background: { type: "solid", color: isLight ? "#ffffff" : "#0f1220" },
       textColor: isLight ? "#1f2937" : "#e8e8f0" },
     grid: {
@@ -1705,13 +1723,14 @@ function renderTradeChartFallback(container, symbol, trade, interval) {
   msg.className = "trade-chart-fallback-msg";
   msg.textContent = "Historical candles unavailable for this trade. Entry/exit times are shown below; the live reference chart cannot display these markers.";
   container.appendChild(msg);
-  appendTradeChartEvents(container, trade);
   const iframe = document.createElement("iframe");
   iframe.title = `${symbol} live reference chart (not historical trade data)`;
-  iframe.src = `https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(symbol)}&interval=${config.tradingView}&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=rgba(0,0,0,0)&studies=&theme=${document.body.classList.contains("is-light") ? "light" : "dark"}&style=1&timezone=Europe%2FLondon&locale=en`;
-  iframe.style.height = "300px";
+  iframe.src = `https://s.tradingview.com/widgetembed/?frameElementId=tv_chart&symbol=${encodeURIComponent(tradingViewTradeSymbol(symbol))}&interval=${config.tradingView}&hidesidetoolbar=1&symboledit=0&saveimage=0&toolbarbg=rgba(0,0,0,0)&studies=&theme=${document.body.classList.contains("is-light") ? "light" : "dark"}&style=1&timezone=Europe%2FLondon&locale=en`;
+  iframe.style.height = "480px";
   iframe.allow = "fullscreen";
   container.appendChild(iframe);
+  container.appendChild(msg);
+  appendTradeChartEvents(container, trade);
 }
 
 function loadTradeChart(container, symbol, trade) {

@@ -60,7 +60,11 @@ def intraday_bars(symbol: str, date_iso: str, interval: str = "5min") -> dict:
     # include intraday history; Yahoo supplies recent sessions as a fallback.
     bars = []
     source = "Alpha Vantage"
+    is_spx = symbol in ("SPX", "SPXW", "^GSPC")
     try:
+        # The equity intraday endpoint cannot safely resolve this index symbol.
+        if is_spx:
+            raise ValueError("Use the explicit index data symbol")
         import alpha_vantage as av
         alpha_interval = "1min" if interval == "2min" else interval
         data = av.fetch_intraday(symbol, interval=alpha_interval, outputsize="full", month=day.strftime("%Y-%m"))
@@ -80,7 +84,7 @@ def intraday_bars(symbol: str, date_iso: str, interval: str = "5min") -> dict:
         try:
             import yfinance as yf
             yf.set_tz_cache_location(os.path.join(tempfile.gettempdir(), "optionriders-yfinance"))
-            frame = yf.Ticker(symbol.replace(".", "-")).history(
+            frame = yf.Ticker("^GSPC" if is_spx else symbol.replace(".", "-")).history(
                 start=day.isoformat(), end=(day + timedelta(days=1)).isoformat(),
                 interval=_INTERVALS[interval], auto_adjust=False, prepost=True,
                 actions=False, timeout=10, raise_errors=True)
