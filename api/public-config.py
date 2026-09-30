@@ -12,25 +12,25 @@ class handler(BaseHTTPRequestHandler):
             # --- Legacy Google client ID (kept for fallback display) ---
             "googleClientId": os.environ.get("GOOGLE_CLIENT_ID", ""),
             "stripePaymentLink": os.environ.get("STRIPE_PAYMENT_LINK", ""),
-            "tradingViewProductName": os.environ.get("TRADINGVIEW_PRODUCT_NAME", "Option Riders TradingView Script"),
+            "tradingViewProductName": os.environ.get("TRADINGVIEW_PRODUCT_NAME", "OptionRiders TradingView Script Bundle"),
             "tradingViewProductDescription": os.environ.get(
                 "TRADINGVIEW_PRODUCT_DESCRIPTION",
-                "Private TradingView tool for traders who want the same Option Riders signal framework directly on-chart.",
+                "Both private OptionRiders indicators, including ongoing updates.",
             ),
             "tradingViewProductPriceLabel": os.environ.get("TRADINGVIEW_PRODUCT_PRICE_LABEL", ""),
             "tradingViewMonthlyLink": os.environ.get("TRADINGVIEW_MONTHLY_LINK", ""),
             "tradingViewMonthlyName": os.environ.get("TRADINGVIEW_MONTHLY_NAME", "Monthly Access"),
-            "tradingViewMonthlyPrice": os.environ.get("TRADINGVIEW_MONTHLY_PRICE", "$0/mo"),
+            "tradingViewMonthlyPrice": os.environ.get("TRADINGVIEW_MONTHLY_PRICE", "$39/month"),
             "tradingViewMonthlyDescription": os.environ.get(
                 "TRADINGVIEW_MONTHLY_DESCRIPTION",
-                "Recurring access to the Option Riders TradingView script.",
+                "Monthly access to both OptionRiders TradingView scripts, including ongoing updates.",
             ),
             "tradingViewLifetimeLink": os.environ.get("TRADINGVIEW_LIFETIME_LINK", ""),
             "tradingViewLifetimeName": os.environ.get("TRADINGVIEW_LIFETIME_NAME", "Lifetime Access"),
-            "tradingViewLifetimePrice": os.environ.get("TRADINGVIEW_LIFETIME_PRICE", "$0 one-time"),
+            "tradingViewLifetimePrice": os.environ.get("TRADINGVIEW_LIFETIME_PRICE", "$400 one-time"),
             "tradingViewLifetimeDescription": os.environ.get(
                 "TRADINGVIEW_LIFETIME_DESCRIPTION",
-                "One payment for lifetime access to the script.",
+                "One payment for lifetime access to both OptionRiders TradingView scripts.",
             ),
         }).encode("utf-8")
         self.send_response(200)

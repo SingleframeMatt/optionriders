@@ -66,6 +66,14 @@
       "dest": "/api/stripe-portal.py"
     },
     {
+      "src": "/api/script-access",
+      "dest": "/api/script-access.py"
+    },
+    {
+      "src": "/script-access",
+      "dest": "/script-access.html"
+    },
+    {
       "src": "/api/journal/([^/?]+).*",
       "dest": "/api/journal.py?action=$1"
     },

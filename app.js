@@ -157,19 +157,19 @@ const AUTH_STATE = {
 let _supabase = null;
 
 const APP_CONFIG = {
-  tradingViewProductName: "Option Riders TradingView Script",
-  tradingViewProductDescription: "Private TradingView tool with Option Riders signals and alerts directly on-chart.",
+  tradingViewProductName: "OptionRiders TradingView Script Bundle",
+  tradingViewProductDescription: "Both private OptionRiders indicators, including ongoing updates.",
   monthlyPlan: {
     link: "",
     name: "Monthly Access",
     price: "$39/month",
-    description: "Recurring access with ongoing updates.",
+    description: "Both scripts, with ongoing updates.",
   },
   lifetimePlan: {
     link: "",
     name: "Lifetime Access",
-    price: "$120 one-time",
-    description: "One payment for lifetime access.",
+    price: "$400 one-time",
+    description: "One payment for lifetime access to both scripts.",
   },
 };
 
@@ -307,8 +307,8 @@ function renderProductOffer() {
   const lifetimeBuyBtn = document.getElementById('lifetimePlanBuyBtn');
   if (!section || !title || !description || !note || !monthlyName || !monthlyPrice || !monthlyDescription || !monthlyBuyBtn || !lifetimeName || !lifetimePrice || !lifetimeDescription || !lifetimeBuyBtn) return;
 
-  title.textContent = APP_CONFIG.tradingViewProductName || 'Option Riders TradingView Script';
-  description.textContent = APP_CONFIG.tradingViewProductDescription || 'Private TradingView tool for traders who want the same Option Riders signal framework directly on-chart.';
+  title.textContent = APP_CONFIG.tradingViewProductName || 'OptionRiders TradingView Script Bundle';
+  description.textContent = APP_CONFIG.tradingViewProductDescription || 'Both private OptionRiders indicators, including ongoing updates.';
 
   const plans = [
     { config: APP_CONFIG.monthlyPlan, nameEl: monthlyName, priceEl: monthlyPrice, descEl: monthlyDescription, buttonEl: monthlyBuyBtn },

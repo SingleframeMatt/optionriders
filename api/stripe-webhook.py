@@ -2,14 +2,15 @@
 POST /api/stripe-webhook
 No auth header — verified via Stripe-Signature.
 
-Handles subscription lifecycle events from Stripe and syncs the
-current status into the dashboard_subscriptions table.
+Handles dashboard subscriptions and the two-script TradingView bundle.
+Bundle purchases are written to an owner queue keyed by TradingView username.
 
 Required Stripe events to forward:
   - checkout.session.completed
   - customer.subscription.created
   - customer.subscription.updated
   - customer.subscription.deleted
+  - charge.refunded
 """
 
 import datetime
@@ -78,6 +79,77 @@ def _update_status_by_sub_id(sub_id, status):
         headers={**_supabase_headers(), "Prefer": "return=minimal"},
         params={"stripe_subscription_id": f"eq.{sub_id}"},
         json={"status": status, "updated_at": now},
+        timeout=10,
+    )
+
+
+def _extract_tradingview_username(session):
+    """Return the required custom-field value from a Stripe Payment Link."""
+    for field in session.get("custom_fields") or []:
+        label = (field.get("label") or {}).get("custom", "").strip().lower()
+        if label != "tradingview username (exact)":
+            continue
+        field_type = field.get("type", "text")
+        value = (field.get(field_type) or {}).get("value", "")
+        return str(value).strip()
+    return ""
+
+
+def _upsert_script_access(session, *, status="active", period_end_ts=None):
+    """Create/update the owner queue for a bundle checkout."""
+    username = _extract_tradingview_username(session)
+    session_id = session.get("id", "")
+    if not username or not session_id:
+        return  # Dashboard checkouts do not contain this field.
+
+    mode = session.get("mode", "")
+    plan = "monthly" if mode == "subscription" else "lifetime"
+    customer_details = session.get("customer_details") or {}
+    payload = {
+        "stripe_checkout_session_id": session_id,
+        "stripe_customer_id": session.get("customer", ""),
+        "stripe_subscription_id": session.get("subscription"),
+        "stripe_payment_intent_id": session.get("payment_intent"),
+        "email": customer_details.get("email", ""),
+        "tradingview_username": username,
+        "plan": plan,
+        "entitlement_status": status,
+        "current_period_ends_at": _ts_to_iso(period_end_ts),
+    }
+    _req.post(
+        f"{SUPABASE_URL}/rest/v1/script_access_requests",
+        headers={**_supabase_headers(), "Prefer": "resolution=merge-duplicates"},
+        params={"on_conflict": "stripe_checkout_session_id"},
+        json=payload,
+        timeout=10,
+    )
+
+
+def _update_script_access_by_subscription(sub):
+    sub_id = sub.get("id", "")
+    if not sub_id:
+        return
+    _req.patch(
+        f"{SUPABASE_URL}/rest/v1/script_access_requests",
+        headers={**_supabase_headers(), "Prefer": "return=minimal"},
+        params={"stripe_subscription_id": f"eq.{sub_id}"},
+        json={
+            "entitlement_status": sub.get("status", "inactive"),
+            "current_period_ends_at": _ts_to_iso(sub.get("current_period_end")),
+        },
+        timeout=10,
+    )
+
+
+def _mark_lifetime_refunded(charge):
+    payment_intent = charge.get("payment_intent", "")
+    if not payment_intent:
+        return
+    _req.patch(
+        f"{SUPABASE_URL}/rest/v1/script_access_requests",
+        headers={**_supabase_headers(), "Prefer": "return=minimal"},
+        params={"stripe_payment_intent_id": f"eq.{payment_intent}"},
+        json={"entitlement_status": "refunded"},
         timeout=10,
     )
 
@@ -154,17 +226,28 @@ class handler(BaseHTTPRequestHandler):
         elif event_type in ("customer.subscription.created",
                             "customer.subscription.updated"):
             _sync_subscription(obj)
+            _update_script_access_by_subscription(obj)
 
         elif event_type == "customer.subscription.deleted":
             # Mark canceled — keeps the row for audit; status blocks access.
             _update_status_by_sub_id(obj.get("id", ""), "canceled")
+            _update_script_access_by_subscription({**obj, "status": "canceled"})
+
+        elif event_type == "charge.refunded":
+            _mark_lifetime_refunded(obj)
 
         self._respond(200, {"received": True})
 
     def _handle_checkout_completed(self, session):
-        """On a completed subscription checkout, fetch the full sub and sync it."""
+        """Record bundle access and retain the existing dashboard checkout sync."""
+        if session.get("mode") == "payment":
+            payment_status = session.get("payment_status", "")
+            status = "active" if payment_status in {"paid", "no_payment_required"} else "pending_payment"
+            _upsert_script_access(session, status=status)
+            return
+
         if session.get("mode") != "subscription":
-            return  # Not a subscription checkout — ignore
+            return
 
         sub_id = session.get("subscription", "")
         if not sub_id:
@@ -178,6 +261,11 @@ class handler(BaseHTTPRequestHandler):
         except Exception:
             return
 
+        _upsert_script_access(
+            session,
+            status=sub.get("status", "active"),
+            period_end_ts=sub.get("current_period_end"),
+        )
         _sync_subscription(sub, user_id=user_id, email=email)
 
     # ------------------------------------------------------------------
