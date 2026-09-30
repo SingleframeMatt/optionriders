@@ -218,6 +218,12 @@ class handler(BaseHTTPRequestHandler):
 
         event_type = event["type"]
         obj = event["data"]["object"]
+        # stripe-python deserializes known event objects (for example a
+        # Checkout Session) into StripeObject instances.  The handlers below
+        # intentionally use normal dictionary access, so normalize the object
+        # before dispatching it.
+        if hasattr(obj, "to_dict_recursive"):
+            obj = obj.to_dict_recursive()
 
         # --- 3. Dispatch ---
         if event_type == "checkout.session.completed":
