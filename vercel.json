@@ -67,7 +67,7 @@
     },
     {
       "src": "/api/script-access",
-      "dest": "/api/script-access.py"
+      "dest": "/api/subscription-status.py"
     },
     {
       "src": "/script-access",
