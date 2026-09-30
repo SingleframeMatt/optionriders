@@ -256,16 +256,20 @@ class handler(BaseHTTPRequestHandler):
         user_id = session.get("metadata", {}).get("supabase_user_id", "")
         email = (session.get("customer_details") or {}).get("email", "")
 
+        # Payment Link bundle checkouts carry the required TradingView username
+        # in the signed event, so no broad Stripe API key is needed to grant.
+        if _extract_tradingview_username(session):
+            _upsert_script_access(session, status="active")
+
+        # Dashboard subscriptions use a server-created Checkout Session and
+        # still need the canonical Subscription object for trial/period fields.
+        if not user_id:
+            return
         try:
             sub = stripe.Subscription.retrieve(sub_id)
         except Exception:
             return
 
-        _upsert_script_access(
-            session,
-            status=sub.get("status", "active"),
-            period_end_ts=sub.get("current_period_end"),
-        )
         _sync_subscription(sub, user_id=user_id, email=email)
 
     # ------------------------------------------------------------------
