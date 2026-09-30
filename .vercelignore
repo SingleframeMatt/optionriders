@@ -1,12 +1,20 @@
-# Local development server; production uses the handlers under api/.
+# Local development servers; production uses the handlers under api/.
 server.py
 dashboard_server.py
 
 # Local-only and generated artifacts.
-.env
-.venv
-output
-__pycache__
-tests
-supabase
+.env*
+.venv/
+.logo-venv/
+.git/
+.vscode/
+.playwright-cli/
+__pycache__/
+*.db
+*.sqlite
+*.sqlite3
 *.pine
+output/
+tests/
+supabase/
+docs/
