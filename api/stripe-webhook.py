@@ -222,8 +222,9 @@ class handler(BaseHTTPRequestHandler):
         # Checkout Session) into StripeObject instances.  The handlers below
         # intentionally use normal dictionary access, so normalize the object
         # before dispatching it.
-        if hasattr(obj, "to_dict_recursive"):
-            obj = obj.to_dict_recursive()
+        to_dict = getattr(obj, "to_dict", None)
+        if callable(to_dict):
+            obj = to_dict()
 
         # --- 3. Dispatch ---
         if event_type == "checkout.session.completed":
